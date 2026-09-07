@@ -35,6 +35,15 @@ type Props = {
   metadataFields?: AccountingMetadataField[];
   // Default sort order for a NEW row = max(existing)+1, computed by the list page.
   nextSortOrder?: number;
+  /**
+   * PAYMENT-TERMS-CODE-NAME-COLUMN-COLLISION — some catalogs (payment_terms today) map BOTH `code`
+   * and `display_name` onto ONE physical column server-side (apps/backend/src/catalogs/accounting/
+   * factory.ts's duplicate-column collapse). Presenting two independently-editable fields the
+   * backend can only ever satisfy identically produced a real, live 400 whenever they diverged. When
+   * true, this hides the separate Display Name input and mirrors `code` into `display_name` on
+   * submit, so the two values can never disagree in the first place.
+   */
+  singleCodeNameField?: boolean;
   onClose: () => void;
   /** Called after successful create/update/deactivate. Create passes id+label for nested pickers. */
   onSaved: (result?: AccountingCatalogSavedResult) => void;
@@ -65,6 +74,7 @@ export function AccountingCatalogModal({
   row,
   metadataFields = [],
   nextSortOrder,
+  singleCodeNameField = false,
   onClose,
   onSaved,
   embedded = false,
@@ -92,13 +102,13 @@ export function AccountingCatalogModal({
   // is present (the on-submit validate() below still produces per-field error messages).
   const canSubmit =
     Boolean(form.code.trim()) &&
-    Boolean(form.display_name.trim()) &&
+    (singleCodeNameField || Boolean(form.display_name.trim())) &&
     metadataFields.every((field) => !field.required || String(form.metadata[field.key] ?? "").trim() !== "");
 
   function validate() {
     const next: Record<string, string> = {};
     if (!form.code.trim()) next.code = "Code is required.";
-    if (!form.display_name.trim()) next.display_name = "Display Name is required.";
+    if (!singleCodeNameField && !form.display_name.trim()) next.display_name = "Display Name is required.";
     for (const field of metadataFields) {
       if (!field.required) continue;
       const value = form.metadata[field.key];
@@ -114,9 +124,12 @@ export function AccountingCatalogModal({
     if (!validate()) return;
     setIsSaving(true);
     setSubmitError("");
+    // PAYMENT-TERMS-CODE-NAME-COLUMN-COLLISION — mirror code into display_name so the two values
+    // sent to the backend are always identical, never independently typed.
+    const displayName_ = singleCodeNameField ? form.code.trim() : form.display_name.trim();
     const body: AccountingCatalogCreateBody = {
       code: form.code.trim(),
-      display_name: form.display_name.trim(),
+      display_name: displayName_,
       description: form.description.trim() || undefined,
       is_active: form.is_active,
       sort_order: Number.isFinite(form.sort_order) ? form.sort_order : undefined,
@@ -125,10 +138,10 @@ export function AccountingCatalogModal({
     try {
       if (mode === "create") {
         const created = await client.create(operatingCompanyId, body);
-        onSaved({ id: String(created.id), label: form.display_name.trim() });
+        onSaved({ id: String(created.id), label: displayName_ });
       } else if (row) {
         await client.update(row.id, operatingCompanyId, body);
-        onSaved({ id: row.id, label: form.display_name.trim() });
+        onSaved({ id: row.id, label: displayName_ });
       } else {
         onSaved();
       }
@@ -180,17 +193,19 @@ export function AccountingCatalogModal({
         {errors.code ? <div className="mt-1 text-[11px] text-red-700">{errors.code}</div> : null}
       </label>
 
-      <label className="block text-xs font-semibold text-gray-600">
-        Display Name
-        <input
-          data-testid="catalog-name-input"
-          value={form.display_name}
-          disabled={readOnly}
-          onChange={(event) => setForm((value) => ({ ...value, display_name: event.target.value }))}
-          className="mt-1 h-9 w-full rounded-sm border border-gray-300 px-2 text-xs disabled:bg-slate-100"
-        />
-        {errors.display_name ? <div className="mt-1 text-[11px] text-red-700">{errors.display_name}</div> : null}
-      </label>
+      {singleCodeNameField ? null : (
+        <label className="block text-xs font-semibold text-gray-600">
+          Display Name
+          <input
+            data-testid="catalog-name-input"
+            value={form.display_name}
+            disabled={readOnly}
+            onChange={(event) => setForm((value) => ({ ...value, display_name: event.target.value }))}
+            className="mt-1 h-9 w-full rounded-sm border border-gray-300 px-2 text-xs disabled:bg-slate-100"
+          />
+          {errors.display_name ? <div className="mt-1 text-[11px] text-red-700">{errors.display_name}</div> : null}
+        </label>
+      )}
 
       {metadataFields.map((field) => {
         const value = form.metadata[field.key];
