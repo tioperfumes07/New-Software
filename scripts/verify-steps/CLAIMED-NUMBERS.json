@@ -8193,5 +8193,10 @@
     "claimed_by": "claude",
     "claimed_at": "2026-09-07",
     "purpose": "verify-cash-flow-rolling-ledger-4-fixes (CASH-FLOW-ROLLING-LEDGER-4-FIXES, owner request 2026-09-07). Static guard: cash-flow.service.ts resolves the real customer name for Factor advance/reserve rows (not the factoring vendor); RollingLedgerTab.tsx honest In/Days labels, selectedDate defaults to today, StatusPill collapses for factor rows, incomeColumns has an Invoice date column."
+  },
+  "10885": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-07",
+    "purpose": "verify-load-costs-expense-category-fuel-row-fixes (LOAD-COSTS-EXPENSE-CATEGORY-FUEL-ROW-ROOT-CAUSE, owner box 2026-09-07). Static guard: expenses.routes.ts accepts+resolves expense_category_code via the existing resolveExpenseCategoryId(); LoadDetailCostsTab.tsx shows a category-code picker when an account has multiple active expense_category_account_map bindings, a Paid-by-driver-reimbursable checkbox wired to is_reimbursable, and Paid With using LocalCombobox+createHref like Category."
   }
 }
