@@ -15,6 +15,7 @@ import { useForm, type FieldErrors } from "react-hook-form";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createDispatchLoad, createTrailerInterchange, distributeLoadInstructions, getLaneMileage, getChainDeadhead } from "../../../api/dispatch";
 import { resolveStopPlace } from "./book-load-city-state";
+import { geocodeRouteReference } from "../../../api/geocoding";
 import { historicalImportReasonsCatalogClient, listAllDispatchCatalogRows, loadCommoditiesCatalogClient, lumperProvidersCatalogClient, pickupTimeTypesCatalogClient } from "../../../api/catalogs-dispatch";
 import { ApiError } from "../../../api/client";
 import { userFacingApiError } from "../../../lib/api-error-message";
@@ -284,6 +285,22 @@ const BOOK_LOAD_CORRECT_DESIGN_CSS = `
 [data-wizard-v5="on"] .space-y-3>*+*{margin-top:7px}
 [data-wizard-v5="on"] .space-y-2>*+*{margin-top:4px}
 `;
+
+// LDT-1 (owner ruling 2026-09-05, ONE-ITEM-INSTRUCTIONS-ALL-SEATS §2): the Empty (deadhead) leg's
+// origin is the USMCA yard — 23918 Mines Rd, Laredo (geofence 188cf90c centroid). The canonical
+// source is the `mdata.locations WHERE is_ih35_yard = true` row that Codex TEL-42 creates, read via
+// GET /api/v1/locations/yard. Until that row + route exist, this ONE constant stands in — never the
+// coordinates in two places. TODO(TEL-42): delete YARD_FALLBACK and read the yard row instead.
+const YARD_FALLBACK: { lat: number; lng: number } = { lat: 27.65149, lng: -99.63094 };
+
+/** Parse a stop's latitude/longitude (stored as strings) into a Routes-API leg endpoint, or null. */
+function stopLatLng(stop: { latitude?: string; longitude?: string } | undefined): { lat: number; lng: number } | null {
+  if (!stop) return null;
+  const lat = Number(String(stop.latitude ?? "").trim());
+  const lng = Number(String(stop.longitude ?? "").trim());
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || (lat === 0 && lng === 0)) return null;
+  return { lat, lng };
+}
 
 export function BookLoadModalV4({
   open,
@@ -621,6 +638,39 @@ export function BookLoadModalV4({
   const originPlace = resolveStopPlace(originCity, originState);
   const destPlace = resolveStopPlace(destCity, destState);
   const milesOperatorTouched = useRef(false);
+
+  // DSP-48 / LDT-1 (owner ruling 2026-09-05, "Google distance = REFERENCE ONLY", LAW §2): once the
+  // picked pickup/delivery carry coordinates, quote two Google Routes legs — the linehaul
+  // (pickup→delivery) and the Empty leg (yard→pickup) — for a grey, read-only comparison beside the
+  // typed miles. This figure NEVER writes miles_practical/miles_shortest/miles_deadhead, pay, RPM or
+  // settlement (verify-google-reference-miles.mjs). Server proxy holds the key; disabled/no-coords
+  // → null (nothing shown), never a fake 0.
+  const pickupLatLng = stopLatLng(pickupStop);
+  const deliveryLatLng = stopLatLng(deliveryStop);
+  const routeReferenceQuery = useQuery({
+    queryKey: [
+      "book-load-route-reference",
+      pickupLatLng?.lat,
+      pickupLatLng?.lng,
+      deliveryLatLng?.lat,
+      deliveryLatLng?.lng,
+    ],
+    queryFn: () =>
+      geocodeRouteReference([
+        { from: pickupLatLng as { lat: number; lng: number }, to: deliveryLatLng as { lat: number; lng: number } },
+        { from: YARD_FALLBACK, to: pickupLatLng as { lat: number; lng: number } },
+      ]),
+    enabled: Boolean(pickupLatLng && deliveryLatLng),
+    staleTime: 5 * 60 * 1000,
+  });
+  const googleReferencePractical = useMemo(() => {
+    const leg = routeReferenceQuery.data?.enabled ? routeReferenceQuery.data.legs?.[0] : null;
+    return leg && Number.isFinite(leg.miles) && Number.isFinite(leg.minutes) ? { miles: leg.miles, minutes: leg.minutes } : null;
+  }, [routeReferenceQuery.data]);
+  const googleReferenceEmpty = useMemo(() => {
+    const leg = routeReferenceQuery.data?.enabled ? routeReferenceQuery.data.legs?.[1] : null;
+    return leg && Number.isFinite(leg.miles) && Number.isFinite(leg.minutes) ? { miles: leg.miles, minutes: leg.minutes } : null;
+  }, [routeReferenceQuery.data]);
 
   const laneMileageQuery = useQuery({
     queryKey: [
@@ -1222,9 +1272,20 @@ export function BookLoadModalV4({
       if (!(Number(values.miles_practical) > 0)) {
         form.setError("miles_practical", {
           type: "required",
-          message: "Enter practical miles so revenue per mile can be computed from the typed rate.",
+          message: "Practical must be greater than 0 — enter practical miles so revenue per mile can be computed from the typed rate.",
         });
         pushToast("Enter practical miles before booking", "error");
+        return;
+      }
+      // RG-03 / MIL-01 (owner CONSOLIDATED, DSP-22): shortest (short) miles drive driver pay —
+      // once a driver is seated, booking without them would settle the driver on $0 miles. Not
+      // required before a driver is assigned (the load can still be booked open).
+      if (assignedPrimaryDriverId && !(Number(values.miles_shortest) > 0)) {
+        form.setError("miles_shortest", {
+          type: "required",
+          message: "Enter shortest miles before booking with a driver — driver pay is computed from shortest miles.",
+        });
+        pushToast("Enter shortest miles before booking with a driver", "error");
         return;
       }
     }
@@ -2359,7 +2420,7 @@ export function BookLoadModalV4({
               <div className="blw-sec-hd">
                 <span className="blw-sec-chip">C</span>
                 <span className="blw-sec-name">Stops and miles</span>
-                <span className="blw-sec-meta">1 pickup, 1 delivery, practical miles (short miles optional)</span>
+                <span className="blw-sec-meta">1 pickup, 1 delivery, practical miles (shortest required once a driver is seated)</span>
               </div>
               <div className="space-y-2 p-3">
                 <MilesStrip
@@ -2367,6 +2428,8 @@ export function BookLoadModalV4({
                   shortest={milesShortest}
                   deadhead={milesDeadhead}
                   ratePerMile={ratePerMile}
+                  googleReferencePractical={googleReferencePractical}
+                  googleReferenceEmpty={googleReferenceEmpty}
                   provenance={
                     mileageSource === "Operator entered"
                       ? "Operator entered"
@@ -2377,7 +2440,7 @@ export function BookLoadModalV4({
                       ? "operator"
                       : laneMileageQuery.data?.fill_confidence
                   }
-                  shortestRequired={false}
+                  shortestRequired={Boolean(assignedPrimaryDriverId)}
                   practicalRequired
                   milesColumnInverted={milesColumnInverted}
                   reverseLaneShortDiff={reverseLaneShortDiff}

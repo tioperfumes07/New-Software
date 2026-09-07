@@ -73,6 +73,8 @@ export type DispatchLoad = {
   rate_total_cents?: number | null;
   currency_code?: string | null;
   pickup_scheduled_at?: string | null;
+  /** RT-FIX: last delivery stop appointment_start_at ?? scheduled_arrival_at, from the list's sd lateral. */
+  delivery_scheduled_at?: string | null;
   scheduled_delivery_date?: string | null;
   effective_delivery_date?: string | null;
   delivery_appointment_start_at?: string | null;
@@ -186,7 +188,7 @@ export type DispatchBookLoadPayload = {
   requested_load_number?: string;
   addToOpenPresettlement?: boolean;
   reservation_uuid?: string;
-  trip_type?: "NB" | "TR" | "SB";
+  trip_type?: "NB" | "TR" | "SB" | "LOCAL";
   tour_id?: string;
   trailer_type?: "refrigerated_van" | "dry_van" | "flatbed" | "lowboy" | "power_only_no_trailer" | "power_only_customer_trailer";
   assigned_unit_id?: string;
@@ -229,6 +231,7 @@ export type DispatchBookLoadPayload = {
     postal_code?: string;
     latitude?: number;
     longitude?: number;
+    geocode_precision?: "rooftop" | "range" | "locality" | null;
   }>;
   save_mode: "draft" | "book_dispatch";
   override_token?: string;
@@ -364,24 +367,25 @@ export function listUnitsWithoutLoad(operatingCompanyId: string) {
 
 /** Live maintenance roster row — same source as Maintenance Fleet Table (read-only). */
 export type DispatchInShopUnit = {
-  id: string;
+  unit_id: string;
   unit_number: string;
+  work_order_id: string;
+  work_order_display_id: string;
+  opened_at: string;
+  expected_ready_at: string | null;
+  shop_or_vendor: string;
+  days_down: number;
   status: string;
-  is_oos?: boolean;
-  open_wo_count?: number;
-  oos_reason?: string | null;
 };
 
 /** In-shop board section: maintenance/repair — distinct from Fleet OOS (is_oos / OutOfService). */
 export function isDispatchInShopUnit(unit: DispatchInShopUnit): boolean {
-  if (unit.is_oos || unit.status === "OutOfService") return false;
-  if (unit.status === "InMaintenance") return true;
-  return (unit.open_wo_count ?? 0) > 0;
+  return Boolean(unit.unit_id && unit.work_order_id);
 }
 
 export function listDispatchInShopUnits(operatingCompanyId: string) {
   return apiRequest<{ rows: DispatchInShopUnit[] }>(
-    `/api/v1/maintenance/fleet-table/rows?operating_company_id=${encodeURIComponent(operatingCompanyId)}`
+    `/api/v1/maintenance/in-shop-units?operating_company_id=${encodeURIComponent(operatingCompanyId)}`
   );
 }
 
@@ -437,6 +441,79 @@ export function geocodeDispatchLoadStops(id: string, operatingCompanyId: string)
   return apiRequest<DispatchLoadGeocodeStopsResult>(
     `/api/v1/dispatch/loads/${id}/geocode-stops?operating_company_id=${encodeURIComponent(operatingCompanyId)}`,
     { method: "POST" }
+  );
+}
+
+// LDT-2 — Stops tab read model (read-only record; edits go to the wizard §C).
+export type StopsRecordStop = {
+  stop_id: string;
+  sequence: number;
+  stop_type: string;
+  address_line1: string | null;
+  city: string | null;
+  state: string | null;
+  postal_code: string | null;
+  country: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  geocode_precision: string | null;
+  geocode_missing: boolean;
+  appointment_window_type: string | null;
+  appointment_start_at: string | null;
+  appointment_end_at: string | null;
+  scheduled_arrival_at: string | null;
+  arrived_at: string | null;
+  departed_at: string | null;
+  dwell_minutes: number | null;
+  free_time_minutes: number;
+  detention_minutes: number;
+  detention_status: "accruing" | "closed" | "billed" | null;
+  source: "Geofence + driver" | "Driver only" | "Manual";
+  contact_name: string | null;
+  contact_phone: string | null;
+  gate_dock_text: string | null;
+  signature_required: boolean;
+  photo_required: boolean;
+  lumper_required: boolean;
+  lumper_amount_cents: number | null;
+  doc_count: number;
+};
+
+export type StopsRecordLeg = {
+  leg_index: number;
+  leg_kind: string;
+  from_label: string;
+  to_label: string;
+  practical_miles: number | null;
+  short_miles: number | null;
+  real_miles: number | null;
+  google_reference_miles: number | null;
+};
+
+export type StopsRecordEvent = {
+  occurred_at: string;
+  event_kind: string;
+  source: "Geofence + driver" | "Driver only" | "Manual";
+  sequence: number | null;
+  point_lat: number | null;
+  point_lng: number | null;
+};
+
+export type StopsRecordResponse = {
+  load: {
+    miles_practical: number | null;
+    miles_shortest: number | null;
+    miles_deadhead: number | null;
+  };
+  stops: StopsRecordStop[];
+  legs: StopsRecordLeg[];
+  events: StopsRecordEvent[];
+  geofence_event_count: number;
+};
+
+export function getLoadStopsRecord(loadId: string, operatingCompanyId: string) {
+  return apiRequest<StopsRecordResponse>(
+    `/api/v1/dispatch/loads/${encodeURIComponent(loadId)}/stops-record?operating_company_id=${encodeURIComponent(operatingCompanyId)}`
   );
 }
 
@@ -509,7 +586,7 @@ export function getDispatchLoadPositions(operatingCompanyId: string, loadIds: st
 // Trip Pairing Board (Block 05).
 export type TripLeg = {
   load_id: string;
-  trip_type: "NB" | "TR" | "SB";
+  trip_type: "NB" | "TR" | "SB" | "LOCAL";
   status: string;
   delivery_city: string | null;
   delivery_state: string | null;
@@ -759,6 +836,7 @@ export type RefinedLoadStop = {
   notes: string | null;
   latitude: number | null;
   longitude: number | null;
+  geocode_precision?: "rooftop" | "range" | "locality" | null;
   signature_required: boolean;
   photo_required: boolean;
   pickup_time_type_id?: string | null;

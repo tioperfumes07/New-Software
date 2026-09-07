@@ -16,6 +16,10 @@ const LABEL = "verify-accounting-reverse-link-list-surfaces";
 const AUDIT_TRAIL = "apps/frontend/src/pages/accounting/AccountingAuditTrailPage.tsx";
 const POSTING_LINEAGE = "apps/frontend/src/pages/accounting/PostingLineagePage.tsx";
 const JE_DETAIL = "apps/frontend/src/pages/accounting/journal-entries/JournalEntryDetailPage.tsx";
+// The postings render moved out of JE_DETAIL into this shared component (a real DRY refactor,
+// same class as this session's other shared-formula extractions) — separate Debit/Credit columns
+// replaced the single signed "amount" column, matching standard double-entry ledger display.
+const POSTING_GRID = "apps/frontend/src/components/accounting/PostingGrid.tsx";
 const AMORTIZATION = "apps/frontend/src/pages/finance/AmortizationPage.tsx";
 const LEASE_DETAIL = "apps/frontend/src/pages/accounting/AccountingLeaseDetailPage.tsx";
 const RECURRING_DETAIL = "apps/frontend/src/pages/accounting/AccountingRecurringTemplateDetailPage.tsx";
@@ -238,7 +242,8 @@ const CHECKS = [
   { name: "Audit Trail drills reimbursement", file: AUDIT_TRAIL, pattern: /case "driver_reimbursement":\s*return "driver_reimbursement";/ },
   { name: "Posting Lineage drills reimbursement", file: POSTING_LINEAGE, pattern: /case "driver_reimbursement":\s*return "driver_reimbursement";/ },
   { name: "JE Detail drills reimbursement", file: JE_DETAIL, pattern: /case "driver_reimbursement":\s*return "driver_reimbursement";/ },
-  { name: "JE Detail amount uses canonical money formatter", file: JE_DETAIL, pattern: /render: \(posting\) => formatUsdCents\(posting\.amount_cents\)/ },
+  { name: "JE Detail renders postings via the shared PostingGrid", file: JE_DETAIL, pattern: /<PostingGrid/ },
+  { name: "PostingGrid amount uses canonical money formatter", file: POSTING_GRID, pattern: /render: \(p\) => \(p\.debit_or_credit === "debit" \? formatUsdCents\(p\.amount_cents\) : ""\)/ },
   { name: "BillDetailPanel EntityLink", file: "apps/frontend/src/pages/accounting/BillDetailPanel.tsx", pattern: /EntityLink/ },
   { name: "ExpensesListPage EntityLink", file: "apps/frontend/src/pages/accounting/ExpensesListPage.tsx", pattern: /EntityLink/ },
   { name: "FactoringDetailPage EntityLink", file: "apps/frontend/src/pages/accounting/FactoringDetailPage.tsx", pattern: /EntityLink/ },

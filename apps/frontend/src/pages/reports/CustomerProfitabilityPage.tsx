@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
-import { DatePicker } from "../../components/forms/DatePicker";
-import { MoneyInput } from "../../components/forms/MoneyInput";
+import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
+import { MoneyInput } from "../../components/forms/MoneyInput";
 import {
   Bar,
   CartesianGrid,
@@ -17,7 +17,6 @@ import {
 import {
   getCustomerProfitability,
   type CustomerProfitabilityRow,
-  type CustomerProfitabilityResponse,
   type CustomerProfitFlag,
 } from "../../api/reports";
 import { PageHeader } from "../../components/layout/PageHeader";
@@ -25,7 +24,7 @@ import { Button } from "../../components/Button";
 import { useCompanyContext } from "../../contexts/CompanyContext";
 import { ReportBlockTPendingBanner } from "./ReportBlockTPendingBanner";
 import { ReportsSubNav } from "./ReportsSubNav";
-import { CollapsedListFilters, useStagedListFilters } from "../../components/table";
+import { ReportFilterBar } from "../../components/reports/ReportFilterBar";
 import { ParityTable, type ParityColumn } from "../../components/parity/ParityTable";
 import { entityLabel } from "../../lib/entity-label";
 import { EntityLink } from "../../components/shared/EntityLink";
@@ -92,13 +91,10 @@ export function CustomerProfitabilityPage() {
   const navigate = useNavigate();
   const { selectedCompanyId } = useCompanyContext();
   const companyId = selectedCompanyId ?? "";
+  const [searchParams, setSearchParams] = useSearchParams();
   const emptyFilters = { ...currentQuarterRange(), minRevDollars: "1000" };
   const [applied, setApplied] = useState(emptyFilters);
-  const staged = useStagedListFilters({
-    applied,
-    empty: emptyFilters,
-    onApply: setApplied,
-  });
+  const [reportSearch, setReportSearch] = useState("");
   const appliedMinCents = useMemo(() => {
     const d = applied.minRevDollars.trim() === "" ? DEFAULT_MIN_REVENUE_CENTS : Math.round(Number(applied.minRevDollars) * 100) || 0;
     return Math.max(0, d);
@@ -118,6 +114,12 @@ export function CustomerProfitabilityPage() {
   });
 
   const rows = query.data?.by_customer ?? [];
+
+  const filtered = useMemo(() => {
+    const q = reportSearch.toLowerCase();
+    if (!q) return rows;
+    return rows.filter((r) => String(r.customer_name ?? "").toLowerCase().includes(q));
+  }, [rows, reportSearch]);
 
   const profitabilityColumns = useMemo<ParityColumn<CustomerProfitabilityRow>[]>(
     () => [
@@ -207,9 +209,9 @@ export function CustomerProfitabilityPage() {
     });
   }, [query.data?.by_customer]);
 
-  function exportCsv(data: CustomerProfitabilityResponse) {
+  function exportCsv() {
     const header = ["Customer", "Loads", "Revenue", "DirectCost", "Margin", "MarginPct", "ARAging", "DaysSinceLoad", "Flags"];
-    const lines = (data.by_customer ?? []).map((r) =>
+    const lines = filtered.map((r) =>
       [
         `"${customerDisplayLabel(r).replace(/"/g, '""')}"`,
         r.load_count,
@@ -241,7 +243,7 @@ export function CustomerProfitabilityPage() {
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;");
     const t = data.totals;
-    const rowsHtml = (data.by_customer ?? [])
+    const rowsHtml = filtered
       .map(
         (r) => `<tr>
           <td>${esc(customerDisplayLabel(r))}</td>
@@ -307,7 +309,7 @@ export function CustomerProfitabilityPage() {
             <Button size="sm" variant="secondary" onClick={printLetter} disabled={!query.data}>
               Print this page
             </Button>
-            <Button size="sm" variant="secondary" disabled={!query.data} onClick={() => query.data && exportCsv(query.data)}>
+            <Button size="sm" variant="secondary" disabled={!query.data} onClick={() => exportCsv()}>
               Export CSV
             </Button>
           </div>
@@ -317,44 +319,31 @@ export function CustomerProfitabilityPage() {
       {!companyId ? <p className="text-xs text-red-600">Select an operating company.</p> : null}
       {query.isError ? <ReportBlockTPendingBanner error={query.error} onRetry={() => void query.refetch()} /> : null}
 
-      <CollapsedListFilters
-        activeFilterCount={JSON.stringify(applied) !== JSON.stringify(emptyFilters) ? 1 : 0}
-        onApply={staged.apply}
-        onReset={staged.reset}
-        onCancel={staged.cancel}
-        applyDisabled={!staged.dirty}
-        defaultOpen={true}
+      <ReportFilterBar
         testIdPrefix="reports-customer-profitability"
-        className="no-print rounded-sm border border-gray-200 bg-white p-3"
+        fromDate={applied.start}
+        toDate={applied.end}
+        onFromDateChange={(d) => setApplied((p) => ({ ...p, start: d ?? "" }))}
+        onToDateChange={(d) => setApplied((p) => ({ ...p, end: d ?? "" }))}
+        onPresetSelect={(preset) => {
+          const next = new URLSearchParams(searchParams);
+          next.set("preset", preset);
+          setSearchParams(next, { replace: true });
+        }}
+        search={reportSearch}
+        onSearchChange={setReportSearch}
       >
-        <div className="flex flex-wrap items-end gap-3">
-          <label className="text-xs text-gray-600">
-            Min revenue (USD)
-            <MoneyInput
-              valueDollars={staged.draft.minRevDollars ? Number(staged.draft.minRevDollars) : null}
-              onChangeDollars={(d) => staged.setDraft((p) => ({ ...p, minRevDollars: d == null ? "" : String(d) }))}
-              ariaLabel="Min revenue (USD)"
-              className="mt-1 w-28"
-            />
-          </label>
-          <label className="text-xs text-gray-600">
-            From
-            <DatePicker
-              className="mt-1 block h-9"
-              value={staged.draft.start}
-              onChange={(next) => staged.setDraft((p) => ({ ...p, start: next }))}
-            />
-          </label>
-          <label className="text-xs text-gray-600">
-            To
-            <DatePicker
-              className="mt-1 block h-9"
-              value={staged.draft.end}
-              onChange={(next) => staged.setDraft((p) => ({ ...p, end: next }))}
-            />
-          </label>
-        </div>
-      </CollapsedListFilters>
+        <label className="flex items-center gap-1 text-xs text-slate-600">
+          <span className="font-semibold text-slate-600">Min rev ($)</span>
+          <MoneyInput
+            valueDollars={applied.minRevDollars ? Number(applied.minRevDollars) : null}
+            onChangeDollars={(d) => setApplied((p) => ({ ...p, minRevDollars: d == null ? "" : String(d) }))}
+            ariaLabel="Min revenue ($)"
+            className="h-7 w-24"
+            name="reports-customer-profitability-min-rev"
+          />
+        </label>
+      </ReportFilterBar>
 
       {query.isLoading ? <p className="text-xs text-gray-500">Loading…</p> : null}
 
@@ -380,10 +369,10 @@ export function CustomerProfitabilityPage() {
           </div>
 
           <ParityTable
-            rows={rows}
+            rows={filtered}
             columns={profitabilityColumns}
             rowKey={(r) => r.customer_id}
-            loading={query.isPending || (query.isFetching && rows.length === 0)}
+            loading={query.isPending || (query.isFetching && filtered.length === 0)}
             storageKey="customer-profitability"
             emptyText="No customers match the current filters."
             exportFilename={`customer-profitability-${applied.start}-${applied.end}`}

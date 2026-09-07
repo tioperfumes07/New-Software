@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { DatePicker } from "../../components/forms/DatePicker";
 import { MoneyInput } from "../../components/forms/MoneyInput";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -12,8 +11,9 @@ import { useCompanyContext } from "../../contexts/CompanyContext";
 import { useToast } from "../../components/Toast";
 import { SelectCombobox } from "../../components/Combobox";
 import { ReportsSubNav } from "./ReportsSubNav";
-import { CollapsedListFilters, useStagedListFilters } from "../../components/table";
+import { ReportFilterBar } from "../../components/reports/ReportFilterBar";
 import { ParityTable, type ParityColumn } from "../../components/parity/ParityTable";
+import { useStagedListFilters } from "../../components/table";
 import { useUrlSort } from "../../hooks/useUrlSort";
 import { apAgingBillsListHref, apAgingVendorProfileHref } from "./agingDrillThrough";
 import { entityLabel } from "../../lib/entity-label";
@@ -58,21 +58,16 @@ export function APAgingPage() {
   const deepLinkVendorId = searchParams.get("vendor_id")?.trim() ?? "";
   const emptyFilters: APAgingFilters = { asOfDate: today, minBal: "", bucketFilter: "all", vendorId: "" };
   const [appliedFilters, setAppliedFilters] = useState<APAgingFilters>({ ...emptyFilters, vendorId: deepLinkVendorId });
+  const staged = useStagedListFilters({
+    applied: appliedFilters,
+    empty: emptyFilters,
+    onApply: setAppliedFilters,
+  });
+  const [reportSearch, setReportSearch] = useState("");
   const exportAction = useExportAction();
   useEffect(() => {
     setAppliedFilters((prev) => ({ ...prev, vendorId: deepLinkVendorId }));
   }, [deepLinkVendorId]);
-  const staged = useStagedListFilters({
-    applied: appliedFilters,
-    empty: emptyFilters,
-    onApply: (next) => {
-      setAppliedFilters(next);
-      const p = new URLSearchParams(searchParams);
-      if (next.vendorId) p.set("vendor_id", next.vendorId);
-      else p.delete("vendor_id");
-      setSearchParams(p, { replace: true });
-    },
-  });
 
   const query = useQuery({
     queryKey: ["reports", "ap-aging", companyId, appliedFilters.asOfDate],
@@ -93,6 +88,7 @@ export function APAgingPage() {
   const minCents = appliedFilters.minBal.trim() === "" ? 0 : Math.round(Number(appliedFilters.minBal) * 100) || 0;
 
   const filtered = useMemo<APAgingRowWithBucket[]>(() => {
+    const q = reportSearch.toLowerCase();
     return rows
       .filter((r) => {
         if (appliedFilters.vendorId && r.vendor_id !== appliedFilters.vendorId) return false;
@@ -101,10 +97,11 @@ export function APAgingPage() {
           const late = r.bucket_61_90_cents + r.bucket_91_plus_cents;
           if (late <= 0) return false;
         }
+        if (q && !String(r.vendor_name ?? "").toLowerCase().includes(q)) return false;
         return true;
       })
       .map((r) => ({ ...r, bucket_0_30_cents: r.current_cents + r.bucket_1_30_cents }));
-  }, [rows, appliedFilters.vendorId, appliedFilters.bucketFilter, minCents]);
+  }, [rows, appliedFilters.vendorId, appliedFilters.bucketFilter, minCents, reportSearch]);
 
   function exportCsv() {
     const header = ["Vendor", "Total", "0-30", "31-60", "61-90", "91+", "Last Pmt"];
@@ -262,56 +259,62 @@ export function APAgingPage() {
         </p>
       ) : null}
 
-      <CollapsedListFilters
-        activeFilterCount={JSON.stringify(appliedFilters) !== JSON.stringify(emptyFilters) ? 1 : 0}
-        onApply={staged.apply}
-        onReset={staged.reset}
-        onCancel={staged.cancel}
-        applyDisabled={!staged.dirty}
-        defaultOpen={true}
+      <ReportFilterBar
         testIdPrefix="reports-ap-aging"
-        className="no-print rounded-sm border border-gray-200 bg-white p-3"
+        fromDate={staged.draft.asOfDate}
+        toDate={null}
+        onFromDateChange={(d) => staged.setDraft((p) => ({ ...p, asOfDate: d ?? today }))}
+        onToDateChange={() => {}}
+        onPresetSelect={(preset) => {
+          const next = new URLSearchParams(searchParams);
+          next.set("preset", preset);
+          setSearchParams(next, { replace: true });
+        }}
+        search={reportSearch}
+        onSearchChange={setReportSearch}
+        onApply={staged.apply}
+        applyDisabled={!staged.dirty}
       >
-        <div className="grid gap-2 md:grid-cols-4 lg:grid-cols-5">
-          <label className="text-xs text-gray-600">
-            As-of date
-            <DatePicker className="mt-1 h-9 w-full" value={staged.draft.asOfDate} onChange={(next) => staged.setDraft((p) => ({ ...p, asOfDate: next }))} />
-          </label>
-          <label className="text-xs text-gray-600">
-            Vendor
-            <EntityPicker
-              kind="vendor"
-              operatingCompanyId={companyId}
-              value={staged.draft.vendorId || null}
-              onChange={(next) => staged.setDraft((p) => ({ ...p, vendorId: next ?? "" }))}
-              allowCreate={false}
-              placeholder="All vendors"
-              className="mt-1"
-              dataTestId="ap-aging-filter-vendor"
-            />
-          </label>
-          <label className="text-xs text-gray-600">
-            Min balance ($)
-            <MoneyInput
-              valueDollars={staged.draft.minBal ? Number(staged.draft.minBal) : null}
-              onChangeDollars={(d) => staged.setDraft((p) => ({ ...p, minBal: d == null ? "" : String(d) }))}
-              ariaLabel="Min balance ($)"
-              className="mt-1 w-full"
-            />
-          </label>
-          <label className="text-xs text-gray-600">
-            Aging bucket
-            <SelectCombobox
-              className="mt-1 h-9 w-full rounded-sm border border-gray-300 px-2"
-              value={staged.draft.bucketFilter}
-              onChange={(e) => staged.setDraft((p) => ({ ...p, bucketFilter: e.target.value as APAgingFilters["bucketFilter"] }))}
-            >
-              <option value="all">All</option>
-              <option value="61+">61+ days past due portion</option>
-            </SelectCombobox>
-          </label>
-        </div>
-      </CollapsedListFilters>
+        <label className="flex items-center gap-1 text-xs text-slate-600">
+          <span className="font-semibold text-slate-600">Vendor</span>
+          <EntityPicker
+            kind="vendor"
+            operatingCompanyId={companyId}
+            value={staged.draft.vendorId || null}
+            onChange={(next) => {
+              const updated = next ?? "";
+              staged.setDraft((p) => ({ ...p, vendorId: updated }));
+              const params = new URLSearchParams(searchParams);
+              if (updated) params.set("vendor_id", updated);
+              else params.delete("vendor_id");
+              setSearchParams(params, { replace: true });
+            }}
+            allowCreate={false}
+            placeholder="All vendors"
+            dataTestId="ap-aging-filter-vendor"
+          />
+        </label>
+        <label className="flex items-center gap-1 text-xs text-slate-600">
+          <span className="font-semibold text-slate-600">Min bal ($)</span>
+          <MoneyInput
+            valueDollars={staged.draft.minBal ? Number(staged.draft.minBal) : null}
+            onChangeDollars={(d) => staged.setDraft((p) => ({ ...p, minBal: d == null ? "" : String(d) }))}
+            ariaLabel="Min balance ($)"
+            className="w-24"
+          />
+        </label>
+        <label className="flex items-center gap-1 text-xs text-slate-600">
+          <span className="font-semibold text-slate-600">Bucket</span>
+          <SelectCombobox
+            className="h-7 rounded-sm border border-slate-300 px-2 text-xs"
+            value={staged.draft.bucketFilter}
+            onChange={(e) => staged.setDraft((p) => ({ ...p, bucketFilter: e.target.value as APAgingFilters["bucketFilter"] }))}
+          >
+            <option value="all">All</option>
+            <option value="61+">61+ days</option>
+          </SelectCombobox>
+        </label>
+      </ReportFilterBar>
 
       <div className="grid gap-2 md:grid-cols-4">
         <div className="rounded-sm border border-gray-200 bg-white px-3 py-2">

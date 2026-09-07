@@ -381,6 +381,15 @@ export function DriverProfilePage({ driverId: driverIdProp, onBack }: DriverProf
         </p>
       </div>
       <div data-testid="dp-section-2-license">
+        <div className="mb-2 flex justify-end">
+          <EntityLink
+            kind="driver_safety_profile"
+            id={id}
+            label="Open full safety file →"
+            className="text-xs font-semibold text-slate-700 underline"
+            data-testid="driver-profile-safety-file-link"
+          />
+        </div>
         <LicenseSection license={aggregate.license} />
       </div>
       <div data-testid="dp-section-3-medical">

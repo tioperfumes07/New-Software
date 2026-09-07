@@ -196,7 +196,6 @@ export const REFUSED_MOUNTS = new Map([
   // these as intentionally unmounted. Re-litigating a documented decision is out of scope for a
   // parity sweep, and mounting code with no consumer expands runtime surface for zero benefit.
   ["safety/drug-pool.routes.ts", "Dead code — no frontend caller (scripts/verify-no-orphan-routes.mjs)."],
-  ["integrations/samsara/samsara-master-sync.routes.ts", "Dead code / admin-only — no frontend caller (scripts/verify-no-orphan-routes.mjs); it also triggers an external Samsara sync that writes mdata.*."],
 
   // ── NO CONSUMER, newly surfaced by THIS guard (the orphan guard could not see them) ───────────
   ["mexico-ops/mx-permits.routes.ts", "No consumer — nothing in apps/frontend or apps/driver-pwa calls /api/v1/mx-permits. Newly surfaced here: it exports `mxPermitsRoutes`, which the orphan guard's `register*Routes` pattern never matched. Triage the Mexico-ops module surface before wiring it."],

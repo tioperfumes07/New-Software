@@ -34,6 +34,24 @@ export type FactoringSummary = {
   mtd_advanced_total: number;
 };
 
+/**
+ * FAC-08: the per-load Load-Costs rollup columns the recourse & chargebacks routes now project via
+ * the shared loadCostRollupLateral() (backend accounting/load-cost-rollup.sql.ts). bigint cents come
+ * over the wire as strings; the factoring register manifest coerces with Number(). Identical math to
+ * the Load-Costs board, so a row's Costs ties to the board for the same load.
+ */
+export type LoadCostRollupFields = {
+  lc_load_number: string | null;
+  lc_driver_id: string | null;
+  lc_driver_name: string | null;
+  lc_unit_number: string | null;
+  lc_settlement_number: string | null;
+  lc_revenue_cents: string | number | null;
+  lc_costs_cents: string | number | null;
+  lc_driver_pay_cents: string | number | null;
+  lc_margin_cents: string | number | null;
+};
+
 export type FactoringRecourseInvoice = {
   factoring_advance_id: string;
   /** Canonical accounting.invoices.id resolved by the recourse producer for direct drill-through. */
@@ -51,7 +69,7 @@ export type FactoringRecourseInvoice = {
   days_until_recourse_expiry: number;
   /** LINK-F5180: real FK, resolved via the same accounting.invoices join that resolves customer_id. */
   load_id: string | null;
-};
+} & LoadCostRollupFields;
 
 export type FactoringChargebackFeeRow = {
   factoring_advance_id: string;
@@ -69,7 +87,9 @@ export type FactoringChargebackFeeRow = {
   /** ACCT-F5901: views.factoring_chargebacks_fees (202613080000) now selects the real advance
    * dollar amount, mirroring FactoringRecourseInvoice.advance_amount above. */
   advance_amount: number;
-};
+  /** LINK-F5180 / FAC-08: source load resolved via the accounting.invoices LATERAL (rollup key). */
+  load_id: string | null;
+} & LoadCostRollupFields;
 
 export type FactoringMonthlyFeeSummary = {
   statement_month: string | null;

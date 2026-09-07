@@ -190,19 +190,26 @@ export function ValidationPanel({
       {allowBlockOverride && result.blockers.length > 0 ? (
         <div className="overflow-x-auto" data-testid="pre-dispatch-blocker-override-table">
           <table className="w-full border-collapse text-xs">
+            {/* TABLE-HEADER-RETIRE-NAVY LAW (owner ruling 2026-09-04, verbatim: "the blue is too
+               * aggressive") -- navy #14314F/white left table headers for good. This thead used to
+               * hardcode navy on the <tr> itself, which sits on top of the global `thead { !important }`
+               * light-gray rule (index.css GLB-02) since that rule targets the <thead> element's own
+               * background, not a child <tr>'s explicit background -- a real loophole the design-system
+               * ratchet guard never checked for. Removed the override; the locked #eef2f6/#1f2937 11px
+               * token now applies here exactly like every other table header in the app. */}
             <thead data-table-header="locked">
-              <tr className="h-[26px] bg-[#14314F] text-xs font-bold uppercase tracking-[0.5px] text-white">
-                <th className="border-r border-[#1f3f63] px-2 text-center">
+              <tr className="h-[26px] tracking-[0.5px]">
+                <th className="border-r border-gray-300 px-2 text-center">
                   <button type="button" className="w-full font-bold uppercase" onClick={() => toggleSort("rule")}>
                     Rule code
                   </button>
                 </th>
-                <th className="border-r border-[#1f3f63] px-2 text-center">
+                <th className="border-r border-gray-300 px-2 text-center">
                   <button type="button" className="w-full font-bold uppercase" onClick={() => toggleSort("subject")}>
                     Subject
                   </button>
                 </th>
-                <th className="border-r border-[#1f3f63] px-2 text-center">
+                <th className="border-r border-gray-300 px-2 text-center">
                   <button type="button" className="w-full font-bold uppercase" onClick={() => toggleSort("missing")}>
                     What is missing
                   </button>

@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import { DatePicker } from "../../components/forms/DatePicker";
+import { Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "../../components/Button";
 import { PageHeader } from "../../components/layout/PageHeader";
@@ -13,7 +12,7 @@ import {
 } from "../../api/reports";
 import { ReportBlockTPendingBanner } from "./ReportBlockTPendingBanner";
 import { ReportsSubNav } from "./ReportsSubNav";
-import { CollapsedListFilters, useStagedListFilters } from "../../components/table";
+import { ReportFilterBar } from "../../components/reports/ReportFilterBar";
 import { formatAccountTypeLabel } from "../../lib/formatAccountTypeLabel";
 import { mmmDd, mmmDdTime } from "../../lib/formatDate";
 import { printLetterHtml } from "../../lib/openPrintableDocument";
@@ -50,14 +49,11 @@ export function ProfitLossPage() {
   const { selectedCompanyId } = useCompanyContext();
   const companyId = selectedCompanyId ?? "";
   const [showCodes] = useShowAccountNumbers();
+  const [searchParams, setSearchParams] = useSearchParams();
   const emptyFilters = { ...currentMonthRange(), basis: "accrual" as AccountingBasis };
   const [applied, setApplied] = useState(emptyFilters);
   const exportAction = useExportAction();
-  const staged = useStagedListFilters({
-    applied,
-    empty: emptyFilters,
-    onApply: setApplied,
-  });
+  const [reportSearch, setReportSearch] = useState("");
 
   const query = useQuery({
     queryKey: ["reports", "profit-loss", companyId, applied.start, applied.end, applied.basis],
@@ -72,9 +68,27 @@ export function ProfitLossPage() {
     retry: false,
   });
 
-  const revenueLines = useMemo(() => sortLines(query.data?.revenue.lines ?? []), [query.data?.revenue.lines]);
-  const cogsLines = useMemo(() => sortLines(query.data?.cogs.lines ?? []), [query.data?.cogs.lines]);
-  const expenseLines = useMemo(() => sortLines(query.data?.operating_expenses.lines ?? []), [query.data?.operating_expenses.lines]);
+  const revenueLines = useMemo(() => {
+    const q = reportSearch.toLowerCase();
+    return sortLines(query.data?.revenue.lines ?? []).filter((line) => {
+      if (!q) return true;
+      return String(line.account_name ?? "").toLowerCase().includes(q) || String(line.account_code ?? "").toLowerCase().includes(q);
+    });
+  }, [query.data?.revenue.lines, reportSearch]);
+  const cogsLines = useMemo(() => {
+    const q = reportSearch.toLowerCase();
+    return sortLines(query.data?.cogs.lines ?? []).filter((line) => {
+      if (!q) return true;
+      return String(line.account_name ?? "").toLowerCase().includes(q) || String(line.account_code ?? "").toLowerCase().includes(q);
+    });
+  }, [query.data?.cogs.lines, reportSearch]);
+  const expenseLines = useMemo(() => {
+    const q = reportSearch.toLowerCase();
+    return sortLines(query.data?.operating_expenses.lines ?? []).filter((line) => {
+      if (!q) return true;
+      return String(line.account_name ?? "").toLowerCase().includes(q) || String(line.account_code ?? "").toLowerCase().includes(q);
+    });
+  }, [query.data?.operating_expenses.lines, reportSearch]);
 
   function printLetter() {
     const data = query.data;
@@ -201,39 +215,25 @@ export function ProfitLossPage() {
         </p>
       ) : null}
 
-      <CollapsedListFilters
-        activeFilterCount={JSON.stringify(applied) !== JSON.stringify(emptyFilters) ? 1 : 0}
-        onApply={staged.apply}
-        onReset={staged.reset}
-        onCancel={staged.cancel}
-        applyDisabled={!staged.dirty}
-        defaultOpen={true}
+      <ReportFilterBar
         testIdPrefix="reports-profit-loss"
-        className="no-print rounded-sm border border-gray-200 bg-white p-3"
+        fromDate={applied.start}
+        toDate={applied.end}
+        onFromDateChange={(d) => setApplied((p) => ({ ...p, start: d ?? "" }))}
+        onToDateChange={(d) => setApplied((p) => ({ ...p, end: d ?? "" }))}
+        onPresetSelect={(preset) => {
+          const next = new URLSearchParams(searchParams);
+          next.set("preset", preset);
+          setSearchParams(next, { replace: true });
+        }}
+        search={reportSearch}
+        onSearchChange={setReportSearch}
       >
-        <div className="flex flex-wrap items-end gap-3">
-          <BasisSelector
-            value={staged.draft.basis}
-            onChange={(next) => staged.setDraft((previous) => ({ ...previous, basis: next }))}
-          />
-          <label className="text-xs text-gray-600">
-            From
-            <DatePicker
-              className="mt-1 block h-9"
-              value={staged.draft.start}
-              onChange={(next) => staged.setDraft((previous) => ({ ...previous, start: next }))}
-            />
-          </label>
-          <label className="text-xs text-gray-600">
-            To
-            <DatePicker
-              className="mt-1 block h-9"
-              value={staged.draft.end}
-              onChange={(next) => staged.setDraft((previous) => ({ ...previous, end: next }))}
-            />
-          </label>
-        </div>
-      </CollapsedListFilters>
+        <BasisSelector
+          value={applied.basis}
+          onChange={(next) => setApplied((p) => ({ ...p, basis: next }))}
+        />
+      </ReportFilterBar>
 
       {query.data ? (
         <div className="grid gap-2 md:grid-cols-3">

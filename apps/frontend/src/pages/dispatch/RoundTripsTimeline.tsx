@@ -6,6 +6,7 @@ import { entityLabel } from "../../lib/entity-label";
 import { addDaysIso, companyToday } from "../../lib/businessDate";
 import { formatPlannerDayLabel } from "./planners/plannerDayLabel";
 import {
+  hasSpanDates,
   loadSpanEndMs,
   loadSpanStartMs,
   orderedLegsForUnit,
@@ -81,13 +82,17 @@ export function RoundTripsTimeline({ loads, rangeFrom, rangeTo, onLoadClick }: P
           <div className="p-4 text-xs text-gray-500">No open tours. A tour opens when a northbound load is booked from the yard.</div>
         ) : (
           byUnit.map(([unitId, unitLoads]) => {
-            const chrono = [...unitLoads].sort((a, b) => loadSpanStartMs(a) - loadSpanStartMs(b));
-            const legs = orderedLegsForUnit(unitLoads);
+            // RT-FIX: only loads with a real pickup→delivery window can be positioned. Loads with
+            // no dates get an honest "no dates" marker below the bars — never a bar on today.
+            const dated = unitLoads.filter(hasSpanDates);
+            const undated = unitLoads.filter((l) => !hasSpanDates(l));
+            const chrono = [...dated].sort((a, b) => (loadSpanStartMs(a) ?? 0) - (loadSpanStartMs(b) ?? 0));
+            const legs = orderedLegsForUnit(dated);
             return (
               <div
                 key={unitId}
                 className="relative border-b border-gray-100"
-                style={{ minHeight: 40 + legs.length * 22 }}
+                style={{ minHeight: 40 + (legs.length + undated.length) * 22 }}
                 data-testid={`round-trips-timeline-unit-${unitId}`}
               >
                 <div
@@ -107,6 +112,7 @@ export function RoundTripsTimeline({ loads, rangeFrom, rangeTo, onLoadClick }: P
                       const next = chrono[i + 1];
                       const gapStart = loadSpanEndMs(load);
                       const gapEnd = loadSpanStartMs(next);
+                      if (gapStart == null || gapEnd == null) return null;
                       if (!(gapEnd > gapStart)) return null;
                       const left = ((Math.max(gapStart, rangeStart) - rangeStart) / spanMs) * 100;
                       const width = ((Math.min(gapEnd, rangeEnd) - Math.max(gapStart, rangeStart)) / spanMs) * 100;
@@ -129,6 +135,7 @@ export function RoundTripsTimeline({ loads, rangeFrom, rangeTo, onLoadClick }: P
                       const kind = resolvedTripType(load, chrono.indexOf(load), chrono);
                       const start = loadSpanStartMs(load);
                       const end = loadSpanEndMs(load);
+                      if (start == null || end == null) return null;
                       const longFlag = (kind === "NB" || kind === "SB") && end - start >= 7 * 24 * 60 * 60 * 1000;
                       const left = ((Math.max(start, rangeStart) - rangeStart) / spanMs) * 100;
                       const width = ((Math.min(end, rangeEnd) - Math.max(start, rangeStart)) / spanMs) * 100;
@@ -163,6 +170,28 @@ export function RoundTripsTimeline({ loads, rangeFrom, rangeTo, onLoadClick }: P
                         </button>
                       );
                     })}
+                    {/* RT-FIX: loads with no pickup/delivery date are unschedulable — shown as an
+                        honest marker on the unit row, never fabricated onto today. */}
+                    {undated.map((load, ui) => (
+                      <button
+                        key={`nodate-${load.id}`}
+                        type="button"
+                        data-testid="round-trips-no-dates"
+                        className="absolute flex h-5 items-center gap-1 truncate rounded-sm border border-dashed border-gray-400 bg-gray-50 px-1 text-left text-xs font-medium text-gray-500"
+                        style={{ top: 14 + (legs.length + ui) * 20, left: 0, maxWidth: "36%" }}
+                        title="No pickup or delivery date — not scheduled on the timeline"
+                        onClick={() => onLoadClick(load.id)}
+                      >
+                        <EntityLink
+                          kind="load"
+                          id={load.id}
+                          label={entityLabel(load.load_number, load.id, "Load")}
+                          className="text-gray-600 hover:underline"
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                        <span>· no dates</span>
+                      </button>
+                    ))}
                   </div>
                 </div>
               </div>

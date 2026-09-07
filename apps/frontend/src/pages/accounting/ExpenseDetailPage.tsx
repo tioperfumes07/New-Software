@@ -1,4 +1,5 @@
 import { entityLabel } from "../../lib/entity-label";
+import { ReceiptAttach } from "../../components/documents/ReceiptAttach";
 import { formatDateUS } from "../../lib/formatDate";
 import { humanMemo } from "./ManualJEListPage";
 import { Link, useParams } from "react-router-dom";
@@ -12,6 +13,7 @@ import { StatusBadge } from "../../components/layout/StatusBadge";
 import { useCompanyContext } from "../../contexts/CompanyContext";
 import { AccountingSubNavWrapper } from "./AccountingSubNavWrapper";
 import { MoneyProofTrailPanel } from "../../components/accounting/MoneyProofTrailPanel";
+import { JournalPostingsPanel } from "../../components/accounting/PostingGrid";
 import { EntityLink } from "../../components/shared/EntityLink";
 import { ParityTable, type ParityColumn } from "../../components/parity/ParityTable";
 import { VoidReasonModal } from "../../components/accounting/VoidReasonModal";
@@ -145,6 +147,9 @@ export function ExpenseDetailPage() {
         actions={
           <div className="flex items-center gap-2">
             <StatusBadge variant={statusVariant(expense.status)}>{expense.status}</StatusBadge>
+            {expense.posting_hold_reason === "tour_open" ? (
+              <StatusBadge variant="crit">held — tour open</StatusBadge>
+            ) : null}
             <Button
               variant="secondary"
               size="sm"
@@ -253,6 +258,11 @@ export function ExpenseDetailPage() {
           <span className="text-xs font-semibold text-gray-600">Expense #</span>
           <span className="text-xs text-gray-900">{expenseListLabel(expense.expense_number)}</span>
         </DataPanelRow>
+        {/* LDT-1 (2026-09-06): receipt on EVERY expense editor — documents.attachments entity_type 'expense'. */}
+        <DataPanelRow>
+          <span className="text-xs font-semibold text-gray-600">Receipt</span>
+          <ReceiptAttach operatingCompanyId={selectedCompanyId!} entityType="expense" entityId={expense.id} readOnly={Boolean(expense.voided_at)} testId="expense-detail-receipt" />
+        </DataPanelRow>
         <DataPanelRow>
           <span className="text-xs font-semibold text-gray-600">Date</span>
           <span className="text-xs text-gray-900">{formatDateUS(expense.transaction_date)}</span>
@@ -263,7 +273,15 @@ export function ExpenseDetailPage() {
         </DataPanelRow>
         <DataPanelRow>
           <span className="text-xs font-semibold text-gray-600">GL posting</span>
-          <span className="text-xs capitalize text-gray-900">{expense.posting_status}</span>
+          <span className="flex items-center gap-2 text-xs capitalize text-gray-900">
+            {expense.posting_status}
+            {/* ACC-50 (LAW §2) — "open tour posts nothing": this expense carries a load whose
+                tour/settlement is still open, so it was held instead of posting, even if GL
+                posting is enabled for this entity. Clears itself once the tour closes. */}
+            {expense.posting_hold_reason === "tour_open" ? (
+              <StatusBadge variant="crit">held — tour open</StatusBadge>
+            ) : null}
+          </span>
         </DataPanelRow>
         {expense.journal_entry_id ? (
           <DataPanelRow>
@@ -393,6 +411,7 @@ export function ExpenseDetailPage() {
           storageKey="expense-detail-lines"
         />
       </DataPanel>
+      <JournalPostingsPanel sourceTransactionType="expense" sourceTransactionId={id} operatingCompanyId={selectedCompanyId} />
       <MoneyProofTrailPanel operatingCompanyId={selectedCompanyId!} documentType="expense" documentId={id} />
     </AccountingSubNavWrapper>
   );

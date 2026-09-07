@@ -6,6 +6,7 @@ import { applyPendingDeductionsToSettlementWithNetFloor } from "./settlement-ded
 import { applyAutoDeductionsToSettlement } from "../settlements/auto-deductions/apply.js";
 import { computeSettlementContractTerms, SETTLEMENT_CONTRACT_TERMS_FLAG } from "./settlement-contract-terms.service.js";
 import { appendSettlementLineFromDriverBillIfMissing, appendEscrowContributionLineIfMissing, fetchTeamDriversForLoad } from "./settlement-engine.js";
+import { materializeSettlementLines, backfillExistingSettlementLineAccounts } from "./settlement-lines-materialize.service.js";
 import { fromMdataStatus } from "../dispatch/load-state-machine.js";
 import {
   settlementEarningsSumSql,
@@ -154,13 +155,49 @@ export async function openLoadBookendedSettlement(
         -- first load is a real in-flight trip is still reused) and breaks only the orphan case. A
         -- settlement with no anchor at all is likewise not reusable — there is nothing to continue.
         AND s.first_load_id IS NOT NULL
-        AND EXISTS (
-          SELECT 1
-          FROM mdata.loads fl
-          WHERE fl.id = s.first_load_id
-            AND fl.operating_company_id = s.operating_company_id
-            AND fl.soft_deleted_at IS NULL
-            AND fl.status::text <> 'cancelled'
+        -- MEGA-TOUR-RULING (CC-1, 2026-09-06, docs/bus/OUTBOX-CC-1.md OUTBOX-CC-1 · MEGA-TOUR-RULING):
+        -- measured live that the mega-tour settlement seed assigned each driver's first_load_id
+        -- essentially arbitrarily -- "one of the driver's loads," not "the load that still
+        -- matters." 8 of 11 still-open USMCA mega-tour settlements have a first_load_id pointing
+        -- at a CANCELLED load, yet 6 of those 8 have real, LIVE loads correctly attached via
+        -- settlement_lines right now. The original EXISTS below (unchanged, still correct for the
+        -- normal single-trip settlement and for a future post-tour-split per-trip settlement whose
+        -- first_load_id IS the trip's real anchor) asked the wrong question for those 6+ drivers:
+        -- it called the settlement dead because its arbitrary anchor died, even though the
+        -- settlement's REAL load membership (settlement_lines) was still live. That false "not
+        -- reusable" verdict made openLoadBookendedSettlement fall through to INSERT a second open
+        -- settlement for a driver who already had one, and
+        -- uq_driver_settlements_one_open_per_driver correctly refused the duplicate (23505) --
+        -- the constraint did its job; the query asked it the wrong question. This is NOT "pick an
+        -- invariant, one has to yield": the seed's one-open-settlement-per-driver mega-tour and the
+        -- DB's one-open-settlement-per-driver constraint say the SAME thing. Widening to ALSO accept
+        -- a settlement with at least one active (is_active = true) settlement_lines row tracing
+        -- through driver_bills (canonical per ACCT-F275/ACCT-F290, settlement_lines.load_id a
+        -- denormalized fallback -- same resolution already used a few lines below in this file) to
+        -- a non-cancelled load is a strict superset of the original check: zero schema change, zero
+        -- data change, and it keeps holding once CC-3's separate TOUR-SPLIT-PLAN split runs (each
+        -- new per-trip settlement's own first_load_id will then correctly be its real anchor, and
+        -- this same widened check still passes via option (a) alone).
+        AND (
+          EXISTS (
+            SELECT 1
+            FROM mdata.loads fl
+            WHERE fl.id = s.first_load_id
+              AND fl.operating_company_id = s.operating_company_id
+              AND fl.soft_deleted_at IS NULL
+              AND fl.status::text <> 'cancelled'
+          )
+          OR EXISTS (
+            SELECT 1
+            FROM driver_finance.settlement_lines sl
+            LEFT JOIN driver_finance.driver_bills db ON db.id = sl.source_driver_bill_id
+            JOIN mdata.loads ll ON ll.id = COALESCE(db.load_id, sl.load_id)
+                                AND ll.operating_company_id = s.operating_company_id
+                                AND ll.soft_deleted_at IS NULL
+            WHERE sl.settlement_id = s.id
+              AND sl.is_active = true
+              AND ll.status::text <> 'cancelled'
+          )
         )
       ORDER BY s.created_at DESC
       LIMIT 1
@@ -176,7 +213,16 @@ export async function openLoadBookendedSettlement(
   }
 
   const settlementNumber = settlementDisplayIdFromLoadNumber(load.load_number);
-  const periodDate = String(tripStartedAt).slice(0, 10);
+  // BUG FOUND LIVE 2026-09-06 (DELIVER-SEED-40): pickupAt/tripStartedAt is typed `string | null`
+  // above, but node-postgres auto-parses a timestamptz column (ls.actual_departure_at) into a
+  // native JS Date object at runtime -- the TS annotation does not enforce that. String(dateObj)
+  // calls Date.prototype.toString() ("Fri Aug 07 2026 00:00:00 GMT+0000 (...)"), not ISO, so
+  // .slice(0, 10) produced "Fri Aug 07" -- Postgres then rejected it with "invalid input syntax
+  // for type date" (22007), aborting the WHOLE surrounding transition transaction for every load
+  // needing to open a NEW settlement here (loads joining an already-open settlement never hit
+  // this line at all, which is why some loads silently succeeded and others didn't). new Date(...)
+  // normalizes correctly whether tripStartedAt arrives as a Date object or an ISO string.
+  const periodDate = new Date(tripStartedAt).toISOString().slice(0, 10);
 
   const inserted = await client.query<{ id: string; display_id: string | null }>(
     `
@@ -632,6 +678,27 @@ async function closeLoadBookendedSettlementForDriver(
       context: { settlement_id: settlementId, driver_id: opts.driverId, last_load_id: opts.load.id },
     });
   }
+
+  // SETL-LINES-GL — "runs at ... close": final, unconditional sweep (not flag-gated — this only
+  // resolves load_id/posting_account_id/approval_status on lines that already exist or that the
+  // two appliers above just created; it never changes a dollar amount, so it is safe regardless of
+  // whether SETTLEMENT_CONTRACT_TERMS_FLAG / SETTLEMENT_DEDUCTION_APPLY_FLAG are on). Idempotent —
+  // a row this same close's own appliers (or an earlier line-creation-time call) already
+  // materialized is skipped by source-id.
+  await materializeSettlementLines(client, {
+    settlementId,
+    operatingCompanyId: opts.operatingCompanyId,
+    actorUserId: opts.actorUserId,
+  });
+
+  // ROUND 16.22 — the SAME unconditional sweep, extended to backfill posting_account_id on lines
+  // that existed BEFORE this settlement's own materializer ever ran (a re-close of an already-
+  // materialized settlement, or a line created by a different writer entirely) — UPDATE-only, never
+  // creates a line, never changes a dollar amount or approval_status.
+  await backfillExistingSettlementLineAccounts(client, {
+    settlementId,
+    operatingCompanyId: opts.operatingCompanyId,
+  });
 
   const totals = await aggregateSettlementTotals(client, settlementId, opts.operatingCompanyId);
 

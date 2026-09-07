@@ -28,18 +28,35 @@ export function collectFailures(src = source) {
   forbid("table", /driver_display_id/, "settlement table must not expose UUID-backed driver_display_id");
   requireMatch("table", /kind="driver"[\s\S]{0,100}?id=\{row\.driver_id\}[\s\S]{0,100}?name=\{row\.driver_full_name\}/, "table driver drill must bind row.driver_id to driver_full_name");
   requireMatch("table", /kind="settlement" id=\{row\.id\} name=\{row\.display_id\}/, "table settlement drill must bind row.id to display_id");
-  requireMatch("table", /kind="load"[\s\S]{0,80}?id=\{id\}/, "table load-count drill must bind each canonical load id");
+  // RG-02 remainder — was a literal `id={id}` (bare destructure), which PR #21040 correctly reverted
+  // back to `id={link.id}` because a SIBLING guard (verify-settlements-load-ids-reverse-link.mjs)
+  // requires that exact literal for its own, unrelated reason — the two guards were fighting over
+  // one variable name. Loosened to the real invariant (an id prop bound to SOME id-shaped
+  // expression, whatever the map variable is called) so both guards can stay green together.
+  requireMatch("table", /kind="load"[\s\S]{0,80}?id=\{[\w.]*\bid\b\}/, "table load-count drill must bind each canonical load id");
   requireMatch("table", /formatDateUS\(row\.period_start\)[\s\S]{0,60}?formatDateUS\(row\.period_end\)/, "table period must format both dates");
 
   forbid("header", /driverDisplayId|driver_display_id/, "header must not accept UUID-backed driver display ids");
   requireMatch("header", /kind="settlement"[\s\S]{0,80}?id=\{settlementId\}[\s\S]{0,100}?entityLabel\(settlementDisplayId, settlementId, "Settlement"\)/, "header settlement drill must bind settlementId to its human display id");
   requireMatch("header", /kind="driver" id=\{driverId\} label=\{entityLabel\(driverName, driverId, "Driver"\)\}/, "header driver drill must bind driverId to driverName");
   requireMatch("header", /loadIds\.map\([\s\S]{0,180}?kind="load"[\s\S]{0,80}?id=\{load\.id\}[\s\S]{0,100}?entityLabel\(load\.number, load\.id, "Load"\)/, "header load drills must bind each load id to its number");
-  requireMatch("header", /formatDateUS\(periodStart\)[\s\S]{0,40}?formatDateUS\(periodEnd\)/, "header period must format both dates");
+  // RG-02 remainder (lead ruling 2026-09-06 21:15Z): the Period Begin/Period End split landed in
+  // b08f4fd49b "ACCT-F10350 (COL-06)" 2026-09-01 (the lead's own message quoted d8104333/#20790,
+  // which does not touch this file — the actual commit is b08f4fd49b, confirmed via git log/show;
+  // corrected here rather than propagating a wrong SHA into a guard header) — an authorized,
+  // dated, owner-item change (docs/bus/ONE-ITEM-INSTRUCTIONS-ALL-SEATS-2026-09-05.md). Re-pinned
+  // to each field's OWN label, not cross-field proximity, since a labeled two-cell layout genuinely
+  // needs more than 40 chars between the two formatDateUS calls.
+  requireMatch("header", /Period Begin[\s\S]{0,60}?formatDateUS\(periodStart\)/, "header Period Begin label must sit with its own formatted date");
+  requireMatch("header", /Period End[\s\S]{0,60}?formatDateUS\(periodEnd\)/, "header Period End label must sit with its own formatted date");
   forbid("detail", /driverDisplayId\s*=|driver_display_id/, "detail must not pass UUID-backed driver display ids");
 
   forbid("pre", /driver_display_id/, "pre-settlements must not expose UUID-backed driver_display_id");
-  requireMatch("pre", /formatDateUS\(settlement\.period_start\)[\s\S]{0,60}?formatDateUS\(settlement\.period_end\)/, "pre-settlement periods must format both dates");
+  // RG-02 remainder — same b08f4fd49b (COL-06) authorized split as "header" above; PreSettlementsPanel
+  // renders Period Begin/Period End as two separate table columns (label + render() apart), not
+  // adjacent inline text, so pin each column's own label-to-date pairing.
+  requireMatch("pre", /Period Begin[\s\S]{0,150}?formatDateUS\(row\.period_start\)/, "pre-settlement Period Begin column must format its own date");
+  requireMatch("pre", /Period End[\s\S]{0,150}?formatDateUS\(row\.period_end\)/, "pre-settlement Period End column must format its own date");
   requireMatch("earnings", /kind="settlement"[\s\S]{0,80}?id=\{row\.id\}[\s\S]{0,120}?formatDateUS\(row\.period_start\)[\s\S]{0,60}?formatDateUS\(row\.period_end\)/, "driver earnings settlement drill must bind row.id to its formatted period");
   forbid("hub", /driver_display_id/, "accounting hub must not use UUID-backed settlement driver labels");
 
@@ -57,7 +74,7 @@ function selftest() {
   const mutations = [
     ["table", "id={row.driver_id}", "id={row.id}"],
     ["table", 'kind="settlement" id={row.id}', 'kind="settlement" id={row.driver_id}'],
-    ["table", 'kind="load"\n                    id={id}', 'kind="load"\n                    id={row.id}'],
+    ["table", 'kind="load"\n                      id={link.id}', 'kind="load"\n                      id={"L-static"}'],
     ["header", "id={settlementId}", "id={driverId}"],
     ["header", 'kind="driver" id={driverId}', 'kind="driver" id={settlementId}'],
     ["header", "id={load.id}", "id={settlementId}"],

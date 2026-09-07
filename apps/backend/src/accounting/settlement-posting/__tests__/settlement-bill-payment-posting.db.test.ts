@@ -617,6 +617,15 @@ describeIntegration("SETTLEMENT-BILL-PAYMENT GL posting (real Postgres)", () => 
     );
     expect(Number(conn[0]!.runs)).toBe(1);
     expect(Number(conn[0]!.billrows)).toBe(3);
+
+    // SETL-POST-01 — a real post through this poster stamps the header's posted_at/posted_by_user_id
+    // (migration 202607520000 added the columns; this is the writer-repoint that never landed until now).
+    const posted = await read<{ posted_at: string | null; posted_by_user_id: string | null }>(
+      `SELECT posted_at::text, posted_by_user_id::text FROM driver_finance.driver_settlements WHERE id=$1::uuid`,
+      [settlementId]
+    );
+    expect(posted[0]!.posted_at).toBeTruthy();
+    expect(posted[0]!.posted_by_user_id).toBe(userId);
   });
 
   it("(c) idempotent -> second post is already_posted, no duplicate bills", async () => {

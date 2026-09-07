@@ -73,7 +73,11 @@ function violations(board, backend) {
   if (backend.includes("GREATEST(0,")) errors.push("other_cost_cents is clamped -- a footing failure would be silently masked (spec §2.4)");
   if (!backend.includes("e.linked_work_order_uuid IS NULL") || !backend.includes("b.linked_work_order_uuid IS NULL")) errors.push("category_costs must exclude WO-linked lines to avoid double-counting with R&M");
   // Spec §4: "A totals row that foots every money column."
-  if (!board.includes("footer={") || !board.includes("load-costs-totals-revenue") || !board.includes("load-costs-totals-other") || !board.includes("load-costs-totals-gross")) errors.push("board has no footing totals row");
+  // 2026-09-06 (lead): DSP-TBL (owner ruling 2026-09-05) replaced ParityTable's raw `footer={` with `footerCells={`
+  // (the totals keyed per column). The old literal pin went stale and reddened locked-guards-heavy on main via the
+  // verify-load-detail-costs-tab chain. Accept either spelling; the three totals testids stay mandatory.
+  const hasFooter = board.includes("footer={") || board.includes("footerCells={");
+  if (!hasFooter || !board.includes("load-costs-totals-revenue") || !board.includes("load-costs-totals-other") || !board.includes("load-costs-totals-gross")) errors.push("board has no footing totals row");
   if (board.includes('method: "POST"') || backend.includes("INSERT INTO") || backend.includes("UPDATE accounting") || backend.includes("DELETE FROM")) errors.push("read-only board introduced a writer");
   return errors;
 }
@@ -99,16 +103,17 @@ if (process.argv.includes("--selftest")) {
     throw new Error(`sort-key mutation escaped: ${key}`);
   }
   const structural = [
-    { board: board.replace("enableColumnReorder", ""), backend },
+    // replaceAll: the page now hosts several ParityTables (board + registers + tour register), each reorderable.
+    { board: board.replaceAll("enableColumnReorder", ""), backend },
     { board: board.replaceAll('sortMode="external"', ""), backend },
     { board: board.replaceAll("onSortChange", ""), backend },
     { board: board.replaceAll("actual_delivery_at", "delivered_guess"), backend },
-    { board: board.replace('headerBg="#EEF2F6"', 'headerBg="#14314F"'), backend },
-    { board: board.replace('headerInk="#1F2937"', 'headerInk="#FFFFFF"'), backend },
+    { board: board.replaceAll('headerBg="#EEF2F6"', 'headerBg="#14314F"'), backend },
+    { board: board.replaceAll('headerInk="#1F2937"', 'headerInk="#FFFFFF"'), backend },
     { board: board.replaceAll("columnGroups={COLUMN_GROUPS}", ""), backend },
-    { board: board.replace('label: "The trip"', 'label: "removed"'), backend },
-    { board: board.replace("function serviceStatus", "function removedServiceStatus"), backend },
-    { board: board.replace('"In transit"', '"removed"'), backend },
+    { board: board.replaceAll('label: "The trip"', 'label: "removed"'), backend },
+    { board: board.replaceAll("function serviceStatus", "function removedServiceStatus"), backend },
+    { board: board.replaceAll('"In transit"', '"removed"'), backend },
     { board: board.replaceAll("Delivered — no appointment on file", "removed"), backend },
     { board, backend: backend.replaceAll("repairs_maintenance_cents", "removed_rm_cents") },
     { board, backend: backend.replaceAll("wo.load_id = e.load_id", "TRUE") },
@@ -119,8 +124,8 @@ if (process.argv.includes("--selftest")) {
     { board, backend: `${backend}\nGREATEST(0, ` },
     { board, backend: backend.replace("e.linked_work_order_uuid IS NULL", "TRUE") },
     { board, backend: backend.replace("b.linked_work_order_uuid IS NULL", "TRUE") },
-    { board: board.replace("footer={", "removedFooter={"), backend },
-    { board: board.replace("load-costs-totals-revenue", "removed"), backend },
+    { board: board.replaceAll("footerCells={", "removedFooterCells={").replaceAll("footer={", "removedFooter={"), backend },
+    { board: board.replaceAll("load-costs-totals-revenue", "removed"), backend },
   ];
   for (const [index, source] of structural.entries()) {
     try { check(source.board, source.backend); }

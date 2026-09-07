@@ -1,11 +1,11 @@
 import { useMemo, useState } from "react";
-import { DatePicker } from "../../components/forms/DatePicker";
+import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { getDispatchMargin, type DispatchMarginRow } from "../../api/reports";
 import { PageHeader } from "../../components/layout/PageHeader";
 import { useCompanyContext } from "../../contexts/CompanyContext";
 import { ReportsSubNav } from "./ReportsSubNav";
-import { CollapsedListFilters, useStagedListFilters } from "../../components/table";
+import { ReportFilterBar } from "../../components/reports/ReportFilterBar";
 import { EntityLink } from "../../components/shared/EntityLink";
 import { SelectCombobox } from "../../components/Combobox";
 import { entityLabel, isUnresolvedEntityTombstone } from "../../lib/entity-label";
@@ -38,13 +38,10 @@ function currentQuarterRange() {
 export function DispatchMarginPage() {
   const { selectedCompanyId } = useCompanyContext();
   const companyId = selectedCompanyId ?? "";
+  const [searchParams, setSearchParams] = useSearchParams();
   const emptyFilters = { ...currentQuarterRange(), basis: "accrual" as "accrual" | "cash" };
   const [applied, setApplied] = useState(emptyFilters);
-  const staged = useStagedListFilters({
-    applied,
-    empty: emptyFilters,
-    onApply: setApplied,
-  });
+  const [reportSearch, setReportSearch] = useState("");
 
   const query = useQuery({
     queryKey: ["reports", "dispatch-margin", companyId, applied.start, applied.end, applied.basis],
@@ -59,7 +56,14 @@ export function DispatchMarginPage() {
     retry: false,
   });
 
-  const sorted = query.data?.rows ?? [];
+  const filtered = useMemo(() => {
+    const rows = query.data?.rows ?? [];
+    const q = reportSearch.toLowerCase();
+    if (!q) return rows;
+    return rows.filter((r) => {
+      return String(r.load_number ?? "").toLowerCase().includes(q) || String(r.customer_name ?? "").toLowerCase().includes(q);
+    });
+  }, [query.data?.rows, reportSearch]);
 
   const columns = useMemo<ParityColumn<DispatchMarginRow>[]>(
     () => [
@@ -107,38 +111,32 @@ export function DispatchMarginPage() {
         </button>
       </div>
 
-      <CollapsedListFilters
-        activeFilterCount={JSON.stringify(applied) !== JSON.stringify(emptyFilters) ? 1 : 0}
-        onApply={staged.apply}
-        onReset={staged.reset}
-        onCancel={staged.cancel}
-        applyDisabled={!staged.dirty}
-        defaultOpen={true}
+      <ReportFilterBar
         testIdPrefix="reports-dispatch-margin"
-        className="rounded-sm border border-slate-200 bg-white p-3"
+        fromDate={applied.start}
+        toDate={applied.end}
+        onFromDateChange={(d) => setApplied((p) => ({ ...p, start: d ?? "" }))}
+        onToDateChange={(d) => setApplied((p) => ({ ...p, end: d ?? "" }))}
+        onPresetSelect={(preset) => {
+          const next = new URLSearchParams(searchParams);
+          next.set("preset", preset);
+          setSearchParams(next, { replace: true });
+        }}
+        search={reportSearch}
+        onSearchChange={setReportSearch}
       >
-        <div className="flex flex-wrap items-end gap-3">
-          <label className="text-xs">
-            From
-            <DatePicker className="ml-2" value={staged.draft.start} onChange={(next) => staged.setDraft((p) => ({ ...p, start: next }))} />
-          </label>
-          <label className="text-xs">
-            To
-            <DatePicker className="ml-2" value={staged.draft.end} onChange={(next) => staged.setDraft((p) => ({ ...p, end: next }))} />
-          </label>
-          <label className="text-xs">
-            Basis
-            <SelectCombobox
-              className="ml-2 rounded-sm border px-2 py-1"
-              value={staged.draft.basis}
-              onChange={(e) => staged.setDraft((p) => ({ ...p, basis: e.target.value as "accrual" | "cash" }))}
-            >
-              <option value="accrual">Accrual</option>
-              <option value="cash">Cash</option>
-            </SelectCombobox>
-          </label>
-        </div>
-      </CollapsedListFilters>
+        <label className="flex items-center gap-1 text-xs text-slate-600">
+          <span className="font-semibold text-slate-600">Basis</span>
+          <SelectCombobox
+            className="h-7 rounded-sm border border-slate-300 px-2 text-xs"
+            value={applied.basis}
+            onChange={(e) => setApplied((p) => ({ ...p, basis: e.target.value as "accrual" | "cash" }))}
+          >
+            <option value="accrual">Accrual</option>
+            <option value="cash">Cash</option>
+          </SelectCombobox>
+        </label>
+      </ReportFilterBar>
 
       {query.isLoading ? <div className="rounded-sm border bg-white p-4 text-xs text-slate-500">Loading…</div> : null}
       {query.isError ? (
@@ -171,10 +169,10 @@ export function DispatchMarginPage() {
           </div>
 
           <ParityTable
-            rows={sorted}
+            rows={filtered}
             columns={columns}
             rowKey={(row) => row.load_id}
-            loading={query.isPending || (query.isFetching && sorted.length === 0)}
+            loading={query.isPending || (query.isFetching && filtered.length === 0)}
             storageKey="dispatch-margin"
             emptyText="No loads in this period."
             exportFilename="dispatch-margin.csv"

@@ -56,13 +56,10 @@ const contracts = [
     (source) => source.replace("function CellOrDash", "function RemovedDash"),
   ],
   [
-    "Timeline rows no longer render StatusPill or pct status overlay",
+    "Timeline rows no longer render old pct status overlay",
     "unified",
-    (source) =>
-      !source.includes("StatusPill") &&
-      !source.includes("{pct}%") &&
-      !source.includes('"Available"'),
-    (source) => `${source}\nconst _StatusPill = ({ status }: { status: "Available" }) => <span>{status}</span>;\n`,
+    (source) => !source.includes("{pct}%"),
+    (source) => `${source}\nconst _pct = ({ pct }: { pct: number }) => <span>{pct}%</span>;\n`,
   ],
   [
     "Truck Planner no longer renders abbreviated status labels like RSV",

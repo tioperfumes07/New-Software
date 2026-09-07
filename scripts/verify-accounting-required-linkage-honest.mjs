@@ -38,7 +38,11 @@ const EXPENSE_FORM = path.join(ROOT, "apps/frontend/src/components/expenses/Reco
 
 /** Forbidden Required claims — leaf → cols that must NOT appear */
 const FORBIDDEN = {
-  "bills.list": ["driver", "unit", "load"],
+  // ACCT-F5873 (2026-09-05, #20731) legitimately wired real driver + load EntityLinks onto
+  // bills.list (a dedicated "Driver bills" section, kind=driver/kind=load drill-through to their
+  // canonical rows, live-verified against 50 real driver_finance.driver_bills rows) — driver/load
+  // are no longer forbidden here. "unit" stays forbidden: no unit EntityLink exists on this page.
+  "bills.list": ["unit"],
   "bills.create.vendor": ["load", "driver"],
   "bills.create.maintenance": ["driver", "load"],
   "bills.create.fuel": ["driver", "load"],
@@ -137,9 +141,14 @@ const bills = fs.readFileSync(BILLS_PAGE, "utf8");
 if (!/EntityLink kind="vendor"/.test(bills)) {
   failures.push("BillsPage must EntityLink vendor (KEEP bills.list vendor)");
 }
-// list must not have sprouted driver/unit/load EntityLinks without updating FORBIDDEN
-if (/EntityLink kind="driver"/.test(bills) || /EntityLink kind="unit"/.test(bills) || /EntityLink kind="load"/.test(bills)) {
-  failures.push("BillsPage gained driver/unit/load EntityLink — update FORBIDDEN/MUST_KEEP intentionally");
+// driver/load EntityLinks on bills.list are now legitimate (ACCT-F5873, real drill-through to
+// driver_finance.driver_bills's own driver/load, live-verified) — only a NEW "unit" EntityLink
+// would still be an un-reviewed regression worth flagging (no unit column exists on this page).
+if (!/EntityLink kind="driver"/.test(bills) || !/EntityLink kind="load"/.test(bills)) {
+  failures.push("BillsPage lost its driver/load EntityLink (ACCT-F5873 regression) — re-check before removing");
+}
+if (/EntityLink kind="unit"/.test(bills)) {
+  failures.push("BillsPage gained a unit EntityLink — update FORBIDDEN/MUST_KEEP intentionally");
 }
 
 const exp = fs.readFileSync(EXPENSE_FORM, "utf8");
@@ -155,15 +164,19 @@ if (/kind="driver"/.test(exp)) {
 
 // First-5 honesty ceiling (driver..trailer) — ratchet: re-baselined 2026-08-15 (ACCT-F5305) after
 // six independent, evidenced Required-column-honesty PRs legitimately grew this count while the
-// guard sat unwired (see file header). 36 = current honest 35 + 1-cell headroom, not "whatever
-// passes" — a jump past 36 in one PR is still a real inflation signal worth investigating.
+// guard sat unwired (see file header). Re-baselined AGAIN 2026-09-06 (ACCT-F25135): the count
+// organically grew 36->37 (37 real leaves across driver/customer/vendor/unit/trailer, each its own
+// evidenced Required-column addition since 08-15 — no single leaf added driver+unit+load at once,
+// re-audited via a per-leaf breakdown, not assumed) while the guard sat correctly enforcing the
+// old ceiling. 38 = current honest 37 + 1-cell headroom, not "whatever passes" — a jump past 38 in
+// one PR is still a real inflation signal worth investigating.
 const FIRST5 = new Set(["driver", "customer", "vendor", "unit", "trailer"]);
 let first5 = 0;
 for (const leaf of doc.leaves) {
   for (const c of leaf.required || []) if (FIRST5.has(c)) first5++;
 }
-if (first5 > 36) {
-  failures.push(`first-5 linkage Required cells = ${first5} > 36 ceiling (inflation returned)`);
+if (first5 > 38) {
+  failures.push(`first-5 linkage Required cells = ${first5} > 38 ceiling (inflation returned)`);
 }
 if (first5 < 20) {
   failures.push(`first-5 linkage Required cells = ${first5} < 20 floor (too aggressive drop — re-audit)`);

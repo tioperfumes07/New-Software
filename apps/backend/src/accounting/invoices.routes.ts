@@ -505,13 +505,32 @@ export async function registerInvoiceRoutes(app: FastifyInstance) {
       // else's books. Fails closed with 404 rather than writing NULL: silently dropping an FK the
       // caller supplied is how this column came to be settable by PATCH but not by create.
       let linkedLoadNumber: string | null = null;
+      // INV-03 (owner order 2026-09-06, ROUND 14 CONSOLIDATED): an invoice created FROM A LOAD must
+      // stamp issue_date from that load's real pickup date (the document), never today's date --
+      // the companyBusinessDate() fallback below must survive ONLY when there is no source load at
+      // all. Pickup stop only (first pickup; a multi-pickup load's invoice issue date is the load's
+      // OWN start, not its last stop) -- actual arrival preferred over scheduled (real over planned).
+      let sourceLoadPickupDate: string | null = null;
       if (body.data.source_load_id) {
         const loadRes = await client.query(
-          `SELECT load_number FROM mdata.loads WHERE id = $1::uuid AND operating_company_id = $2::uuid LIMIT 1`,
+          `
+            SELECT l.load_number,
+                   (
+                     SELECT COALESCE(ls.actual_arrival_at, ls.scheduled_arrival_at)::date::text
+                     FROM mdata.load_stops ls
+                     WHERE ls.load_id = l.id AND ls.stop_type = 'pickup'
+                     ORDER BY ls.sequence_number ASC
+                     LIMIT 1
+                   ) AS pickup_date
+            FROM mdata.loads l
+            WHERE l.id = $1::uuid AND l.operating_company_id = $2::uuid
+            LIMIT 1
+          `,
           [body.data.source_load_id, query.data.operating_company_id]
         );
         if (loadRes.rows.length === 0) return { code: 404 as const, error: "load_not_found_for_entity" };
         linkedLoadNumber = String(loadRes.rows[0]?.load_number ?? "").trim();
+        sourceLoadPickupDate = (loadRes.rows[0]?.pickup_date as string | null) ?? null;
         if (!linkedLoadNumber) {
           return { code: 422 as const, error: "load_number_required_for_invoice_line" };
         }
@@ -572,7 +591,10 @@ export async function registerInvoiceRoutes(app: FastifyInstance) {
         }
       }
 
-      const issueDate = body.data.issue_date ?? companyBusinessDate();
+      // INV-03: caller-supplied issue_date always wins; else the source load's real pickup date;
+      // else (no source load at all) today, unchanged from before -- never guessed when a real
+      // document (the load's own pickup stop) is available to answer the question honestly.
+      const issueDate = body.data.issue_date ?? sourceLoadPickupDate ?? companyBusinessDate();
       const termsDays = Number(customer.days_until_due ?? 30);
       const dueDate = body.data.due_date ?? new Date(new Date(`${issueDate}T00:00:00.000Z`).getTime() + termsDays * 86400000).toISOString().slice(0, 10);
       const displayId = await resolveInvoiceDisplayId(

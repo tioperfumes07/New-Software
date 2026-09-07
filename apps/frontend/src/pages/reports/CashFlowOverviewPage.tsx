@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { DatePicker } from "../../components/forms/DatePicker";
+import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import {
@@ -21,7 +21,7 @@ import { Button } from "../../components/Button";
 import { useCompanyContext } from "../../contexts/CompanyContext";
 import { ReportBlockTPendingBanner } from "./ReportBlockTPendingBanner";
 import { ReportsSubNav } from "./ReportsSubNav";
-import { CollapsedListFilters, useStagedListFilters } from "../../components/table";
+import { ReportFilterBar } from "../../components/reports/ReportFilterBar";
 import { mmmDd, mmmDdTime } from "../../lib/formatDate";
 import { printLetterHtml } from "../../lib/openPrintableDocument";
 
@@ -97,12 +97,10 @@ export function CashFlowOverviewPage() {
   const { selectedCompanyId } = useCompanyContext();
   const companyId = selectedCompanyId ?? "";
   const today = companyToday();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [appliedAsOf, setAppliedAsOf] = useState(today);
-  const staged = useStagedListFilters({
-    applied: { asOfDate: appliedAsOf, basis: "accrual", groupBy: "month" },
-    empty: { asOfDate: today, basis: "accrual", groupBy: "month" },
-    onApply: (next) => setAppliedAsOf(next.asOfDate),
-  });
+  const [groupBy, setGroupBy] = useState("month");
+  const [reportSearch, setReportSearch] = useState("");
 
   const query = useQuery({
     queryKey: ["reports", "cash-flow-overview", companyId, appliedAsOf],
@@ -111,7 +109,13 @@ export function CashFlowOverviewPage() {
     retry: false,
   });
 
-  const projection = useMemo(() => (query.data ? buildProjectionSeries(query.data) : []), [query.data]);
+  const projection = useMemo(() => {
+    if (!query.data) return [];
+    const series = buildProjectionSeries(query.data);
+    const q = reportSearch.toLowerCase();
+    if (!q) return series;
+    return series.filter((row) => String(row.date ?? "").toLowerCase().includes(q));
+  }, [query.data, reportSearch]);
 
   const kpiSpark = useMemo(() => {
     if (!query.data) return [0, 0, 0, 0, 0, 0, 0];
@@ -226,52 +230,34 @@ export function CashFlowOverviewPage() {
 
       {query.isError ? <ReportBlockTPendingBanner error={query.error} onRetry={() => void query.refetch()} /> : null}
 
-      <CollapsedListFilters
-        activeFilterCount={appliedAsOf !== today ? 1 : 0}
-        defaultOpen={true}
-        onApply={staged.apply}
-        onReset={staged.reset}
-        onCancel={staged.cancel}
-        applyDisabled={!staged.dirty}
+      <ReportFilterBar
         testIdPrefix="reports-cash-flow-overview"
-        className="no-print rounded-sm border border-gray-200 bg-white p-3"
+        fromDate={appliedAsOf}
+        toDate={null}
+        onFromDateChange={(asOf) => { if (asOf) setAppliedAsOf(asOf); }}
+        onToDateChange={() => {}}
+        onPresetSelect={(preset) => {
+          const next = new URLSearchParams(searchParams);
+          next.set("preset", preset);
+          setSearchParams(next, { replace: true });
+        }}
+        search={reportSearch}
+        onSearchChange={setReportSearch}
       >
-        <div className="flex flex-wrap items-end gap-3">
-          <label className="text-xs text-gray-600">
-            As-of date
-            <DatePicker
-              className="mt-1 h-9"
-              value={staged.draft.asOfDate}
-              onChange={(next) => staged.setDraft({ ...staged.draft, asOfDate: next })}
-            />
-          </label>
-          <label className="text-xs text-gray-600">
-            Basis
-            <select
-              className="mt-1 h-9 rounded-sm border border-gray-300 px-2 text-xs"
-              value={staged.draft.basis}
-              onChange={(e) => staged.setDraft({ ...staged.draft, basis: e.target.value })}
-              data-testid="reports-cash-flow-overview-basis"
-            >
-              <option value="accrual">Accrual</option>
-              <option value="cash">Cash</option>
-            </select>
-          </label>
-          <label className="text-xs text-gray-600">
-            Group by
-            <select
-              className="mt-1 h-9 rounded-sm border border-gray-300 px-2 text-xs"
-              value={staged.draft.groupBy}
-              onChange={(e) => staged.setDraft({ ...staged.draft, groupBy: e.target.value })}
-              data-testid="reports-cash-flow-overview-group-by"
-            >
-              <option value="day">Day</option>
-              <option value="week">Week</option>
-              <option value="month">Month</option>
-            </select>
-          </label>
-        </div>
-      </CollapsedListFilters>
+        <label className="flex items-center gap-1 text-xs text-slate-600">
+          <span className="font-semibold text-slate-600">Group by</span>
+          <select
+            className="h-7 rounded-sm border border-slate-300 px-2 text-xs"
+            value={groupBy}
+            onChange={(e) => setGroupBy(e.target.value)}
+            data-testid="reports-cash-flow-overview-group-by"
+          >
+            <option value="day">Day</option>
+            <option value="week">Week</option>
+            <option value="month">Month</option>
+          </select>
+        </label>
+      </ReportFilterBar>
 
       {query.isLoading ? <p className="text-xs text-gray-500">Loading…</p> : null}
 

@@ -468,30 +468,58 @@ export type BankMatchCandidate = {
   amount_cents: number;
   event_date: string;
   memo: string;
+  // BANK-MATCH-QBO (owner 2026-09-06): the QuickBooks "Find match" columns.
+  counterparty_kind?: "vendor" | "customer" | null;
+  counterparty_id?: string | null;
+  counterparty_name?: string | null;
+  reference?: string | null;
+  description?: string | null;
+  open_balance_cents?: number | null;
+  payee_similarity?: number;
   amount_gap_cents: number;
   date_gap_days: number;
   memo_similarity: number;
   match_score: number;
   auto_match: boolean;
+  exact_amount?: boolean;
 };
 
-// Ranked match candidates for one bank transaction (Match drawer). Read-only.
+export type BankMatchFilters = {
+  searchAll?: boolean;
+  q?: string;
+  windowDays?: number;
+  /** Show: which record types (QuickBooks "Show" dropdown). Empty = all. */
+  kinds?: BankMatchCandidateKind[];
+  payee?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  /** Dollars as typed. */
+  amountMin?: number;
+  amountMax?: number;
+};
+
+// Ranked match candidates for one bank transaction (Match drawer / inline pane). Read-only.
 // companyId is the active entity from useCompanyContext; the server re-scopes + membership-guards it.
-// QBO parity: searchAll widens ±365d; q filters memo/payee/ref contains.
-export function getMatchCandidates(
-  bankTxnId: string,
-  companyId: string,
-  opts?: { searchAll?: boolean; q?: string; windowDays?: number }
-) {
+// QBO parity: default window 90 days before / 20 after; searchAll widens ±365d; q searches memo /
+// payee / ref; kinds / payee / date / amount are the QuickBooks "Find match" filters.
+export function getMatchCandidates(bankTxnId: string, companyId: string, opts?: BankMatchFilters) {
   const params = new URLSearchParams();
   params.set("operating_company_id", companyId);
   if (opts?.searchAll) params.set("search_all", "1");
   if (opts?.q?.trim()) params.set("q", opts.q.trim());
   if (opts?.windowDays != null) params.set("window_days", String(opts.windowDays));
+  if (opts?.kinds?.length) params.set("kinds", opts.kinds.join(","));
+  if (opts?.payee?.trim()) params.set("payee", opts.payee.trim());
+  if (opts?.dateFrom) params.set("date_from", opts.dateFrom);
+  if (opts?.dateTo) params.set("date_to", opts.dateTo);
+  if (opts?.amountMin != null && Number.isFinite(opts.amountMin)) params.set("amount_min", String(opts.amountMin));
+  if (opts?.amountMax != null && Number.isFinite(opts.amountMax)) params.set("amount_max", String(opts.amountMax));
   return apiRequest<{
     candidates: BankMatchCandidate[];
     match_candidates_count: number;
-    window_days?: number;
+    window_days?: number | null;
+    days_before?: number;
+    days_after?: number;
     search_query?: string | null;
     bank_transaction_id?: string;
   }>(`/api/v1/banking/transactions/${bankTxnId}/match-candidates?${params.toString()}`);
@@ -872,8 +900,21 @@ export function supersedePlaidPendingTransaction(transactionId: string, companyI
   );
 }
 
+// ACCT-F375 (landed 2026-08-12): the backend has always computed a rule-based match here (reusing
+// accounting.banking_rules' own bankingRuleMatches predicate) and returned it as `rule_match` — this
+// is the SAME real rule set (15/16 real, seeded USMCA rules) that banking-rules.engine.ts's
+// applyBankingRulesForTransaction writes onto suggested_vendor_id/suggested_account_id, but until
+// ROUND 16.21 nothing in the frontend ever read `rule_match` off this response. That gap — not a
+// missing/broken rule engine — is why 0 of 364 real USMCA rule matches ever turned into an actual
+// categorization: the UI simply never showed the human anything to accept.
+export type BankTransactionRuleMatch = {
+  rule_id: string;
+  then_account_id: string;
+  then_vendor_id: string | null;
+};
+
 export function getBankingSuggestions(transactionId: string, companyId: string) {
-  return apiRequest<{ suggestions: Array<Record<string, unknown>> }>(
+  return apiRequest<{ suggestions: Array<Record<string, unknown>>; rule_match: BankTransactionRuleMatch | null }>(
     `/api/v1/banking/transactions/${transactionId}/suggestions?${q(companyId)}`
   );
 }
@@ -942,6 +983,17 @@ export function unhideBankAccount(companyId: string, bankAccountId: string) {
   return apiRequest<{ account: BankAccountVisibilityRow }>(`/api/v1/banking/accounts/${bankAccountId}/unhide`, {
     method: "POST",
     body: { operating_company_id: companyId },
+  });
+}
+
+// ── Petty Cash account (owner request 2026-09-06) ────────────────────────────────────────────────────
+// A Petty Cash account is a REAL banking.bank_accounts row (tile_kind='real'), created manually
+// (not via Plaid). When a check is generated, the check amount posts a transfer FROM the source
+// bank account TO this account.
+export function createPettyCashAccount(companyId: string, displayName?: string) {
+  return apiRequest<{ account: { id: string; already_existed: boolean } }>(`/api/v1/banking/accounts/petty-cash`, {
+    method: "POST",
+    body: { operating_company_id: companyId, display_name: displayName },
   });
 }
 

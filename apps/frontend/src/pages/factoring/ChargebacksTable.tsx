@@ -7,6 +7,8 @@ import { entityLabel } from "../../lib/entity-label";
 import { ParityTable, type ParityColumn } from "../../components/parity/ParityTable";
 import { EntityLink } from "../../components/shared/EntityLink";
 import { useToast } from "../../components/Toast";
+import type { LoadCostRollupFields } from "../../api/factoring";
+import { buildLoadCostColumns, centsFromWire } from "./loadCostColumnManifest";
 
 export type ChargebackFeeRow = {
   factoring_advance_id: string;
@@ -23,7 +25,9 @@ export type ChargebackFeeRow = {
   // views.factoring_chargebacks_fees (202613080000) now selects the real advance amount, mirroring
   // views.factoring_recourse_at_risk's already-live advance_amount column exactly.
   advance_amount: number;
-};
+  // FAC-08: source load resolved by the backend chargebacks route (accounting.invoices LATERAL).
+  load_id: string | null;
+} & LoadCostRollupFields;
 
 type Props = {
   rows: ChargebackFeeRow[];
@@ -100,6 +104,28 @@ export function ChargebacksTable({ rows, fmtCurrency, fmtDate }: Props) {
       sortable: true,
       render: (row) => fmtCurrency(row.factor_fee_amount),
     },
+    // FAC-08: same SHARED Load-Costs manifest as the recourse register (one manifest, two consumers).
+    // Advanced + Factoring fee excluded — this register renders native Advance + Fee dollar columns
+    // above (never-delete law), so the gear shows no duplicate.
+    ...buildLoadCostColumns<ChargebackFeeRow>(
+      (row) => ({
+        loadId: row.load_id,
+        loadNumber: row.lc_load_number,
+        driverId: row.lc_driver_id,
+        driverName: row.lc_driver_name,
+        unitNumber: row.lc_unit_number,
+        settlementNumber: row.lc_settlement_number,
+        revenueCents: centsFromWire(row.lc_revenue_cents),
+        costsCents: centsFromWire(row.lc_costs_cents),
+        driverPayCents: centsFromWire(row.lc_driver_pay_cents),
+        marginCents: centsFromWire(row.lc_margin_cents),
+        factoringFeeCents: null,
+        reserveCents: null,
+        advancedCents: null,
+        dueCents: null,
+      }),
+      { exclude: ["advanced", "factoring_fee"] },
+    ),
   ];
 
   return (

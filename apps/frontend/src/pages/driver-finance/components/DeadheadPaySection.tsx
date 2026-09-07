@@ -1,3 +1,5 @@
+// TABLE_DATE_OMIT: this table has no date column by design (not a time-series view).
+
 /**
  * DeadheadPaySection — 25-task #12 (CC-1-INSTRUCTIONS-09-02-2026.txt): "Deadhead pay line renders
  * on the settlement as its own row labeled 'Empty Miles', never folded into 'Loaded Miles'."

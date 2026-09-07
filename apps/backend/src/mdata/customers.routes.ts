@@ -547,6 +547,11 @@ export async function registerCustomerRoutes(app: FastifyInstance) {
       // real data, compounding the same RLS contradiction fixed for vendors (ACCT-F5768). Skip it only
       // for the explicit inactive request; every other status value keeps the exclusion unchanged.
       const filters: string[] = status === "inactive" ? [] : [EXCLUDE_ARCHIVED_MDATA_CUSTOMERS_SQL];
+      // ACCT-F26012 (owner, 2026-09-07) — the live Customers list carried 11 is_sample_data=true
+      // rows (measured live, USMCA) with no exclusion of any kind: unlike Fleet
+      // (fleet-visibility.ts's excludeSampleDataSql, ACCT-F25134) this list endpoint never filtered
+      // on is_sample_data at all. Same fix, same fragment shape, quarantine-not-delete.
+      filters.push("is_sample_data IS NOT TRUE");
       if (status === "active") filters.push("deactivated_at IS NULL");
       if (status === "inactive") filters.push("deactivated_at IS NOT NULL");
       // CUST-F6183 — the prefix-match pattern used only by the ORDER BY relevance ranking below

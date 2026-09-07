@@ -10,11 +10,11 @@ const servicePathForCall = "apps/backend/src/dispatch/book-load.service.ts";
 if (!fs.existsSync(servicePathForCall)) throw new Error(`Missing service: ${servicePathForCall}`);
 const content = fs.readFileSync(servicePathForCall, "utf8");
 
-if (!content.includes("void autoCreateGeofencesForLoad")) {
-  throw new Error("CAP-2 requires non-blocking hook: expected `void autoCreateGeofencesForLoad` in bookLoad()");
+if (!content.includes("void geocodeStopsBackfill")) {
+  throw new Error("CAP-2 requires non-blocking hook: expected `void geocodeStopsBackfill` in bookLoad()");
 }
-if (content.includes("await autoCreateGeofencesForLoad")) {
-  throw new Error("CAP-2 requires non-blocking hook: found awaited auto-geofence call in the booking path");
+if (content.includes("await geocodeStopsBackfill")) {
+  throw new Error("CAP-2 requires non-blocking hook: found awaited stop-geocode call in the booking path");
 }
 
 const servicePath = "apps/backend/src/telematics/auto-geofence.service.ts";

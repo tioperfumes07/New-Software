@@ -39,9 +39,12 @@ function assertAll(src) {
     }
   }
 
+  // Both routes now carry a { config: { rateLimit: {...} } } object between the path and the
+  // handler (this repo's broader per-route rate-limiting rollout) — match any options object, not
+  // just a bare handler, so this guard doesn't drift every time a rate limit is tuned.
   const routes = [
-    [/app\.post\("\/api\/v1\/driver-finance\/pre-settlements\/:id\/add-load", async \(req, reply\) => \{\s*\n\s*const user = (\w+)\(req, reply\);/, "POST /:id/add-load"],
-    [/app\.post\("\/api\/v1\/driver-finance\/pre-settlements\/:id\/settle", async \(req, reply\) => \{\s*\n\s*const user = (\w+)\(req, reply\);/, "POST /:id/settle"],
+    [/app\.post\("\/api\/v1\/driver-finance\/pre-settlements\/:id\/add-load",[^)]*?async \(req, reply\) => \{\s*\n\s*const user = (\w+)\(req, reply\);/, "POST /:id/add-load"],
+    [/app\.post\("\/api\/v1\/driver-finance\/pre-settlements\/:id\/settle",[^)]*?async \(req, reply\) => \{\s*\n\s*const user = (\w+)\(req, reply\);/, "POST /:id/settle"],
   ];
   for (const [re, label] of routes) {
     const m = src.match(re);
@@ -61,8 +64,8 @@ if (SELFTEST) {
   const src = read();
 
   const planted = src.replace(
-    'app.post("/api/v1/driver-finance/pre-settlements/:id/settle", async (req, reply) => {\n    const user = requirePreSettlementWriteRole(req, reply);',
-    'app.post("/api/v1/driver-finance/pre-settlements/:id/settle", async (req, reply) => {\n    const user = authed(req, reply);',
+    'app.post("/api/v1/driver-finance/pre-settlements/:id/settle", { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } }, async (req, reply) => {\n    const user = requirePreSettlementWriteRole(req, reply);',
+    'app.post("/api/v1/driver-finance/pre-settlements/:id/settle", { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } }, async (req, reply) => {\n    const user = authed(req, reply);',
   );
   if (planted === src) {
     console.error(`${LABEL} SELFTEST SETUP FAILED: mutation target not found (guard text drifted from real code)`);

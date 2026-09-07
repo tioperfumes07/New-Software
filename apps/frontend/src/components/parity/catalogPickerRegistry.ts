@@ -481,7 +481,7 @@ export const CATALOG_PICKER_CONFIGS = {
     writeEndpoint: "/api/v1/catalogs/dispatch-flag-colors",
     entityScoped: true,
     readWriteParity: "same-endpoint-verified",
-    evidence: "apps/backend/src/catalogs/dispatch-flag-colors.routes.ts — list and create use catalogs.dispatch_flag_colors",
+    evidence: "apps/backend/src/catalogs/dispatch-flag-colors.routes.ts:71,91,103,114 — GET list (line 71, SELECT at 91) and POST create (line 103, INSERT at 114) both target catalogs.dispatch_flag_colors",
     consumerPath: "apps/frontend/src/components/dispatch/LoadDetailDrawer.tsx",
     fields: [
       { name: "display_name", label: "Name", required: true, maxLength: 120 },

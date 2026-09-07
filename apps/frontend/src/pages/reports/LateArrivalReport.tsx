@@ -1,12 +1,12 @@
 import { useMemo, useState } from "react";
-import { DatePicker } from "../../components/forms/DatePicker";
+import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "../../api/client";
 import { PageHeader } from "../../components/layout/PageHeader";
 import { ListErrorState } from "../../components/ListErrorState";
 import { useCompanyContext } from "../../contexts/CompanyContext";
 import { ReportsSubNav } from "./ReportsSubNav";
-import { CollapsedListFilters, useStagedListFilters } from "../../components/table";
+import { ReportFilterBar } from "../../components/reports/ReportFilterBar";
 import { formatQueryErrorDetail } from "../../lib/tableError";
 import { ParityTable, type ParityColumn } from "../../components/parity/ParityTable";
 import { companyToday, monthBoundsIso } from "../../lib/businessDate";
@@ -56,13 +56,10 @@ const TAB_LABELS: Record<GroupBy, string> = {
 export function LateArrivalReport() {
   const { selectedCompanyId, companies } = useCompanyContext();
   const operatingCompanyId = selectedCompanyId ?? companies[0]?.id ?? "";
+  const [searchParams, setSearchParams] = useSearchParams();
   const emptyFilters = { from: monthStart(), to: today(), groupBy: "driver" as GroupBy, minDelayHours: "" };
   const [applied, setApplied] = useState(emptyFilters);
-  const staged = useStagedListFilters({
-    applied,
-    empty: emptyFilters,
-    onApply: setApplied,
-  });
+  const [reportSearch, setReportSearch] = useState("");
 
   const reportQuery = useQuery({
     queryKey: ["reports", "late-arrival", operatingCompanyId, applied.from, applied.to, applied.groupBy],
@@ -77,6 +74,12 @@ export function LateArrivalReport() {
   }, [reportQuery.data?.rows]);
 
   const rows = reportQuery.data?.rows ?? [];
+
+  const filtered = useMemo(() => {
+    const q = reportSearch.toLowerCase();
+    if (!q) return rows;
+    return rows.filter((r) => String(r.entity_label ?? "").toLowerCase().includes(q));
+  }, [rows, reportSearch]);
 
   const columns = useMemo<ParityColumn<LateArrivalRow>[]>(
     () => [
@@ -108,39 +111,32 @@ export function LateArrivalReport() {
         </button>
       </div>
 
-      <CollapsedListFilters
-        activeFilterCount={JSON.stringify(applied) !== JSON.stringify(emptyFilters) ? 1 : 0}
-        defaultOpen={true}
-        onApply={staged.apply}
-        onReset={staged.reset}
-        onCancel={staged.cancel}
-        applyDisabled={!staged.dirty}
+      <ReportFilterBar
         testIdPrefix="reports-late-arrival"
-        className="rounded-sm border border-slate-200 bg-white p-3"
+        fromDate={applied.from}
+        toDate={applied.to}
+        onFromDateChange={(d) => setApplied((p) => ({ ...p, from: d ?? "" }))}
+        onToDateChange={(d) => setApplied((p) => ({ ...p, to: d ?? "" }))}
+        onPresetSelect={(preset) => {
+          const next = new URLSearchParams(searchParams);
+          next.set("preset", preset);
+          setSearchParams(next, { replace: true });
+        }}
+        search={reportSearch}
+        onSearchChange={setReportSearch}
       >
-        <div className="flex flex-wrap items-end gap-3">
-          <label className="text-xs text-slate-600">
-            From
-            <DatePicker className="mt-1 block" value={staged.draft.from} onChange={(next) => staged.setDraft((p) => ({ ...p, from: next }))} />
-          </label>
-          <label className="text-xs text-slate-600">
-            To
-            <DatePicker className="mt-1 block" value={staged.draft.to} onChange={(next) => staged.setDraft((p) => ({ ...p, to: next }))} />
-          </label>
-          <label className="text-xs text-slate-600">
-            Min delay (hours)
-            <input
-              type="number"
-              min={0}
-              className="mt-1 block h-9 w-32 rounded-sm border border-gray-300 px-2 text-xs"
-              value={staged.draft.minDelayHours}
-              onChange={(e) => staged.setDraft((p) => ({ ...p, minDelayHours: e.target.value }))}
-              data-testid="reports-late-arrival-min-delay"
-              // TODO: wire to backend filter
-            />
-          </label>
-        </div>
-      </CollapsedListFilters>
+        <label className="flex items-center gap-1 text-xs text-slate-600">
+          <span className="font-semibold text-slate-600">Min delay (h)</span>
+          <input
+            type="number"
+            min={0}
+            className="h-7 w-24 rounded-sm border border-slate-300 px-2 text-xs"
+            value={applied.minDelayHours}
+            onChange={(e) => setApplied((p) => ({ ...p, minDelayHours: e.target.value }))}
+            data-testid="reports-late-arrival-min-delay"
+          />
+        </label>
+      </ReportFilterBar>
 
       <div className="text-xs text-slate-500">
         {summary.chronic} chronic (&gt;20%) · {summary.total} entities
@@ -151,9 +147,9 @@ export function LateArrivalReport() {
           <button
             key={tab}
             type="button"
-            className={`px-3 py-2 text-xs ${staged.draft.groupBy === tab ? "border-b-2 border-slate-300 font-medium text-slate-700" : "text-slate-600"}`}
+            className={`px-3 py-2 text-xs ${applied.groupBy === tab ? "border-b-2 border-slate-300 font-medium text-slate-700" : "text-slate-600"}`}
             onClick={() => {
-              staged.setDraft((current) => ({ ...current, groupBy: tab }));
+              setApplied((current) => ({ ...current, groupBy: tab }));
             }}
           >
             {TAB_LABELS[tab]}
@@ -169,10 +165,10 @@ export function LateArrivalReport() {
         />
       ) : (
         <ParityTable
-          rows={rows}
+          rows={filtered}
           columns={columns}
           rowKey={(row) => row.entity_id}
-          loading={reportQuery.isPending || (reportQuery.isFetching && rows.length === 0)}
+          loading={reportQuery.isPending || (reportQuery.isFetching && filtered.length === 0)}
           storageKey="late-arrival-report"
           emptyText="No completed stops with scheduled times in this period."
           exportFilename="late-arrival-report.csv"

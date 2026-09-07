@@ -1,31 +1,45 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "../../api/client";
 import { formatMoneyCents } from "./constants";
-import { entityLabel, visibleDocumentLabel } from "../../lib/entity-label";
+import { entityLabel } from "../../lib/entity-label";
+import { formatDateUS } from "../../lib/formatDate";
 import { EntityLink } from "../shared/EntityLink";
-import { Link } from "react-router-dom";
 import { ListErrorState } from "../ListErrorState";
+import { MoneyProofTrailPanel } from "../accounting/MoneyProofTrailPanel";
 
 /**
- * Load → Driver Pay tab reads driver_finance.driver_bills (header payables),
- * NOT settlement_lines. The prior bug mapped settlement-line shapes onto bills,
- * so every real payable rendered as $0 — FAIL-SETL-DRIVER-PAY-TAB.
+ * LDT-3 (owner item, 2026-09-05, deadline 06:00Z) — Load → Driver Pay tab.
+ *
+ * MEASURED LIVE (22:55Z, the prior version of this file): "1,610.0 practical mi × $0.60/mi ·
+ * $958.69" — 1,610 × 0.60 = 966.00 ≠ 958.69. The prior component read driver_bills.rate_per_mile_cents
+ * directly (a stored column that can be blended/wrong — filed to CC-2) as if it were the rate that
+ * produced gross_amount_cents. Fixed at the SOURCE (GET /api/v1/driver-finance/loads/:loadId/
+ * driver-pay-detail, driver-bills.routes.ts): every mileage line's rate is derived as
+ * amount_cents / miles ON THE SAME ROW, never read from a column independently of the amount it
+ * produced — SET-RATE law, "miles × rate ≠ amount" is impossible by construction, not merely
+ * asserted. Two lines always (loaded + empty), matching LAW §2.
  */
-type DriverBillRow = {
-  id: string;
-  driver_id: string;
-  driver_name?: string | null;
-  load_id: string;
-  load_number?: string | null;
-  bill_number: string;
-  gross_amount_cents: number;
-  miles_basis?: number | null;
-  miles_basis_type?: string | null;
-  rate_per_mile_cents?: number | null;
-  status: string;
-  notes?: string | null;
-  settled_in_settlement_id?: string | null;
-  created_at: string;
+type MileageLine = { kind: "loaded" | "empty"; miles: number | null; amount_cents: number | null; rate_cents_per_mile: number | null };
+type Accessorial = { id: string; line_type: string; description: string; amount: string | number; approval_status: string };
+type Deduction = { id: string; deduction_type: string; reason: string | null; amount_cents: string | number; status: string; applied_to_settlement_id: string | null };
+type BrokerAdvance = { id: string; category: string; amount_cents: string | number; disbursed_amount_cents: string | number | null; disbursed_to_driver_bill_id: string | null };
+type RateCard = { basis_type: string; rate_per_mile_cents: string | null; rate_empty_per_mile_cents: string | null; effective_from: string; effective_to: string | null };
+type PostingPreview = {
+  debit: Array<{ account_id: string; account_label: { account_number: string; account_name: string } | null; amount_cents: number }>;
+  credit: Array<{ account_id: string; account_label: { account_number: string; account_name: string } | null; amount_cents: number }>;
+  balanced: boolean;
+  unresolved_reason: string | null;
+};
+type DriverPayDetail = {
+  driver_id: string | null;
+  driver_name: string | null;
+  bill: { id: string; bill_number: string; status: string; gross_amount_cents: number } | null;
+  mileage_lines: MileageLine[];
+  accessorials: Accessorial[];
+  deductions: Deduction[];
+  broker_advances: BrokerAdvance[];
+  rate_card: RateCard | null;
+  posting_preview: PostingPreview;
 };
 
 type Props = {
@@ -34,172 +48,206 @@ type Props = {
   currencyCode: "USD" | "MXN";
 };
 
-function statusBadge(status: string): string {
-  switch (status) {
-    case "open":
-      return "bg-slate-100 text-slate-700";
-    case "approved":
-      return "bg-slate-100 text-slate-800";
-    case "paid":
-      return "bg-slate-200 text-slate-900";
-    case "void":
-      return "bg-gray-50 text-gray-400 line-through";
-    case "disputed":
-      return "bg-red-50 text-red-800";
-    default:
-      return "bg-gray-100 text-gray-700";
-  }
-}
+const DASH = "—";
+const MILE_KIND_LABEL: Record<MileageLine["kind"], string> = { loaded: "Loaded miles", empty: "Empty miles" };
 
+function fmtMiles(v: number | null): string {
+  return v == null ? DASH : v.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+}
+function fmtRate(cents: number | null): string {
+  return cents == null ? DASH : `$${(cents / 100).toFixed(4)}`;
+}
+function pillClass(status: string): string {
+  if (status === "approved") return "ldt-pill ok";
+  if (status === "rejected") return "ldt-pill bad";
+  return "ldt-pill warn";
+}
 function statusLabel(status: string): string {
   return status.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-function billDescription(bill: DriverBillRow): string {
-  const parts: string[] = [];
-  if (bill.miles_basis != null && bill.rate_per_mile_cents != null) {
-    const basis = bill.miles_basis_type === "practical" ? "practical" : "short";
-    parts.push(`${bill.miles_basis} ${basis} mi × ${formatMoneyCents(bill.rate_per_mile_cents, "USD")}/mi`);
-  }
-  if (bill.notes?.trim()) parts.push(bill.notes.trim());
-  return parts.length > 0 ? parts.join(" · ") : "Driver payable";
-}
-
 export function LoadDetailDriverPayTab({ loadId, operatingCompanyId, currencyCode }: Props) {
-  // Both load_id AND operating_company_id are REQUIRED by the endpoint (each missing → 400
-  // validation_error, which the drawer rendered as the Driver Pay "error"). Only fire when both are
-  // present so a transient empty value can't produce a malformed request.
   const hasParams = Boolean(loadId) && Boolean(operatingCompanyId);
-  const billsQuery = useQuery({
-    queryKey: ["driver-bills", "load", loadId, operatingCompanyId],
+  const query = useQuery({
+    queryKey: ["driver-pay-detail", loadId, operatingCompanyId],
     enabled: hasParams,
     queryFn: () =>
-      apiRequest<{ driver_bills: DriverBillRow[] }>(
-        `/api/v1/driver-finance/driver-bills?load_id=${encodeURIComponent(loadId)}&operating_company_id=${encodeURIComponent(operatingCompanyId)}`
+      apiRequest<DriverPayDetail>(
+        `/api/v1/driver-finance/loads/${encodeURIComponent(loadId)}/driver-pay-detail?operating_company_id=${encodeURIComponent(operatingCompanyId)}`
       ),
   });
 
-  if (!hasParams || billsQuery.isLoading) {
+  if (!hasParams || query.isLoading) {
     return <div className="py-8 text-center text-xs text-gray-500">Loading driver pay…</div>;
   }
 
-  if (billsQuery.error) {
-    const err = billsQuery.error as { status?: number };
+  if (query.error) {
+    const err = query.error as { status?: number };
     if (err?.status === 501) {
-      return (
-        <div className="rounded-sm border border-slate-200 bg-slate-100 p-4 text-xs text-slate-700">
-          Driver finance module is not yet configured for this company.
-        </div>
-      );
+      return <div className="ldt-note">Driver finance module is not yet configured for this company.</div>;
     }
     if (err?.status === 403) {
-      return (
-        <div className="rounded-sm border border-red-200 bg-red-50 p-4 text-xs text-red-700">
-          You do not have permission to view driver pay for this load.
-        </div>
-      );
+      return <div className="ldt-note bad">You do not have permission to view driver pay for this load.</div>;
     }
-    // DSP-MONEY-F7105-DRIVER-PAY-READ-FAILURE-DEAD-END (GO-0027, CC-1): the 501/501-not-configured
-    // and 403-forbidden states above are deliberate terminal states, but a transient read failure
-    // (network blip, 500, timeout) has no recovery path short of closing and reopening the whole
-    // drawer. Give it a real Retry bound to the exact query instance.
-    return (
-      <ListErrorState
-        title="Failed to load driver pay data."
-        status={err?.status ?? 0}
-        onRetry={() => void billsQuery.refetch()}
-      />
-    );
+    return <ListErrorState title="Failed to load driver pay data." status={err?.status ?? 0} onRetry={() => void query.refetch()} />;
   }
 
-  const bills: DriverBillRow[] = billsQuery.data?.driver_bills ?? [];
-
-  if (bills.length === 0) {
+  const data = query.data;
+  if (!data || !data.bill) {
     return (
-      <div className="space-y-3">
-        <div className="rounded-sm border border-gray-200 bg-gray-50 p-4 text-center text-xs text-gray-500">
-          No driver bill for this load yet.
-          <div className="mt-1 text-xs text-gray-400">
-            Payables mint when the load is booked with miles and a driver pay rate (or on deliver when that path is armed). Settlement composition is separate.
-          </div>
+      <div className="ldt-note">
+        No driver bill for this load yet.
+        <div className="ldt-muted" style={{ marginTop: 4 }}>
+          Payables mint when the load is booked with miles and a driver pay rate (or on deliver when that path is armed).
         </div>
       </div>
     );
   }
 
-  const active = bills.filter((b) => b.status !== "void");
-  const grossCents = active.reduce((sum, b) => sum + Number(b.gross_amount_cents ?? 0), 0);
-  const voidedCount = bills.length - active.length;
+  const { bill, mileage_lines, accessorials, deductions, broker_advances, rate_card, posting_preview, driver_id, driver_name } = data;
+  const knownLineTotal = mileage_lines.reduce((s, l) => s + (l.amount_cents ?? 0), 0) + accessorials.reduce((s, a) => s + Math.round(Number(a.amount) * 100), 0);
 
+  const totalDebit = posting_preview.debit.reduce((n, d) => n + d.amount_cents, 0);
+  const totalCredit = posting_preview.credit.reduce((n, c) => n + c.amount_cents, 0);
+  const basisLabel = (kind: MileageLine["kind"]) => (kind === "loaded" ? (rate_card?.basis_type === "shortest" ? "Short" : "Practical") : "Deadhead (attributed to this pickup)");
+  const acct = (a: { account_label: { account_number: string; account_name: string } | null; account_id: string }) => (a.account_label ? `${a.account_label.account_number} ${a.account_label.account_name}` : a.account_id);
+  const escrow = deductions.filter((d) => /escrow/i.test(d.deduction_type) || /escrow/i.test(d.reason ?? ""));
+  const otherDeductions = deductions.filter((d) => !escrow.includes(d));
+  const money = (c: number) => formatMoneyCents(c, currencyCode);
+
+  // LDT-3 DESIGN (owner 2026-09-06 04:2xZ "THE DESIGN … ALL THE SHIT IN THESE PICTURES"): the approved render
+  // (LOAD-DETAIL-TABS-RENDERS-2026-09-05.html § Driver Pay) — one header line with the bill and its state, the pay table with
+  // LINE · BASIS · MILES · RATE · AMOUNT · SOURCE, then TWO cards side by side: DEDUCTIONS & ADVANCES (fuel advance · broker
+  // advance · escrow, each with its rule) and POSTING — WHEN THE TOUR CLOSES (ACCOUNT · DEBIT · CREDIT, totals in balance).
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-2 rounded-sm border border-gray-200 bg-gray-50 p-3 text-xs">
+    <div className="ldt-body" data-testid="driver-pay-tab">
+      <div className="ldt-rowbar">
         <div>
-          <div className="text-xs text-gray-500">Driver bills (open/approved/paid)</div>
-          <div className="font-semibold text-gray-900">{formatMoneyCents(grossCents, currencyCode)}</div>
+          Driver bill <b className="ldt-k">{bill.bill_number}</b> ·{" "}
+          {driver_id ? <EntityLink kind="driver" id={driver_id} label={entityLabel(driver_name, driver_id, "Driver")} /> : <span className="ldt-muted">no driver</span>} ·{" "}
+          <span className={pillClass(bill.status === "open" ? "pending" : "approved")}>{statusLabel(bill.status)}</span>
+          {bill.status === "open" ? <span className="ldt-muted"> · accrues to the open tour</span> : null}
         </div>
-        <div>
-          <div className="text-xs text-gray-500">Bill count</div>
-          <div className="font-semibold text-gray-900">
-            {active.length}
-            {voidedCount > 0 ? <span className="ml-1 text-xs font-normal text-gray-500">(+{voidedCount} void)</span> : null}
-          </div>
+        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          {rate_card ? (
+            <span className="ldt-muted">Rate card: {rate_card.basis_type === "per_load_pay" ? "flat per load" : "per mile"} · effective {formatDateUS(rate_card.effective_from)}</span>
+          ) : (
+            <span className="ldt-muted">No active rate card on file for this driver</span>
+          )}
+          <EntityLink kind="driver_bill" id={bill.id} label="Open driver bill" className="ldt-btn g" />
         </div>
       </div>
 
-      <div className="space-y-1">
-        <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Driver bills</div>
-        {bills.map((bill) => {
-          const cents = Number(bill.gross_amount_cents ?? 0);
-          const isVoid = bill.status === "void";
-          // driver_finance.driver_bills ≠ accounting.bills — kind="bill" drills to
-          // /accounting/bills/:id and live-returns bill_not_found (L-20260810-0003 /
-          // B-20260810-0003 → 31f155f3-…). No per-id driver-bill route yet; reverse to
-          // settlement when settled, else driver profile. Never invent an AP bill link.
-          return (
-            <div key={bill.id} className="flex items-center justify-between rounded-sm border border-gray-100 p-2 text-xs">
-              <div className="flex min-w-0 flex-col gap-0.5">
-                <div className="flex flex-wrap items-center gap-1">
-                  <span className={`rounded-sm px-1.5 py-0.5 text-xs font-semibold ${statusBadge(bill.status)}`}>
-                    {statusLabel(bill.status)}
-                  </span>
-                  <span
-                    className="truncate text-xs font-medium text-gray-800"
-                    data-testid="load-driver-pay-bill-number"
-                  >
-                    {visibleDocumentLabel(bill.bill_number, bill.id, "Driver bill")}
-                  </span>
-                  <Link className="text-xs font-semibold text-slate-700 hover:underline" to={`/accounting/proof-trail/driver_bill/${encodeURIComponent(bill.id)}`}>
-                    Proof trail
-                  </Link>
-                  {bill.settled_in_settlement_id ? (
-                    <EntityLink
-                      kind="settlement"
-                      id={bill.settled_in_settlement_id}
-                      label="Settlement"
-                      className="truncate text-xs font-medium text-gray-800"
-                      data-testid="load-driver-pay-settlement-link"
-                    />
-                  ) : null}
-                  {bill.driver_id ? (
-                    <EntityLink
-                      kind="driver"
-                      id={bill.driver_id}
-                      label={entityLabel(bill.driver_name, bill.driver_id, "Driver")}
-                      className="truncate text-xs font-medium text-gray-800"
-                      data-testid="load-driver-pay-driver-link"
-                    />
-                  ) : null}
-                </div>
-                <span className="truncate text-xs text-gray-600">{billDescription(bill)}</span>
-              </div>
-              <span className={`ml-3 shrink-0 font-semibold ${isVoid ? "text-gray-400 line-through" : "text-gray-900"}`}>
-                {formatMoneyCents(Math.abs(cents), currencyCode)}
-              </span>
+      <div className="ldt-card" data-testid="driver-pay-lines-card">
+        <div className="ldt-rows ldt-rows-pay">
+          <div className="ldt-row head">
+            <span>Line</span><span>Basis</span><span>Miles</span><span>Rate</span><span>Amount</span><span>Source</span>
+          </div>
+          {mileage_lines.map((line) => (
+            <div className="ldt-row" key={line.kind} data-testid={`driver-pay-line-${line.kind}`}>
+              <span>{MILE_KIND_LABEL[line.kind]}</span>
+              <span>{basisLabel(line.kind)}</span>
+              <span className="ldt-m">{fmtMiles(line.miles)}</span>
+              <span className="ldt-m">{line.miles == null ? <span title="no telematics miles for this leg">{DASH}</span> : fmtRate(line.rate_cents_per_mile)}</span>
+              <span className="ldt-m">{line.amount_cents == null ? DASH : money(line.amount_cents)}</span>
+              <span className="ldt-k ldt-muted">{line.kind === "loaded" ? "loaded_pay_cents" : "deadhead_pay_cents"} {line.amount_cents ?? DASH}{line.rate_cents_per_mile != null ? ` · rate ${(line.rate_cents_per_mile / 100).toFixed(2)}` : ""}</span>
             </div>
-          );
-        })}
+          ))}
+          {accessorials.map((a) => (
+            <div className="ldt-row" key={a.id}>
+              <span>{a.line_type === "detention_pay" ? "Detention" : "Accessorial"} — {a.description}</span>
+              <span><span className={pillClass(a.approval_status)}>{statusLabel(a.approval_status)}</span></span>
+              <span className="ldt-m">{DASH}</span>
+              <span className="ldt-m">{DASH}</span>
+              <span className="ldt-m">{money(Math.round(Number(a.amount) * 100))}</span>
+              <span className="ldt-k ldt-muted">settlement_lines {a.line_type}</span>
+            </div>
+          ))}
+          <div className="ldt-row tot">
+            <span>Gross pay on this load</span><span /><span /><span />
+            <span className="ldt-m" data-testid="driver-pay-gross">{money(bill.gross_amount_cents)}</span>
+            <span className="ldt-k ldt-muted">gross_amount_cents {bill.gross_amount_cents} {knownLineTotal === bill.gross_amount_cents ? "✔ adds up" : `≠ lines ${knownLineTotal}`}</span>
+          </div>
+        </div>
+        <div className="ldt-hint">
+          Rate is <b>always</b> amount ÷ miles on this same line — a stored rate can never disagree with the amount it produced.
+        </div>
       </div>
+
+      <div className="ldt-grid2">
+        <div className="ldt-card" data-testid="driver-pay-deductions-card">
+          <div className="ldt-ch"><span>Deductions &amp; advances touching this load</span><span className="ldt-sub">driver_finance</span></div>
+          <div className="ldt-rows ldt-rows-ded">
+            <div className="ldt-row">
+              <span>Fuel advance (company → driver)</span>
+              <span className="ldt-m">{money(0)}</span>
+              <span className="ldt-muted">company expense when it happens, never a receivable</span>
+            </div>
+            {broker_advances.length === 0 ? (
+              <div className="ldt-row">
+                <span>Broker advance to driver (bill payment)</span>
+                <span className="ldt-m">{money(0)}</span>
+                <span className="ldt-muted">links to broker_advances by instrument</span>
+              </div>
+            ) : broker_advances.map((b) => (
+              <div className="ldt-row" key={b.id}>
+                <span>Broker advance to driver — {statusLabel(b.category)}</span>
+                <span className="ldt-m">{money(Number(b.disbursed_amount_cents ?? b.amount_cents))}</span>
+                <span className="ldt-muted">{b.disbursed_to_driver_bill_id ? "disbursed · links to broker_advances by instrument" : "pending disbursement"}</span>
+              </div>
+            ))}
+            {escrow.length === 0 ? (
+              <div className="ldt-row">
+                <span>Escrow contribution (this period)</span>
+                <span className="ldt-m">{money(0)}</span>
+                <span className="ldt-muted">liability · driver's own 2100 sub-account</span>
+              </div>
+            ) : escrow.map((d) => (
+              <div className="ldt-row" key={d.id}>
+                <span>Escrow contribution (this period)</span>
+                <span className="ldt-m">−{money(Number(d.amount_cents))}</span>
+                <span className="ldt-muted">liability · {d.applied_to_settlement_id ? "applied" : statusLabel(d.status)}{d.reason ? ` · ${d.reason}` : ""}</span>
+              </div>
+            ))}
+            {otherDeductions.map((d) => (
+              <div className="ldt-row" key={d.id}>
+                <span>{statusLabel(d.deduction_type)}</span>
+                <span className="ldt-m">−{money(Number(d.amount_cents))}</span>
+                <span className="ldt-muted">{d.applied_to_settlement_id ? "applied" : statusLabel(d.status)}{d.reason ? ` · ${d.reason}` : ""}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="ldt-card" data-testid="driver-pay-posting-card">
+          <div className="ldt-ch"><span>Posting</span><span className="ldt-sub">when the tour closes</span></div>
+          {posting_preview.balanced ? (
+            <div className="ldt-rows ldt-rows-post">
+              <div className="ldt-row head"><span>Account</span><span>Debit</span><span>Credit</span></div>
+              {posting_preview.debit.map((d) => (
+                <div className="ldt-row" key={`d-${d.account_id}`}><span>{acct(d)}</span><span className="ldt-m">{(d.amount_cents / 100).toFixed(2)}</span><span /></div>
+              ))}
+              {posting_preview.credit.map((c) => (
+                <div className="ldt-row" key={`c-${c.account_id}`}><span>{acct(c)}</span><span /><span className="ldt-m">{(c.amount_cents / 100).toFixed(2)}</span></div>
+              ))}
+              <div className="ldt-row tot" data-testid="driver-pay-posting-totals">
+                <span>Totals · {totalDebit === totalCredit ? "in balance" : "OUT OF BALANCE"}</span>
+                <span className="ldt-m">{(totalDebit / 100).toFixed(2)}</span>
+                <span className="ldt-m">{(totalCredit / 100).toFixed(2)}</span>
+              </div>
+            </div>
+          ) : (
+            <div className="ldt-note warn">Preview unavailable — {posting_preview.unresolved_reason ?? "GL account not resolved"}.</div>
+          )}
+        </div>
+      </div>
+      <div className="ldt-note warn">
+        Nothing posts here while the tour is open (LAW §2 "open = pre-settlement"). The Amount column is computed <b>from the same rate the line stores</b> — miles × rate is the only path. The real journal entry is created when the driver's settlement pay run closes.
+      </div>
+      {/* RG-22 — kind="driver_bill" EntityLink above deliberately resolves to plain text (no
+          dedicated route); this is the real click-to-ledger path for the driver bill once it has
+          posted, same shared panel every other document type on the settlement/accounting pages use. */}
+      <MoneyProofTrailPanel operatingCompanyId={operatingCompanyId} documentType="driver_bill" documentId={bill.id} />
     </div>
   );
 }

@@ -77,15 +77,15 @@ export function measure() {
 
   return {
     header_ok:
-      tokens.includes('tableHeaderBg: "#14314F"') &&
-      tokens.includes('tableHeaderText: "#FFFFFF"') &&
+      tokens.includes('tableHeaderBg: "#EEF2F6"') &&
+      tokens.includes('tableHeaderText: "#1F2937"') &&
       parity.includes("colors.tableHeaderBg") &&
-      /thead\s*\{[\s\S]*?background-color:\s*#14314f\s*!important;[\s\S]*?color:\s*#ffffff\s*!important;[\s\S]*?font-size:\s*11px\s*!important;[\s\S]*?font-weight:\s*700\s*!important;/.test(css) &&
+      /thead\s*\{[\s\S]*?background-color:\s*#eef2f6\s*!important;[\s\S]*?color:\s*#1f2937\s*!important;[\s\S]*?font-size:\s*11px\s*!important;[\s\S]*?font-weight:\s*700\s*!important;/.test(css) &&
       tableHeaderCell.includes('data-table-header-cell="locked"') &&
       tableHeaderCell.includes("colors.tableHeaderBg") &&
       tableHeaderCell.includes("colors.tableHeaderText") &&
       parity.includes("column.sortable !== false") &&
-      spec.includes("#14314F"),
+      spec.includes("#EEF2F6"),
     call_sites: callSites.length,
     missing_date: missingDate,
     missing_date_count: missingDate.length,

@@ -204,10 +204,13 @@ function readSort(): SortMode {
   return "truck";
 }
 
-function readView(deepLink?: boolean): BoardView {
+function readView(_deepLink?: boolean): BoardView {
+  // RT-FIX (lead 2026-09-06): the approved design (GO-RT-01 22a26613) opens on the LOAD BOARD (NB → TR → SB);
+  // BRD-10 (ebc54d5d) flipped the deep link to the timeline — that is what the owner saw as "changed completely".
+  // Default is the board again on every entry; the timeline stays one click away and remembers the choice.
   const raw = typeof localStorage !== "undefined" ? localStorage.getItem(VIEW_KEY) : null;
   if (raw === "timeline" || raw === "board") return raw;
-  return deepLink ? "timeline" : "board";
+  return "board";
 }
 
 export function RoundTrips({

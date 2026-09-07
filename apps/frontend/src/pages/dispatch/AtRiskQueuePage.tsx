@@ -183,17 +183,19 @@ export function AtRiskQueuePage() {
     [],
   );
 
-  const footer = (
-    <>
-      <td className="px-2 py-2" colSpan={10}>
+  // DSP-TBL (owner ruling 2026-09-05): footerCells replaces the raw colSpan=10 footer — the
+  // "N loads shown" caption now lives in "load_number", each total stays keyed to its own
+  // column (loaded_miles/rate_total_cents/rpm), so it can't drift if a column moves.
+  const footerCells = {
+    load_number: (
+      <span className="font-normal" data-testid="at-risk-footer-count">
         {loads.length} loads shown · matches tile
-      </td>
-      <td className="px-2 py-2 text-right tabular-nums">{milesSum.toLocaleString(undefined, { maximumFractionDigits: 1 })}</td>
-      <td className="px-2 py-2 text-right tabular-nums">{moneyCents(rateSumCents)}</td>
-      <td className="px-2 py-2 text-right tabular-nums">{milesSum > 0 ? weightedRpm.toFixed(2) : "—"}</td>
-      <td className="px-2 py-2" colSpan={4} />
-    </>
-  );
+      </span>
+    ),
+    loaded_miles: <span className="tabular-nums">{milesSum.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span>,
+    rate_total_cents: <span className="tabular-nums">{moneyCents(rateSumCents)}</span>,
+    rpm: <span className="tabular-nums">{milesSum > 0 ? weightedRpm.toFixed(2) : "—"}</span>,
+  };
 
   if (!companyId) {
     return <div className="rounded-sm border bg-white p-4 text-xs text-slate-600">Select an operating company.</div>;
@@ -237,7 +239,7 @@ export function AtRiskQueuePage() {
             setParitySortKey(key);
             setSortDirection(direction);
           }}
-          footer={footer}
+          footerCells={footerCells}
         />
       )}
       <p className="text-[11px] text-gray-500" data-testid="kpi-drill-row-count">

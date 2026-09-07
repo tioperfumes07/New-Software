@@ -22,9 +22,9 @@
       "date": "2026-08-12"
     },
     "linehaul_amount": 1700,
-    "loaded_miles": 721.4,
+    "loaded_miles": 716.8,
     "loaded_rate": 0.45,
-    "empty_miles": 232.8,
+    "empty_miles": 222.0,
     "empty_rate": 0.45,
     "fuel_rows": [
       {
@@ -89,9 +89,9 @@
       "date": "2026-08-13"
     },
     "linehaul_amount": 525,
-    "loaded_miles": 442.2,
+    "loaded_miles": 436.1,
     "loaded_rate": 0.45,
-    "empty_miles": 109.8,
+    "empty_miles": 108.2,
     "empty_rate": 0.45,
     "fuel_rows": [
       {
@@ -1419,5 +1419,236 @@
         "amount": -10
       }
     ]
+  },
+  "13563": {
+    "load_number": "13563",
+    "settlement_ref": null,
+    "customer_name": "Hawkeye Transportation Services",
+    "driver_name": "Rafael Rogelio Rivero Reynoso",
+    "unit": "T148",
+    "trailer": "10218 - 53' Reefer",
+    "status_in_recon": "Dispatched",
+    "pickup": {
+      "location_name": "ENVISION COLD STORAGE",
+      "city": "LAREDO",
+      "state": "TX",
+      "zip": null,
+      "date": "2026-09-01"
+    },
+    "delivery": {
+      "location_name": "Continental Forwarding",
+      "city": "Laredo",
+      "state": "TX",
+      "zip": null,
+      "date": "2026-09-02"
+    },
+    "linehaul_amount": 500,
+    "loaded_miles": 7.2,
+    "loaded_rate": null,
+    "empty_miles": null,
+    "empty_rate": null,
+    "fuel_rows": [],
+    "expense_rows": [],
+    "additional_pay_rows": [],
+    "reimbursement_rows": [],
+    "deduction_rows_from_driver_settlement": []
+  },
+  "13564": {
+    "load_number": "13564",
+    "settlement_ref": null,
+    "customer_name": "Armstrong Transport GR",
+    "driver_name": "Leonel Antonio Morales",
+    "unit": "T175",
+    "trailer": "FB-56704 - 53' Flatbed",
+    "status_in_recon": "Dispatched",
+    "pickup": {
+      "location_name": "Allura - Laredo Warehouse",
+      "city": "LAREDO",
+      "state": "TX",
+      "zip": null,
+      "date": "2026-09-01"
+    },
+    "delivery": {
+      "location_name": "Plycem USA LLC., Roaring river",
+      "city": "NORTH WILKESBORO",
+      "state": "NC",
+      "zip": null,
+      "date": "2026-09-03"
+    },
+    "linehaul_amount": 3000,
+    "loaded_miles": 1439.2,
+    "loaded_rate": 0.45,
+    "empty_miles": null,
+    "empty_rate": null,
+    "fuel_rows": [],
+    "expense_rows": [],
+    "additional_pay_rows": [],
+    "reimbursement_rows": [],
+    "deduction_rows_from_driver_settlement": []
+  },
+  "13569": {
+    "load_number": "13569",
+    "settlement_ref": null,
+    "customer_name": "Armstrong Transport GR",
+    "driver_name": "Fernando Mecor Hernandez",
+    "unit": "T168",
+    "trailer": "FB-56210 - 53' Flatbed",
+    "status_in_recon": "Dispatched",
+    "pickup": {
+      "location_name": "Allura - Laredo Warehouse",
+      "city": "LAREDO",
+      "state": "TX",
+      "zip": null,
+      "date": "2026-09-01"
+    },
+    "delivery": {
+      "location_name": "Plycem USA LLC., Roaring river",
+      "city": "NORTH WILKESBORO",
+      "state": "NC",
+      "zip": null,
+      "date": "2026-09-03"
+    },
+    "linehaul_amount": 3000,
+    "loaded_miles": 1439.2,
+    "loaded_rate": 0.44,
+    "empty_miles": null,
+    "empty_rate": null,
+    "fuel_rows": [],
+    "expense_rows": [],
+    "additional_pay_rows": [],
+    "reimbursement_rows": [],
+    "deduction_rows_from_driver_settlement": []
+  },
+  "13570": {
+    "load_number": "13570",
+    "settlement_ref": null,
+    "customer_name": "XPR LOGISTICS LLC",
+    "driver_name": "Carlos Mauricio Carvallo",
+    "unit": "T164",
+    "trailer": "10219 - 53' Reefer",
+    "status_in_recon": "Dispatched",
+    "pickup": {
+      "location_name": "Vilore Foods",
+      "city": "Laredo",
+      "state": "TX",
+      "zip": null,
+      "date": "2026-09-01"
+    },
+    "delivery": {
+      "location_name": "WM6023R VA SUTHERLAND",
+      "city": "PETERSBURG",
+      "state": "VA",
+      "zip": null,
+      "date": "2026-09-05"
+    },
+    "linehaul_amount": 5900,
+    "loaded_miles": 1728.8,
+    "loaded_rate": 0.45,
+    "empty_miles": null,
+    "empty_rate": null,
+    "fuel_rows": [],
+    "expense_rows": [],
+    "additional_pay_rows": [],
+    "reimbursement_rows": [],
+    "deduction_rows_from_driver_settlement": []
+  },
+  "13571": {
+    "load_number": "13571",
+    "settlement_ref": null,
+    "customer_name": "Semares Forwarding Services",
+    "driver_name": "Jorge Luis Infante Corona",
+    "unit": "T177",
+    "trailer": "FB-56713 - 53' Flatbed",
+    "status_in_recon": "Dispatched",
+    "pickup": {
+      "location_name": "Semares",
+      "city": "Laredo",
+      "state": "TX",
+      "zip": null,
+      "date": "2026-09-01"
+    },
+    "delivery": {
+      "location_name": "Global Manufacturing, Inc",
+      "city": "EDISON",
+      "state": "NJ",
+      "zip": null,
+      "date": "2026-09-04"
+    },
+    "linehaul_amount": 4900,
+    "loaded_miles": 1958.9,
+    "loaded_rate": 0.42,
+    "empty_miles": null,
+    "empty_rate": null,
+    "fuel_rows": [],
+    "expense_rows": [],
+    "additional_pay_rows": [],
+    "reimbursement_rows": [],
+    "deduction_rows_from_driver_settlement": []
+  },
+  "13572": {
+    "load_number": "13572",
+    "settlement_ref": null,
+    "customer_name": "Value Logistics Inc DBA A1 Value",
+    "driver_name": "Genaro Guerrero Chavez",
+    "unit": "T152",
+    "trailer": "22206 - 53' Van",
+    "status_in_recon": "Dispatched",
+    "pickup": {
+      "location_name": "LAREDO MILE 13",
+      "city": "LAREDO",
+      "state": "TX",
+      "zip": null,
+      "date": "2026-09-02"
+    },
+    "delivery": {
+      "location_name": "Logan Aluminum, Inc. Recycling Center",
+      "city": "RUSSELVILLE",
+      "state": "KY",
+      "zip": null,
+      "date": "2026-09-04"
+    },
+    "linehaul_amount": 3200,
+    "loaded_miles": 1114.9,
+    "loaded_rate": null,
+    "empty_miles": null,
+    "empty_rate": null,
+    "fuel_rows": [],
+    "expense_rows": [],
+    "additional_pay_rows": [],
+    "reimbursement_rows": [],
+    "deduction_rows_from_driver_settlement": []
+  },
+  "13573": {
+    "load_number": "13573",
+    "settlement_ref": null,
+    "customer_name": "Armstrong Transport GR",
+    "driver_name": "Vicente Santos Contreras",
+    "unit": "T174",
+    "trailer": "FB-56709 - 53' Flatbed",
+    "status_in_recon": "Dispatched",
+    "pickup": {
+      "location_name": "North State Hardwoods",
+      "city": "NORTH WILKESBORO",
+      "state": "NC",
+      "zip": null,
+      "date": "2026-09-02"
+    },
+    "delivery": {
+      "location_name": "Barney Robinson Hdwds & Lumber",
+      "city": "FT WORTH",
+      "state": "TX",
+      "zip": null,
+      "date": "2026-09-04"
+    },
+    "linehaul_amount": 2300,
+    "loaded_miles": null,
+    "loaded_rate": null,
+    "empty_miles": null,
+    "empty_rate": null,
+    "fuel_rows": [],
+    "expense_rows": [],
+    "additional_pay_rows": [],
+    "reimbursement_rows": [],
+    "deduction_rows_from_driver_settlement": []
   }
 }

@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { EntityLinkOrTombstone } from "../../components/shared/EntityLinkOrTombstone";
-import { getCustomerBillingSummary, listAllAtRiskCustomerRelationshipScores, type Customer } from "../../api/mdata";
+import { getCustomerBillingSummary, listAllAtRiskCustomerRelationshipScores, type Customer, type CustomerFinanceRollup } from "../../api/mdata";
 import { customerQualityKind, customerQualityClass } from "../../lib/quality-badge";
 import { bulkUpdate } from "../../api/bulk";
 import { ParityTable } from "../../components/parity/ParityTable";
@@ -19,6 +19,18 @@ import { mmmDd } from "../../lib/formatDate";
 
 function fmtMoney(cents: number) {
   return formatUsdCents(cents);
+}
+
+// ROUND 16.10 — a null day-count or dollar figure means no real ledger source for THIS customer,
+// never a fabricated 0 (LAW §8 "zero is a claim").
+function fmtDays(value: number | null): string {
+  return value == null ? "—" : `${Math.round(value)} d`;
+}
+function fmtFinanceCents(value: number | null): string {
+  return value == null ? "—" : fmtMoney(value);
+}
+function fmtPct(value: number | null): string {
+  return value == null ? "—" : `${value.toFixed(1)}%`;
 }
 
 function qualityBadge(customer: Customer) {
@@ -46,13 +58,23 @@ type CustomerRow = Customer & {
   overdue_label: string;
   load_count: number | null;
   booked_ytd_cents: number | null;
+  revenue_mtd_cents: number | null;
+  ar_open_cents: number | null;
   last_load_iso: string | null;
+  factored_label: string;
+  // ROUND 16.10 (owner 2026-09-06 21:59Z) — null (not 0) whenever the customer has no rollup row
+  // or a specific figure has no real ledger source (LAW §8 "zero is a claim").
+  finance: CustomerFinanceRollup | null;
 };
 
 // CC-3 V.1 roll-up: per-customer profitability merged from the customer-profitability endpoint.
+// VC-LIST-01: extended with invoice-based A/R (ar_open_cents), past_due, and Revenue (MTD).
 type CustomerProfitability = {
   load_count: number;
   revenue_cents: number;
+  revenue_mtd_cents: number;
+  ar_open_cents: number;
+  past_due: boolean;
   last_load_iso: string | null;
 };
 
@@ -67,10 +89,12 @@ type Props = {
   openBalancesAvailable: boolean;
   /** CC-3 V.1 roll-up: per-customer YTD profitability keyed by customer_id. */
   profitabilityByCustomerId: Map<string, CustomerProfitability>;
+  /** ROUND 16.10: per-customer days-to-pay + cost-of-finance rollup, keyed by customer_id. */
+  financeByCustomerId: Map<string, CustomerFinanceRollup>;
   onSelectCustomer?: (customerId: string) => void;
 };
 
-export function CustomersListView({ companyId, customers, status, openByCustomerId, openBalancesAvailable, profitabilityByCustomerId, onSelectCustomer }: Props) {
+export function CustomersListView({ companyId, customers, status, openByCustomerId, openBalancesAvailable, profitabilityByCustomerId, financeByCustomerId, onSelectCustomer }: Props) {
   const queryClient = useQueryClient();
   const { pushToast } = useToast();
   // Same BULK_WRITE_ROLES gate the old BulkActionBar enforced internally (useBulkPermission) —
@@ -136,10 +160,18 @@ export function CustomersListView({ companyId, customers, status, openByCustomer
           // CC-3 V.1 roll-up columns — null when the customer has no profitability row (renders "—").
           load_count: profit?.load_count ?? null,
           booked_ytd_cents: profit?.revenue_cents ?? null,
+          revenue_mtd_cents: profit?.revenue_mtd_cents ?? null,
+          // VC-LIST-01: invoice-based A/R (excludes void + pro forma). Prefer the openByCustomerId
+          // billing summary where available, else the profitability ar_aging_balance.
+          ar_open_cents: openBalancesAvailable ? (openByCustomerId.get(c.id) ?? profit?.ar_open_cents ?? 0) : (profit?.ar_open_cents ?? null),
           last_load_iso: profit?.last_load_iso ?? null,
+          // VC-LIST-01: Factored? — a customer whose credit limit is sourced from a factor is a
+          // factored account (credit_limit_source = 'factor').
+          factored_label: c.credit_limit_source === "factor" ? "Yes" : "No",
+          finance: financeByCustomerId.get(c.id) ?? null,
         };
       }),
-    [filtered, openBalancesAvailable, openByCustomerId, atRiskCustomerIds, atRiskQuery.isError, profitabilityByCustomerId]
+    [filtered, openBalancesAvailable, openByCustomerId, atRiskCustomerIds, atRiskQuery.isError, profitabilityByCustomerId, financeByCustomerId]
   );
 
   // LIST-EMPTY-1: empty row renders only once the roster fetch settles.
@@ -242,6 +274,8 @@ export function CustomersListView({ companyId, customers, status, openByCustomer
         rows={enrichedRows}
         rowKey={(row) => row.id}
         storageKey="customers-list"
+        pageSizeOptions={[25, 50, 100, 250, 300]}
+        allowAllPageSize
         initialPageSize={50}
         sortKey={sortKey}
         sortDirection={sortDirection}
@@ -370,40 +404,31 @@ export function CustomersListView({ companyId, customers, status, openByCustomer
               </span>
             ),
           },
-          { key: "email", label: "Email", sortable: true, render: (row) => row.email ?? "—" },
-          { key: "phone", label: "Phone", sortable: true, render: (row) => row.phone ?? "—" },
-          { key: "billing_state", label: "Billing State", sortable: true, render: (row) => row.billing_state ?? "—" },
+          // VC-LIST-01 (owner ROUND 11) spec column set: Name · Type · Status · Open A/R · Overdue ·
+          // Revenue (MTD) · Revenue (YTD) · Last load · Factored? · Credit limit. Pre-existing extras
+          // (Email/Phone/Billing State/Loads/FMCSA/Health/Quality/Last Activity/Created) are kept but
+          // default-hidden (never deleted, §7) — reachable via the column chooser.
+          { key: "customer_type", label: "Type", sortable: true, render: (row) => row.customer_type ?? "—" },
           {
-            key: "open_balance",
-            label: "Open Balance",
+            key: "status",
+            label: "Status",
             sortable: true,
-            cellClass: "text-right tabular-nums",
-            render: (row) => row.open_balance == null ? <span className="text-gray-500">Unavailable</span> : fmtMoney(row.open_balance),
-          },
-          // CC-3 V.1 roll-up columns — Loads / Booked YTD / Last Load (dash-never-zero).
-          {
-            key: "load_count",
-            label: "Loads",
-            sortable: true,
-            cellClass: "text-right tabular-nums",
-            render: (row) => (row.load_count == null ? <span className="text-gray-400">—</span> : String(row.load_count)),
-          },
-          {
-            key: "booked_ytd_cents",
-            label: "Booked YTD",
-            sortable: true,
-            cellClass: "text-right tabular-nums",
-            render: (row) => (row.booked_ytd_cents == null ? <span className="text-gray-400">—</span> : fmtMoney(row.booked_ytd_cents)),
-          },
-          {
-            key: "last_load_iso",
-            label: "Last Load",
-            sortable: true,
-            cellClass: "text-right tabular-nums",
             render: (row) => {
-              const label = row.last_load_iso ? mmmDd(row.last_load_iso) : "";
-              return label ? label : <span className="text-gray-400">—</span>;
+              const active = row.status === "active";
+              return (
+                <span className={`inline-flex rounded-sm px-2 py-0.5 text-xs font-semibold ${active ? "bg-slate-100 text-slate-700" : "bg-gray-200 text-gray-700"}`}>
+                  {row.status === "active" ? "Active" : row.status === "inactive" ? "Inactive" : row.status === "credit_hold" ? "Credit hold" : row.status === "blacklist" ? "Blacklist" : "—"}
+                </span>
+              );
             },
+          },
+          {
+            key: "ar_open_cents",
+            label: "Open A/R",
+            sortable: true,
+            cellClass: "text-right tabular-nums",
+            sortValue: (row) => row.ar_open_cents ?? -1,
+            render: (row) => (row.ar_open_cents == null ? <span className="text-gray-500">Unavailable</span> : fmtMoney(row.ar_open_cents)),
           },
           {
             key: "overdue_label",
@@ -417,15 +442,189 @@ export function CustomersListView({ companyId, customers, status, openByCustomer
               ),
           },
           {
+            key: "revenue_mtd_cents",
+            label: "Revenue (MTD)",
+            sortable: true,
+            cellClass: "text-right tabular-nums",
+            sortValue: (row) => row.revenue_mtd_cents ?? -1,
+            render: (row) => (row.revenue_mtd_cents == null ? <span className="text-gray-400">—</span> : fmtMoney(row.revenue_mtd_cents)),
+          },
+          {
+            key: "booked_ytd_cents",
+            label: "Revenue (YTD)",
+            sortable: true,
+            cellClass: "text-right tabular-nums",
+            render: (row) => (row.booked_ytd_cents == null ? <span className="text-gray-400">—</span> : fmtMoney(row.booked_ytd_cents)),
+          },
+          {
+            key: "last_load_iso",
+            label: "Last load",
+            sortable: true,
+            cellClass: "text-right tabular-nums",
+            render: (row) => {
+              const label = row.last_load_iso ? mmmDd(row.last_load_iso) : "";
+              return label ? label : <span className="text-gray-400">—</span>;
+            },
+          },
+          // CC-3 — pre-VC-LIST-01 roll-up columns (kept, default hidden now that VC-LIST-01's
+          // "Revenue (YTD)" / "Last load" above carry the same data under the owner's ROUND 11
+          // wording). Never deleted (§7) — same pattern VendorsListView.tsx's "Purchases YTD" /
+          // "Last Purchase" already follows for the identical reason.
+          {
+            key: "booked_ytd",
+            label: "Booked YTD",
+            sortable: false,
+            defaultHidden: true,
+            cellClass: "text-right tabular-nums",
+            render: (row) => (row.booked_ytd_cents == null ? <span className="text-gray-400">—</span> : fmtMoney(row.booked_ytd_cents)),
+          },
+          {
+            key: "last_load",
+            label: "Last Load",
+            sortable: false,
+            defaultHidden: true,
+            cellClass: "text-right tabular-nums",
+            render: (row) => {
+              const label = row.last_load_iso ? mmmDd(row.last_load_iso) : "";
+              return label ? label : <span className="text-gray-400">—</span>;
+            },
+          },
+          {
+            key: "factored_label",
+            label: "Factored?",
+            sortable: true,
+            render: (row) =>
+              row.factored_label === "Yes" ? (
+                <span className="inline-flex rounded-sm bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">Yes</span>
+              ) : (
+                <span className="text-gray-400">No</span>
+              ),
+          },
+          // ROUND 16.10 (owner 2026-09-06 21:59Z): "EVERY CUSTOMER IN THE RATING ... AVERAGE
+          // PAYMENT TO FACTORING OR TO US ... HOW MUCH IT IS COSTING US IN FINANCE, IN FACTORING
+          // FEES, IN LATE FEES, ETC." One read model (getCustomerFinanceRollup), list AND detail
+          // both read it. late_fee_cents stays "—" (never $0.00) — no late-fee source exists
+          // anywhere in the ledger (checked mdata.customer_quality_events: 0 rows carry a real
+          // dollar_impact_amount).
+          {
+            key: "avg_days_to_pay_us",
+            label: "Avg days → us",
+            sortable: true,
+            cellClass: "text-right tabular-nums",
+            sortValue: (row) => row.finance?.avg_days_to_pay_us ?? -1,
+            render: (row) => fmtDays(row.finance?.avg_days_to_pay_us ?? null),
+          },
+          {
+            key: "avg_days_to_pay_factor",
+            label: "Avg days → factor",
+            sortable: true,
+            cellClass: "text-right tabular-nums",
+            sortValue: (row) => row.finance?.avg_days_to_pay_factor ?? -1,
+            render: (row) => fmtDays(row.finance?.avg_days_to_pay_factor ?? null),
+          },
+          {
+            key: "avg_days_late",
+            label: "Avg days late",
+            sortable: true,
+            defaultHidden: true,
+            cellClass: "text-right tabular-nums",
+            sortValue: (row) => row.finance?.avg_days_late ?? -1,
+            render: (row) => fmtDays(row.finance?.avg_days_late ?? null),
+          },
+          {
+            key: "factoring_fee_cents",
+            label: "Factoring fees",
+            sortable: true,
+            defaultHidden: true,
+            cellClass: "text-right tabular-nums",
+            sortValue: (row) => row.finance?.factoring_fee_cents ?? -1,
+            render: (row) => fmtFinanceCents(row.finance?.factoring_fee_cents ?? null),
+          },
+          {
+            key: "factoring_interest_cents",
+            label: "Factor interest",
+            sortable: true,
+            defaultHidden: true,
+            cellClass: "text-right tabular-nums",
+            sortValue: (row) => row.finance?.factoring_interest_cents ?? -1,
+            render: (row) => fmtFinanceCents(row.finance?.factoring_interest_cents ?? null),
+          },
+          {
+            key: "late_fee_cents",
+            label: "Late fees",
+            sortable: false,
+            defaultHidden: true,
+            cellClass: "text-right tabular-nums",
+            render: () => (
+              <span className="text-gray-400" title="No late-fee source in the ledger">
+                —
+              </span>
+            ),
+          },
+          {
+            key: "reserve_held_cents",
+            label: "Reserve held",
+            sortable: true,
+            defaultHidden: true,
+            cellClass: "text-right tabular-nums",
+            sortValue: (row) => row.finance?.reserve_held_cents ?? -1,
+            render: (row) => fmtFinanceCents(row.finance?.reserve_held_cents ?? null),
+          },
+          {
+            key: "finance_cost_total_cents",
+            label: "Finance cost",
+            sortable: true,
+            cellClass: "text-right tabular-nums",
+            sortValue: (row) => row.finance?.finance_cost_total_cents ?? -1,
+            render: (row) => fmtFinanceCents(row.finance?.finance_cost_total_cents ?? null),
+          },
+          {
+            key: "finance_cost_pct",
+            label: "Finance %",
+            sortable: true,
+            cellClass: "text-right tabular-nums",
+            sortValue: (row) => row.finance?.finance_cost_pct ?? -1,
+            render: (row) => fmtPct(row.finance?.finance_cost_pct ?? null),
+          },
+          {
+            key: "credit_limit",
+            label: "Credit limit",
+            sortable: true,
+            cellClass: "text-right tabular-nums",
+            sortValue: (row) => (row.credit_limit == null ? -1 : Number(row.credit_limit)),
+            render: (row) => (row.credit_limit == null ? <span className="text-gray-400">—</span> : fmtMoney(Math.round(Number(row.credit_limit) * 100))),
+          },
+          { key: "email", label: "Email", sortable: true, defaultHidden: true, render: (row) => row.email ?? "—" },
+          { key: "phone", label: "Phone", sortable: true, defaultHidden: true, render: (row) => row.phone ?? "—" },
+          { key: "billing_state", label: "Billing State", sortable: true, defaultHidden: true, render: (row) => row.billing_state ?? "—" },
+          {
+            key: "open_balance",
+            label: "Open Balance",
+            sortable: true,
+            defaultHidden: true,
+            cellClass: "text-right tabular-nums",
+            render: (row) => row.open_balance == null ? <span className="text-gray-500">Unavailable</span> : fmtMoney(row.open_balance),
+          },
+          {
+            key: "load_count",
+            label: "Loads",
+            sortable: true,
+            defaultHidden: true,
+            cellClass: "text-right tabular-nums",
+            render: (row) => (row.load_count == null ? <span className="text-gray-400">—</span> : String(row.load_count)),
+          },
+          {
             key: "fmcsa_verified_at",
             label: "FMCSA Verified",
             sortable: true,
+            defaultHidden: true,
             render: (row) => (row.fmcsa_verified_at ? "Yes" : "No"),
           },
           {
             key: "health_tier_label",
             label: "Health",
             sortable: true,
+            defaultHidden: true,
             render: (row) => {
               const tier = row.relationship_health_tier ?? (atRiskCustomerIds.has(row.id) ? "at_risk" : null);
               const b = relationshipTierBadge(tier, atRiskQuery.isError && !row.relationship_health_tier);
@@ -436,6 +635,7 @@ export function CustomersListView({ companyId, customers, status, openByCustomer
             key: "quality_flag_label",
             label: "Quality Flag",
             sortable: true,
+            defaultHidden: true,
             render: (row) => {
               const b = qualityBadge(row);
               return <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${b.className}`}>{b.label}</span>;
@@ -445,6 +645,7 @@ export function CustomersListView({ companyId, customers, status, openByCustomer
             key: "updated_at",
             label: "Last Activity",
             sortable: true,
+            defaultHidden: true,
             cellClass: "text-right tabular-nums",
             render: (row) => {
               const label = row.updated_at ? mmmDd(row.updated_at) : "";
@@ -455,6 +656,7 @@ export function CustomersListView({ companyId, customers, status, openByCustomer
             key: "created_at",
             label: "Created",
             sortable: true,
+            defaultHidden: true,
             cellClass: "text-right tabular-nums",
             render: (row) => {
               const label = row.created_at ? mmmDd(row.created_at) : "";

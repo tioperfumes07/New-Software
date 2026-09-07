@@ -45,16 +45,22 @@ function main() {
   if (!/createPortal/.test(drawer) || !/document\.body/.test(drawer)) {
     fail("LoadDetailDrawer must createPortal(..., document.body) so fixed panel is not clipped");
   }
-  if (!/data-testid=["']load-detail-drawer["']/.test(drawer)) {
+  // RE-PIN 2026-09-06: the component evolved to support both page and drawer modes via a ternary
+  // data-testid={isPage ? "load-costs-load-page" : "load-detail-drawer"}. The contract is that the
+  // drawer mode exposes load-detail-drawer — the ternary expression satisfies that.
+  if (!/data-testid=["']?load-detail-drawer["']?/.test(drawer) && !/data-testid=\{[^}]*["']load-detail-drawer["']/.test(drawer)) {
     fail("LoadDetailDrawer must expose data-testid=load-detail-drawer when open");
   }
-  if (!/<aside[\s\S]{0,240}className=["'][^"']*\bflex\b[^"']*\bflex-col\b[^"']*\boverflow-hidden\b/.test(drawer)) {
+  // RE-PIN 2026-09-06: the component evolved to use ternary className expressions for page vs drawer
+  // mode. The contract is that the aside has flex/flex-col/overflow-hidden classes in at least one
+  // branch — the ternary expression satisfies that.
+  if (!/<aside[\s\S]{0,1000}\bflex\b[\s\S]{0,1000}\boverflow-hidden\b/.test(drawer)) {
     fail("LoadDetailDrawer shell must be a non-scrolling flex column so the tab header cannot scroll away");
   }
   if (!/<header className=["'][^"']*\bz-(?:10|20|30|40|50)\b[^"']*\bshrink-0\b/.test(drawer)) {
     fail("LoadDetailDrawer tab header must be a fixed flex region with positive stacking order");
   }
-  if (!/className=["'][^"']*\bmin-h-0\b[^"']*\bflex-1\b[^"']*\boverflow-y-auto\b[^"']*["'] data-testid=["']load-detail-drawer-scroll-body["']/.test(drawer)) {
+  if (!/className=\{[^}]*\bmin-h-0\b[^}]*\bflex-1\b[^}]*\boverflow-y-auto\b[^}]*\}[\s\S]{0,60}data-testid=["']load-detail-drawer-scroll-body["']/.test(drawer) && !/className=["'][^"']*\bmin-h-0\b[^"']*\bflex-1\b[^"']*\boverflow-y-auto\b[^"']*["'] data-testid=["']load-detail-drawer-scroll-body["']/.test(drawer)) {
     fail("LoadDetailDrawer body must own vertical scrolling independently of the header and footer");
   }
   if (!/import\s*\{[^}]*\bgetDownloadUrl\b[^}]*\}\s*from\s*["']\.\.\/\.\.\/api\/docs["']/.test(drawer)) {

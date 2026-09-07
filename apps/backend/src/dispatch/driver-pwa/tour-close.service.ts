@@ -29,6 +29,7 @@ import { DISPATCH_ACTIVE_LOAD_STATUSES } from "../active-loads-count.js";
 import { getActiveSettlementForDriver, stampTripClosedForBookendedSettlement } from "../../driver-finance/settlements-load-bookended.service.js";
 import { closeCompanySettlementAlongsideDriverSettlement } from "../../accounting/company-settlement-close.service.js";
 import { appendCrudAudit } from "../../audit/crud-audit.js";
+import { materializeRealDrivenMilesSegments } from "../../integrations/samsara/geofences/real-driven-miles.service.js";
 
 export type DbClient = {
   query: <R = Record<string, unknown>>(sql: string, values?: unknown[]) => Promise<{ rows: R[]; rowCount?: number }>;
@@ -225,6 +226,14 @@ export async function closeTourForDriver(
   if (!eligibility.can_close) {
     throw new TourCloseError("TOUR_NOT_CLOSEABLE", eligibility.reason);
   }
+
+  // TEL-43: tour close is a second reconciliation trigger. It remains fail-closed:
+  // loads without a complete fence-event + odometer pair produce no segment.
+  await materializeRealDrivenMilesSegments(client, {
+    operatingCompanyId: input.operatingCompanyId,
+    driverId: input.driverId,
+    includeClosedLoads: true,
+  });
 
   const active = await getActiveSettlementForDriver(client, input);
   if (!active) {

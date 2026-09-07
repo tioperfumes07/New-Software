@@ -121,7 +121,8 @@ export async function buildInvoiceFromLoad(client: Queryable, input: BuildInvoic
         COALESCE(c.ar_email, c2.ar_email) AS ar_email,
         COALESCE(c.ar_phone, c2.ar_phone) AS ar_phone,
         pt.terms_name AS payment_terms_label,
-        pt.days_until_due AS payment_terms_days
+        pt.days_until_due AS payment_terms_days,
+        delivery_stop.at AS delivery_stop_at
       FROM mdata.loads l
       -- ACCT-F5788 — mdata.customers' customers_select RLS excludes a deactivated customer for a
       -- non-bypass reader, and a plain JOIN here threw a misleading load_not_found (the load DOES
@@ -136,6 +137,17 @@ export async function buildInvoiceFromLoad(client: Queryable, input: BuildInvoic
         WHERE c.id IS NULL
       ) c2 ON true
       LEFT JOIN catalogs.payment_terms pt ON pt.id = COALESCE(c.payment_terms_id, c2.payment_terms_id)
+      -- CASH-FLOW-01 (owner order 2026-09-06, ROUND 14): "due = invoice_date (delivery/conversion
+      -- date) + customer terms." The real event this document reports is the delivery, not the
+      -- moment software happened to mint/convert it -- last delivery stop only (multi-drop must
+      -- not multiply the invoice), actual arrival preferred over scheduled (real over planned).
+      LEFT JOIN LATERAL (
+        SELECT COALESCE(ls.actual_arrival_at, ls.scheduled_arrival_at) AS at
+        FROM mdata.load_stops ls
+        WHERE ls.load_id = l.id AND ls.stop_type = 'delivery'
+        ORDER BY ls.sequence_number DESC
+        LIMIT 1
+      ) delivery_stop ON true
       WHERE l.id = $1
         AND l.operating_company_id = $2::uuid
       LIMIT 1
@@ -191,7 +203,17 @@ export async function buildInvoiceFromLoad(client: Queryable, input: BuildInvoic
     input.requestedDisplayId,
     loadNumber
   );
-  const issueDate = new Date();
+  // CASH-FLOW-01 (owner order 2026-09-06, ROUND 14): "due = invoice_date (delivery/conversion
+  // date) + customer terms." issue_date/delivery_date previously stamped `new Date()` (whenever
+  // the mint code happened to run, e.g. a historical load converted today reads today's date) --
+  // measured live: 39 sent USMCA invoices all carried issue_date = their mint day (09-04/05/06)
+  // instead of their real delivery (some as early as 2026-08-10), pushing every due_date to
+  // 2026-10-05/06 regardless of when the load actually delivered. The real delivery-stop date
+  // (joined above) is the correct basis; `new Date()` is now only the last-resort fallback for a
+  // load with no delivery stop recorded at all (should not happen for anything reaching invoicing,
+  // but never throw here over it -- degrade to the mint moment rather than fail the mint).
+  const invoiceDate = toIsoDate(load.delivery_stop_at) ?? toIsoDate(load.updated_at) ?? toIsoDate(load.created_at) ?? toIsoDate(new Date())!;
+  const issueDate = new Date(`${invoiceDate}T00:00:00.000Z`);
   const paymentTermsDays = Number(load.payment_terms_days ?? 30);
   const dueDate = new Date(issueDate);
   dueDate.setUTCDate(dueDate.getUTCDate() + paymentTermsDays);
@@ -235,7 +257,7 @@ export async function buildInvoiceFromLoad(client: Queryable, input: BuildInvoic
         input.loadId,
         issueDate.toISOString().slice(0, 10),
         dueDate.toISOString().slice(0, 10),
-        toIsoDate(load.updated_at) ?? toIsoDate(load.created_at),
+        invoiceDate,
         load.payment_terms_id ?? null,
         load.payment_terms_label ?? null,
         paymentTermsDays,

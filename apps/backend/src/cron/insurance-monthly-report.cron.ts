@@ -174,29 +174,43 @@ async function alarmReport(
 }
 
 export async function runInsuranceMonthlyReportTick(app: FastifyInstance) {
-  await withLuciaBypass(async (client) => {
-    const companies = await client.query<CompanyRow>(
+  // Company list on its own short-lived connection.
+  const companies = await withLuciaBypass((client) =>
+    client.query<CompanyRow>(
       `SELECT DISTINCT operating_company_id::text AS operating_company_id
        FROM mdata.drivers
        WHERE deactivated_at IS NULL
          AND operating_company_id IS NOT NULL`
-    );
+    )
+  );
 
-    for (const row of companies.rows) {
-      const operatingCompanyId = String(row.operating_company_id ?? "");
-      if (!operatingCompanyId) continue;
+  for (const row of companies.rows) {
+    const operatingCompanyId = String(row.operating_company_id ?? "");
+    if (!operatingCompanyId) continue;
 
-      try {
+    // TXN-ISOLATION (INSURANCE-CRON-ABORT-CASCADE): each company runs in its OWN transaction. The
+    // previous single-transaction-for-the-whole-tick shape meant one company's failed INSERT aborted
+    // the shared transaction, so EVERY later company then failed with "current transaction is aborted,
+    // commands ignored until end of transaction block" — and the catch block's own recovery queries
+    // (listCompanyNotifyUserIds + createNotification) ran on that SAME aborted transaction and threw
+    // the identical secondary error, masking the real first failure. Isolated transactions mean one
+    // company's failure never poisons another's, and the error-alarm below opens a FRESH connection so
+    // it can always record the coverage gap even when the report transaction aborted.
+    try {
+      await withLuciaBypass(async (client) => {
         const report = await gatherReportData(client, operatingCompanyId);
         await alarmReport(client, operatingCompanyId, report);
         app.log.info(
           { operatingCompanyId, ...report },
           `[${CRON_NAME}] report generated and alarmed`
         );
-      } catch (err) {
-        // A missed report is a coverage argument — ALARM, never fail silently.
-        app.log.error({ operatingCompanyId, err }, `[${CRON_NAME}] FAILED to generate report — alarming`);
+      });
+    } catch (err) {
+      // A missed report is a coverage argument — ALARM, never fail silently. Fresh connection: the
+      // report transaction above is already rolled back, so this recovery is never on a poisoned txn.
+      app.log.error({ operatingCompanyId, err }, `[${CRON_NAME}] FAILED to generate report — alarming`);
 
+      await withLuciaBypass(async (client) => {
         const recipientUserIds = await listCompanyNotifyUserIds(client, operatingCompanyId, [
           "Owner",
           "Administrator",
@@ -219,9 +233,9 @@ export async function runInsuranceMonthlyReportTick(app: FastifyInstance) {
             client
           );
         }
-      }
+      });
     }
-  });
+  }
 }
 
 export function initializeInsuranceMonthlyReportCron(app: FastifyInstance) {

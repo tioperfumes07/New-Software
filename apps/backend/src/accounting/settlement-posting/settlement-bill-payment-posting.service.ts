@@ -800,6 +800,18 @@ export async function postSettlementBillPayment(
         WHERE id = $1::uuid`,
       [runId, gross, totalDeductions, gross - totalDeductions]
     );
+    // SETL-POST-01 (lead ROUND 13, 2026-09-06): migration 202607520000 added driver_settlements.
+    // posted_at/posted_by_user_id anticipating this exact stamp ("posted_at <- post UPDATE (now())")
+    // but the write never landed in either live poster (this one included) — a settlement genuinely
+    // posted through THIS path still read posted_at IS NULL forever. Unconditional (not gated on
+    // headerAccountingBillId like the back-link below) — this run just finalized as 'posted' above,
+    // regardless of whether a header bill link exists. COALESCE guards a re-entrant call.
+    await client.query(
+      `UPDATE driver_finance.driver_settlements
+          SET posted_at = COALESCE(posted_at, now()), posted_by_user_id = COALESCE(posted_by_user_id, $2::uuid)
+        WHERE id = $1::uuid`,
+      [settlementId, actor.userId]
+    );
     // SETL-HEADER-05 — the missing header back-link, in the SAME transaction as the run finalize so
     // it can never disagree with what actually posted. COALESCE keeps a re-entrant/idempotent call
     // (already-posted bills, headerAccountingBillId null) from clobbering a previously-written link.

@@ -51,6 +51,8 @@ export async function registerScanDuplicateVendorRoutes(app: FastifyInstance) {
           WHERE a.operating_company_id = $1::uuid
             AND a.deactivated_at IS NULL
             AND b.deactivated_at IS NULL
+            AND a.is_sample_data IS NOT TRUE
+            AND b.is_sample_data IS NOT TRUE
           ORDER BY similarity DESC
           LIMIT 25
         `,

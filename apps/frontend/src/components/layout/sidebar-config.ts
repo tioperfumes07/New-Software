@@ -326,7 +326,7 @@ export function getSidebarFlyoutItems(id: SidebarItemId, role: UserRole): Sideba
     case "reports":
       return [
         { label: "Reports Home", to: "/reports" },
-        { label: "Company Settlements", to: "/reports/trip-profitability" },
+        { label: "Company Settlements", to: "/driver-finance/company-settlements" },
         { label: "Late Arrival Report", to: "/reports/late-arrival" },
       ];
     default:

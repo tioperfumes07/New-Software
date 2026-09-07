@@ -81,6 +81,11 @@ const updateEquipmentBodySchema = z
     currently_leased_to_company_id: z.string().uuid().nullable().optional(),
     notes: z.string().trim().max(2000).nullable().optional(),
     deactivated_at: z.string().datetime().nullable().optional(),
+    // ROUND 16.19 (owner directive) — mdata.equipment already has is_sample_data (migration
+    // 202613140000, FLEET-VISIBILITY-F4583-SAMPLE-DATA-GAP), but it was never PATCHable — the
+    // ONLY way to mark a fixture trailer for quarantine was a raw ops script, no audited path.
+    // Mirrors mdata.vendors's own FAC-10 quarantine field exactly (flag, never hard-delete).
+    is_sample_data: z.boolean().optional(),
   })
   .refine((v) => Object.keys(v).length > 0, { message: "at least one field is required" });
 
@@ -519,7 +524,8 @@ export async function registerEquipmentRoutes(app: FastifyInstance) {
               updated_at,
               deactivated_at,
               created_by_user_id,
-              updated_by_user_id
+              updated_by_user_id,
+              is_sample_data
             FROM mdata.equipment
             WHERE id = $1
               AND (owner_company_id = $2 OR currently_leased_to_company_id = $2)
@@ -580,6 +586,7 @@ export async function registerEquipmentRoutes(app: FastifyInstance) {
         if ("owner_company_id" in b) add("owner_company_id", resolvedOwnerId);
         if ("currently_leased_to_company_id" in b) add("currently_leased_to_company_id", resolvedLeasedId);
         if ("notes" in b) add("notes", b.notes ?? null);
+        if ("is_sample_data" in b) add("is_sample_data", b.is_sample_data);
         add("updated_by_user_id", authUser.uuid);
         values.push(parsedParams.data.id);
         const idIdx = values.length;
@@ -609,7 +616,8 @@ export async function registerEquipmentRoutes(app: FastifyInstance) {
               updated_at,
               deactivated_at,
               created_by_user_id,
-              updated_by_user_id
+              updated_by_user_id,
+              is_sample_data
           `,
           values
         );

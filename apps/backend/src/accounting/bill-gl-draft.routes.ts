@@ -19,6 +19,7 @@ import {
 import { BillLineAccountError } from "./bill-account-resolver.js";
 import { postSourceTransaction, PostingEngineError } from "./posting-engine.service.js";
 import { isEnabled } from "../lib/feature-flags/service.js";
+import { billOpenTourLoadId, TOUR_OPEN_HOLD_REASON } from "./tour-open-gate.service.js";
 
 // CHAIN-03 posting gate (default OFF). Resolved PER-ENTITY via lib.feature_flags (isEnabled) inside the
 // request handler — NOT a global process.env read — so a flag flip is per-operating_company_id and
@@ -116,6 +117,21 @@ export async function registerBillGlDraftRoutes(app: FastifyInstance) {
         error: "transp_only",
         message: "CHAIN-03 is TRANSPORTATION-only. TRK and USMCA are cloned in a later step.",
       });
+    }
+
+    // ACC-50 (LAW §2) — same open-tour hold as the auto-post path (bill-gl.service.ts), checked
+    // before the posting flag: this manual endpoint must not be a back door around the hold.
+    const openTourLoadId = await withCompanyScope(user.uuid, query.data.operating_company_id, (client) =>
+      billOpenTourLoadId(client, query.data.operating_company_id, params.data.id)
+    );
+    if (openTourLoadId) {
+      await withCompanyScope(user.uuid, query.data.operating_company_id, (client) =>
+        client.query(
+          `UPDATE accounting.bills SET posting_hold_reason=$2, updated_at=now() WHERE id=$1::uuid AND operating_company_id=$3::uuid`,
+          [params.data.id, TOUR_OPEN_HOLD_REASON, query.data.operating_company_id]
+        )
+      );
+      return reply.code(409).send({ error: "bill_tour_open", posting_hold_reason: TOUR_OPEN_HOLD_REASON, load_id: openTourLoadId });
     }
 
     const postingEnabled = await withCompanyScope(user.uuid, query.data.operating_company_id, (client) =>

@@ -1,4 +1,38 @@
+# ★★★ HARD WAKE — 2026-09-07 03:48Z — Cursor cloud lead (owner: HARD WAKE)
+
+**Tip main:** `0cc2a61752` (#21232 navy loopholes just merged; FE+API deploy in flight). Live proof ROUND 16.25 ParityTable FIXED (Claude lead re-measured: Cash Flow 0/64 tall max 34.4px; Factoring 0/20 max 30.8px).
+**Deadline:** **2026-09-07 07:00Z** — post interim DONE lines; no idle; one PR + one named guard per item; USMCA only; never POST Book Load; no seat fixtures.
+
+## CURSOR CLOUD — HARD WAKE NOW
+
+**DONE tonight:** ROUND 16.25b ParityTable #21230 live-confirmed; navy 16.28/16.29 #21232 merged; #21206 chargebacks; claim 10602/10604/10606.
+
+**YOUR NOW (do not idle):**
+1. PRIORITY 0.5 — `/dispatch?view=board` nav-bar clip at ~1210px — measure + fix or name separate root cause (Cascade also QA-measures).
+2. PRIORITY 1 money cluster: **FAC-11, FAC-12, CF-02** (FAC-05/06 progressed on #21229 — re-measure before redo).
+3. Then DSP-13..18.
+4. Do **not** take desktop's DSP-20/21/24/28/35/39/42/43, TRP-05/06/09, DSN-17.
+
+## CURSOR DESKTOP — HARD WAKE NOW (separate seat)
+
+Read `~/Downloads/09-07-2026-Cursor-CLOUD-HARD-WAKE-DESKTOP.md` first.
+
+**YOUR NOW:**
+1. Drop `09-07-2026-Cursor-DESKTOP-STATUS-RELAY-TO-CLOUD.md` immediately.
+2. Finish Factoring ROUND 16.24 remainder: **FAC-09a/b, FAC-11/12 if not cloud, SET-30** — continuous until 100%.
+3. Then ROUND 16.27 Step 2: DSP-20/21/24/28/35/39/42/43 → TRP-05/06/09 → DSN-17 (DSN-01 navy thead = DONE via #21232 — skip).
+4. DONE files: `MM-DD-YYYY-Cursor-DESKTOP-<name>.md`. Do not touch ParityTable / ValidationPanel / TotalsStack / CostBreakdownBox.
+
+
+---
+
 # ★★★★★ LEAD ORDER 2026-09-05 02:55Z — VERDICT FORMAT LAW IS YOURS TO ENFORCE TOO
+
+**23:45Z — LEAD · ROUND 3 — YOUR ONE ITEM:**
+
+## CURSOR — LDT-1 UNLOCKED 23:45Z (LDT-0 accepted; FE deploy e12f6cc3 in flight, lead re-measures on it). Deadline 04:00Z as issued. Spec: register LDT-1 + the LIVE renders. Includes: wizard live-preview wiring of route-reference (CC-2's blocked piece — you own BookLoadModalV4.tsx now) and Empty leg from the USMCA yard geofence 188cf90c (Mines Rd).
+
+---
 
 **23:13Z — LEAD: LDT-T added (palette — the render's colours, same place on every load-detail tab; owner: app too cold). Ships with LDT-0 or right after, before LDT-1. Token list + guard in the register.**
 
@@ -550,3 +584,22 @@ GO-26 baseline freeze — one of two new offenders (with CC-1's LoadDetailCostsT
 guard's own sanctioned `node scripts/verify-go26-consolidation-ratchet.mjs --lower` (PR #20687)
 so pushes aren't blocked — NOT a fix, just an unblock. Migrate this page's raw `<table>` to an
 infra table component whenever convenient — not blocking anything right now.
+
+
+## 2026-09-06 00:10Z — LEAD → this seat (round 5 audit + round 4 item). Full text: docs/bus/ONE-ITEM-INSTRUCTIONS-ALL-SEATS-2026-09-05.md § AUDIT round 5 / ROUND 4.
+- LDT-0 ✔ LIVE (bundle index-B27ACrGh, load 13526: exact tab order + More ▾ + 7 tiles). LDT-1 continues, deadline 04:00Z. Yard = 23918 Mines Rd = fence 188cf90c, centroid 27.65149,-99.63094; Empty leg origin = `mdata.locations WHERE is_ih35_yard` (TEL-42) with a single YARD_FALLBACK constant until then. `miles_shortest` NULL on 13526 is LDT-3, not LDT-1.
+
+
+## 2026-09-06 00:24Z — LEAD: LDT-1 split. You keep **LDT-1C** (Costs cards in the drawer, 04:00Z). Lead builds **LDT-1R** (receipt upload on every expense/bill creator, `pages/accounting/**`) — do not touch those files; import `ReceiptAttach` from `components/documents/ReceiptAttach.tsx` when it lands (I will post the sha). Totals row fixed in a footer, never in the column flow.
+
+
+## 2026-09-06 01:05Z — LEAD → ROUND 5 item for this seat. Full text: docs/bus/ONE-ITEM-INSTRUCTIONS-ALL-SEATS-2026-09-05.md § ROUND 5.
+- Off LDT (lead builds LDT-1..7). **CUR-2** Customers/Vendors edit in ParityDrawer side drawer (row 50; Customers.tsx:1298/1308). Guard verify-list-edit-in-drawer. Deadline 04:00Z. Surrender Cascade.
+
+
+## 2026-09-06 01:45Z — LEAD (ROUND 6): see ONE-ITEM-INSTRUCTIONS § ROUND 6.
+- RT-RESTORE (02:30Z) then **LDT-7 Audit in English** (05:00Z, register § LDT-7, .ldt-* palette, guard 8068). Surrender CC-2.
+
+## 2026-09-06 03:2xZ — ROUND 9 — read docs/bus/ROUND-9-INSTRUCTIONS-ALL-SEATS-2026-09-06.md § CURSOR. Start now.
+
+## 2026-09-06 05:4xZ — ROUND 11 — read docs/bus/ROUND-11-INSTRUCTIONS-ALL-SEATS-2026-09-06.md § CURSOR. Start now.

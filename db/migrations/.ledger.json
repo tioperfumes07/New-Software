@@ -1,7 +1,7 @@
 {
   "_comment": "GENERATED FILE - cache of the canonical ledger _system._schema_migrations, read by verify:applied-migrations-immutable where the database is unreachable. Do not hand-edit. Regenerate with: npm run db:ledger:snapshot",
   "generated_by": "db:migrate",
-  "migration_count": 990,
+  "migration_count": 1139,
   "migrations": [
     {
       "filename": "0001_audit_init.sql",
@@ -201,7 +201,7 @@
     },
     {
       "filename": "0050_two_section_v5_and_safety_restructure.sql",
-      "checksum": "1d5f77d669ceb800c60f3b4cbf51060e174568fb22126be9ab3f3cadeb05c5de"
+      "checksum": "8919f0ed54012cbbb865852a7074e0c69c9dad399357e5f14fefcffb682ec2ef"
     },
     {
       "filename": "0050a_safety_to_driver_finance_grants.sql",
@@ -257,7 +257,7 @@
     },
     {
       "filename": "0062_p3_t11_21_0_catalog_seed_data.sql",
-      "checksum": "cba54c3f629f433e5668d6101c9f97331c334d616f2c4b14bfae20e69e1d594c"
+      "checksum": "76e26d55f6a5434acc021388f58ecc52dc190d2eb25f0f448a3c25dacd36c403"
     },
     {
       "filename": "0065_p3_cleanup_3_permanent_grants.sql",
@@ -289,19 +289,19 @@
     },
     {
       "filename": "0072_p5_t1_1_banking_bank_accounts.sql",
-      "checksum": "09aa91e8032b67a72caee6daca1849d752f8f8aed2c341033ca1fc6761dbb0f9"
+      "checksum": "0120b2b04d10c0ff60b113e9eae8391443de16bcde138738a0a1d20a35e66754"
     },
     {
       "filename": "0073_p5_t1_1_banking_bank_transactions.sql",
-      "checksum": "d65dacd67bc5bf638e7257625253fed5ba004e7a31fbb4d7786e71632843aaa4"
+      "checksum": "8a34ce9643fe79b0fb71ae34b014c834ad5345745a3994932556215986f1828a"
     },
     {
       "filename": "0074_p5_t1_1_banking_transaction_categories.sql",
-      "checksum": "6fb3f424591956256c1384f4afa6fc6c6c407ab9c9004291b2de0dbaf4db27dc"
+      "checksum": "b105b08b01f7267464fc0e220c7958ebabf2ff522d7befad925035a349cfcc8c"
     },
     {
       "filename": "0075_p5_t1_1_banking_reconciliation_sessions.sql",
-      "checksum": "10366a338345fba7c1a552d5e70bcad91df601df0e368fc12029686343b9fe36"
+      "checksum": "d372a17085dae7da93e9ef8ba152d2e0302ff81cd1f1a72c3c3e99f6f44d56cf"
     },
     {
       "filename": "0079_p5_t6_qbo_forensic_snapshot.sql",
@@ -341,7 +341,7 @@
     },
     {
       "filename": "0089_p5_d1_banking_transfers.sql",
-      "checksum": "1bbcaf4c5e5213ea0b6e1efdef5516ed80f24ff71db97eb57037bda90c4f98f2"
+      "checksum": "11ec0de088782b53195e44bd47e7252943feffd74aedbfe75bcf32deb94ae495"
     },
     {
       "filename": "0090_p5_d2_bill_payment_balance.sql",
@@ -349,7 +349,7 @@
     },
     {
       "filename": "0091_p5_d3_qbo_vendor_driver_asset_linkage.sql",
-      "checksum": "b1e91919847db2d775d4fed8bf6a18a16e63ce7b9b4e8fcd8196fed19d05ed07"
+      "checksum": "f7fc2ecc158547fa5415100f23f05f59649e5b1bf7a9f53c951f6c246c23cdf7"
     },
     {
       "filename": "0092_p5_d4_manual_journal_entries.sql",
@@ -365,23 +365,23 @@
     },
     {
       "filename": "0095_p5_e5_severe_repair_oos_estimate.sql",
-      "checksum": "bd8cc8fc47563a5779300100b724b5a538aabc4de9fc05564cc99674ac23ff06"
+      "checksum": "5c32948187f57020f5ec014e9c0464b4a05b8f7b2cf4e33ffbb04a6e5e7dd104"
     },
     {
       "filename": "0096_p5_e2_settlement_disputes_workflow.sql",
-      "checksum": "519f459c944f0416b50e05f52f2f8c93374d100773e2660fdfede56417fd9357"
+      "checksum": "aaa305afec1b86aa6f4b52bec103b400d1f85ac7924bc5a75dc414e70dcbf039"
     },
     {
       "filename": "0097_p5_e3_team_drivers_split.sql",
-      "checksum": "ae4ac31e3fb0aa886f220568fff69865f1b4aec4b0534aacc6a47aa2a3f85d6f"
+      "checksum": "59c85fa034e5b1674fe142dcf9d0551211104ab9ba49c93d70f4f944ce2c01f5"
     },
     {
       "filename": "0098_p5_f1_roadservice_bucket.sql",
-      "checksum": "28fa613255eb343129a9a111165aa81e9a365f2f28d5a043f50059ea0a7623dd"
+      "checksum": "a353d9c1a0f04b5c6423384b0eb59d7c79c4cc1b4d5c4e6d16e7f96a43c297e7"
     },
     {
       "filename": "0099_p5_f2_safety_active_filter.sql",
-      "checksum": "41de9d195c1f2b7dd115e0e8a4ce8bdc6c29c1d80f588210602f4214268aa7fc"
+      "checksum": "b67696b4b08b860bab9ea69161c11e49c8f1ab816b42ae8a71a78c28189aa8a5"
     },
     {
       "filename": "0100_p5_f3_quicksave_assignments.sql",
@@ -389,7 +389,7 @@
     },
     {
       "filename": "0101_p5_f4_cancellation_reasons.sql",
-      "checksum": "8b524472ae21d15a6536ef252a38902f8fefcbd198c3dbdfc9916776d3b6377b"
+      "checksum": "2aa9e148e83b782237bf62da14be0cf0af0ef73a9ecef51d450920b5fbfa2e6e"
     },
     {
       "filename": "0102_p5_f5_equipment_dual_confirm_transfer.sql",
@@ -441,7 +441,7 @@
     },
     {
       "filename": "0114_p6_owner_admin_role_provisioning.sql",
-      "checksum": "3f29b28fb3e8d3425702db878e61ec24f6dda1f99d98a89f1af7d79a28d3ee5c"
+      "checksum": "c9a814e578ad59c3d7166f495b09e2166b9d3fb338ec8a2cd23633d148029934"
     },
     {
       "filename": "0115_p6_stabilization_reconciliation.sql",
@@ -461,11 +461,11 @@
     },
     {
       "filename": "0123_p6_pre_ledger_drift_reconciliation.sql",
-      "checksum": "d54e0972e76fc26b5a39711cf7dc4d93a1f2079b4f8792494fc3e25dd3db6980"
+      "checksum": "2d8ed1e017d32b7c3c9d1f56f93c9cd9c983f82d62fb5805e0325e4da558655e"
     },
     {
       "filename": "0124_p6_active_drift_reconciliation.sql",
-      "checksum": "e199881eb4ef1b25ee6d555b940207bb2e67135c897021623ab428033cf7b445"
+      "checksum": "4fe831c44e9299a1d652c050e457df50944c361171289d158029e1e8a18a1fc2"
     },
     {
       "filename": "0125_p6_block_c_runtime_guardrails.sql",
@@ -517,7 +517,7 @@
     },
     {
       "filename": "0141_p6_t11172_driver_finance_driver_bills.sql",
-      "checksum": "70c1115a7d2b2874ec7ed1ab7b7c3de2e96309bb4153331a3a37007cdb3a77f7"
+      "checksum": "3e6aac5afb5b22438df07ec0b81b776ef37c0ffa9a277d811e27e9409ede8f8e"
     },
     {
       "filename": "0142_mdata_qbo_master_data_tables.sql",
@@ -529,7 +529,7 @@
     },
     {
       "filename": "0144_qbo_sync_observability_and_alerts.sql",
-      "checksum": "e04a6ef0e734e36276aaace75ade9bfe5fe79059a9a306e3dd82af05dfc16c54"
+      "checksum": "1fead37b774c9dcfcafebb333be1f1cd6f62d2f91c6479f8c50393feed2e8a0b"
     },
     {
       "filename": "0145_work_order_mandatory_fields_and_enums.sql",
@@ -593,7 +593,7 @@
     },
     {
       "filename": "0162_p6_t11196_qbo_sync_runs_and_bill_payment_mappings.sql",
-      "checksum": "manual-apply-1778758391.834389"
+      "checksum": "1089d70b388bd56d982a25fff03d446cf033971f1920211db0e4f5419b1fa178"
     },
     {
       "filename": "0163_p6_t11199_qbo_sync_worker_retry_outbox.sql",
@@ -1129,7 +1129,7 @@
     },
     {
       "filename": "0299_grant_aggregate_schemas.sql",
-      "checksum": "8da2fd99607837d645b4628c5f58a0dc1d02ca1c5c181985413bce526a463bbf"
+      "checksum": "41f5b735378791e51d291547ec29e0dc41702e166eed0394b3937e495343cd5f"
     },
     {
       "filename": "0300_create_fuel_transactions.sql",
@@ -1369,7 +1369,7 @@
     },
     {
       "filename": "0383_catalog_excel_upload_jobs.sql",
-      "checksum": "9fc1c1f68d11615ccb0fc06a83b7cd9777f54e670132fc5b95b0bcc7b67246bb"
+      "checksum": "42ce4d1d30e9f1b2231f2e45e080736ad98e6e4cdff4f6b28fe30a36026f2296"
     },
     {
       "filename": "0384_seed_remaining_catalogs.sql",
@@ -1377,7 +1377,7 @@
     },
     {
       "filename": "0385_rls_audit_all_tables.sql",
-      "checksum": "2d2c7d1494b612450ba7107406f78a4de3a728a1ad8ffe6d0a73b354fd080116"
+      "checksum": "379dee543af1ae1f329bce1e83613ec2398ad33c8b28a5a1942ce9095238bb18"
     },
     {
       "filename": "0386_usmca_carrier_seed.sql",
@@ -1681,7 +1681,7 @@
     },
     {
       "filename": "202606080937_coa_role_bindings_seed.sql",
-      "checksum": "afa4ff0439c4bd9780ebbb1ef53bdf473d0315c52528263116617ffbe848f0e2"
+      "checksum": "c72c5b8d8596f6474eb16fd53cea273968143deef3e0ba24f863686aef7987e5"
     },
     {
       "filename": "202606080940_block26_partition_hot_tables.sql",
@@ -2465,7 +2465,7 @@
     },
     {
       "filename": "202607080000_settlement_contract_terms.sql",
-      "checksum": "2cca4179981cf46bee3bdfb79c83cd7d32cd783a3d0d14aab97c07d840a9e76a"
+      "checksum": "93385bd9b537c3a18eed05d9481aecd14b64fd2aeeb51cfe4660b52b8e5ecbb2"
     },
     {
       "filename": "202607080100_event_log_force_rls_blocked_pending_guc_fix.sql",
@@ -2705,19 +2705,19 @@
     },
     {
       "filename": "202607480000_driver_advance_gl_posting_flag.sql",
-      "checksum": "f13e2cbbeb769c75ca6f9b415ed1e0469ba176a90d009ff91f6c9c47bf43842c"
+      "checksum": "ebf852db488fc820fdc8bc88106dae498f6c036fbe64be1e05a19e85ec5df95e"
     },
     {
       "filename": "202607490000_insurance_entity_isolation.sql",
-      "checksum": "3b60d39fbd7a64af8dac30dcacb2be8f4a2f6dddd27b2b3f2c95ec38d519212b"
+      "checksum": "35ceed02c84a1528ed6eb9f4a03eff67ab842451882f814e96369dfef1a2e219"
     },
     {
       "filename": "202607500000_factoring_entity_isolation.sql",
-      "checksum": "35322bb7bc804ec7097fc4177b528f28659fb51303b43fc4d3474213c420671f"
+      "checksum": "f728fb8b71a03d3e9179fd084db5b8a2b7674c48f9524514a06b879d07a39c9e"
     },
     {
       "filename": "202607510000_events_audit_log_entity_isolation.sql",
-      "checksum": "f2abcd740aff67f4fc7406bf9242b05ff6b1a31f4cbb450a58c21caaba46625e"
+      "checksum": "f92e428c0688c3be5380e5587b85edf5eac9b2d13a18ca30feb4e434a3cb1dd4"
     },
     {
       "filename": "202607520000_driver_finance_settlement_posting_linkage_columns.sql",
@@ -2725,7 +2725,7 @@
     },
     {
       "filename": "202607530000_type_catalog_shared_write.sql",
-      "checksum": "32c38d06990c2335112c6c247cc667b493f68c96f38b77f05523b75eed612e16"
+      "checksum": "2e21edecb08a565afe1aa92e7c91ba71f1c24667756ab3db381de8271a55a9af"
     },
     {
       "filename": "202607540000_customer_payment_transp_override.sql",
@@ -2833,7 +2833,7 @@
     },
     {
       "filename": "202607770000_drop_account_role_bindings_global_unique.sql",
-      "checksum": "4575fe02113eee81b92b4e08752f740cd28f960b66bfbf2ab023d9cf27402cb8"
+      "checksum": "a6c6ff2b589d4138d81c870cae5beea8dbcf14bc3443ec84a8c25e868973f4e3"
     },
     {
       "filename": "202607780000_bank_account_cash_gl_postable_trigger.sql",
@@ -2841,7 +2841,7 @@
     },
     {
       "filename": "202607790000_cost_of_labor_mexico_drivers_transp_usmca.sql",
-      "checksum": "d709ac509f113e7f42e7bf9f7b94c0fa0ef740f5157a7598f7d76402c8096101"
+      "checksum": "8429d94902bd28c3a8fdfc8958e795d8044ce36410f0ce1ba6ffe90643b5c718"
     },
     {
       "filename": "202607800000_escrow_forfeit_source_type_and_damage_recovery_designation.sql",
@@ -2853,7 +2853,7 @@
     },
     {
       "filename": "202607820000_safety_relational_linkage_and_lifecycle.sql",
-      "checksum": "578a6d7d7f2ae3f2e58bf44ebf36b757d6898748dd14e10c7bfe6bf71293c3b3"
+      "checksum": "8fa5d8e6854aac1dd54da22f5d54c1c7489c296760bd5f06b6c45ef9d39ef10d"
     },
     {
       "filename": "202607830000_escrow_target_settings.sql",
@@ -2881,7 +2881,7 @@
     },
     {
       "filename": "202607870000_driver_load_statuses_per_entity.sql",
-      "checksum": "cde8dfee0cabd77683527b7cc045ebbb34d0a069db7ec5297517580266c759da"
+      "checksum": "ad06d44b3dc06146e261edc409369f3c4c4bfbcdb3c06340b3aef677d412c0fe"
     },
     {
       "filename": "202607880000_qbo_purchases_inbound_mirror.sql",
@@ -2889,7 +2889,7 @@
     },
     {
       "filename": "202607890000_driver_termination_reasons_per_entity.sql",
-      "checksum": "1c6faa42401f68de00e67e1557152f58aeef1b61ca40cf22164941f8c599bea2"
+      "checksum": "cb4bb778f5cbe0dd8dc0387bacd9859fbd7c16c662f3fe724a284e39cbfc76c7"
     },
     {
       "filename": "202607890000_qbo_expenses_projection_key_and_flags.sql",
@@ -2901,7 +2901,7 @@
     },
     {
       "filename": "202607910000_equipment_types_per_entity.sql",
-      "checksum": "7cec7823d98cc2dc4328ed60e2d5c7ff2a718b6772b5e992132613d630210638"
+      "checksum": "d8bbefecbbcdd69cbda37c536d840a984799f9f4e31dd2df9759941313263eeb"
     },
     {
       "filename": "202607911000_equipment_types_norm_dedupe_per_entity.sql",
@@ -2977,7 +2977,7 @@
     },
     {
       "filename": "202608080000_acct_link_02_accounts_detail_type_fk.sql",
-      "checksum": "4d66df412a4164b9e2c7b54b8d93c714b6f2557792884d9d1af9ee962e21bc39"
+      "checksum": "49ec6c6c2af2bb62e8ac8ab10d260059ac90951ca4bbb2e886d7b60a123154f7"
     },
     {
       "filename": "202608082248_restore_driver_settlement_with_debt_view.sql",
@@ -2997,7 +2997,7 @@
     },
     {
       "filename": "202608120000_item5a_demo_purge_recursive_cascade.sql",
-      "checksum": "held-manual-apply"
+      "checksum": "4d9baceebe4b5e14e39e6016897e46e31faec9f4f2ffbb3ae0b949884c92aa7d"
     },
     {
       "filename": "202608120900_liabilities_view_reverse_link_columns.sql",
@@ -3041,11 +3041,31 @@
     },
     {
       "filename": "202608180900_usmca_fixed_asset_depr_coa_roles.sql",
-      "checksum": "1f6fa0f8930df1610ea4776903cef9521b002d24a945582edb3fb91c8eb8d156"
+      "checksum": "2b3c5b436105b06542e7be168413f5a5a75cc6bc93363d4c2b06851312d3ab7d"
     },
     {
       "filename": "202608190630_integrity_anomalies_runtime_grants.sql",
       "checksum": "6f0d59388ccc0677b19bafae58485a465900f8f36270308122815d1c7db230d2"
+    },
+    {
+      "filename": "202608222245_driver_termination_reasons_drop_legacy_permissive_policies.sql",
+      "checksum": "8434e3371cd6a3aee00a1159c2113b879a49a771c3cf65e196ddc08d29483a4a"
+    },
+    {
+      "filename": "202608222310_customer_quality_event_reasons_drop_legacy_permissive_policies.sql",
+      "checksum": "915cc26b5718624c758e1c7b40b5c51f97cd6997f5492c511e49b4143f4cb24f"
+    },
+    {
+      "filename": "202608270001_safety_da_active_enrollment_unique.sql",
+      "checksum": "0ad0ba49298fd9356a7f0f8a32a39da55cdb5db7c2976f43bd512c5b6320d942"
+    },
+    {
+      "filename": "202608270002_safety_accident_photo_keys.sql",
+      "checksum": "96bd9e88e4b4e3d112c1edfd74d94b92864dc7a2bd53cc0a700dd289f2df6278"
+    },
+    {
+      "filename": "202608301800_shortpay_coa_credit_memo_reasons.sql",
+      "checksum": "6b950a1be13f0bc969e7729973f531b175c7eb104efaebd2f87cba7de58f3f5b"
     },
     {
       "filename": "202609010000_fact_02_factoring_recourse_window_95d.sql",
@@ -3096,8 +3116,16 @@
       "checksum": "f4925057267f0145eb5bb8b2e249eb9e9fc768961623ed1c663485cfeab7d017"
     },
     {
+      "filename": "202609022351_go18_gap5_worm_expenses_factoring_advances.sql",
+      "checksum": "67d2cd28944ff7e37d0f4d91b77aedf469d2f68f6d4fbeb234f5b0bea3773dab"
+    },
+    {
       "filename": "202609030000_mnt_econ_01_parts_purchase_gl_hop.sql",
       "checksum": "70c1826ffd5ba9d35eb930bb14f3f49ffa7ab7224f71014928ca979e6ffdc574"
+    },
+    {
+      "filename": "202609040000_sweep_c11_driver_subcatalog_split_brain_lock.sql",
+      "checksum": "2cd2bf0bde1060d1495db95af28d0fd913ff4bf78ae2410818fbaadadc1bc681"
     },
     {
       "filename": "202609050000_mnt_econ_04_warranty_reimburse_gl_hop.sql",
@@ -3125,7 +3153,7 @@
     },
     {
       "filename": "202609090020_fuel_03_overage_events_unit_fk.sql",
-      "checksum": "b41f18fc1c8a14785101e8411a80eb0586be20e73dacde9f8699cc86f6716f12"
+      "checksum": "2d7b7c219aacbe6552f3d1c76136d16279c46379166626a2656acca50b8429d7"
     },
     {
       "filename": "202609100000_mnt_link_04_maintenance_vendor_ap_link.sql",
@@ -3158,6 +3186,10 @@
     {
       "filename": "202609100070_mnt_ent_01_parts_inventory_company_fk.sql",
       "checksum": "18bb4d1c42b646fec598f2ae53a853b885dc0f82e304123bae6fdf953e51fcb1"
+    },
+    {
+      "filename": "202609100090_nd_inv_01_proforma_invoice_pipeline.sql",
+      "checksum": "85ece33b0856c00b5efa1b177137c1abc539c749979b9cbbcb7e3da45604285a"
     },
     {
       "filename": "202609100100_fact_phantom_01_fact_01_factoring_summary_linkage.sql",
@@ -3200,6 +3232,14 @@
       "checksum": "cd80a3958ec823df787b957ca3d98d08fd8bf155a12b9ceaba375d0658f11c2e"
     },
     {
+      "filename": "202609250000_flt_02_real_fleet_owned_by_trk.sql",
+      "checksum": "45b895d5b8ad8e25c9b58a48b8215a6c71a55755756caf3245503cdeb9a77994"
+    },
+    {
+      "filename": "202609260000_archive_legacy_fixed_assets_schema_rule07.sql",
+      "checksum": "a3c17f6c08bd23de597c1c1f2ae5e003b4f3a990d2649181af2733674bc38ebd"
+    },
+    {
       "filename": "202609290000_disp_01_revrec_two_event_latch.sql",
       "checksum": "32dde907f58a3af8e3ab19093ada3168a1d4defababc08c6dd0f5463604d4823"
     },
@@ -3214,6 +3254,10 @@
     {
       "filename": "202610010000_fact_02_subledger_je_fk.sql",
       "checksum": "d617291f95e4ba86712f4ce3054da646002bbcbfea7004eebaa9125b9b5cc816"
+    },
+    {
+      "filename": "202610010010_drv_02_escrow_pending_source_type_catalog_fk.sql",
+      "checksum": "95daaa2fa963a7cd0d2515f367a72cb2847ba426a8adb22617280679e830da74"
     },
     {
       "filename": "202610050000_fuel_07_seed_full_ifta_jurisdictions.sql",
@@ -3233,7 +3277,7 @@
     },
     {
       "filename": "202610090000_retire_ifta_states_near_twin.sql",
-      "checksum": "ba7031ada319abc49ad1fd6fa66137ef3faf8aef76e44698a9f643bd97033c01"
+      "checksum": "97fa91dd5b76dc3e1ce5b2aa2d5d8cca06ba8126668f16b35406aff84ac7f152"
     },
     {
       "filename": "202610100000_lst_link_02_safety_catalog_fks.sql",
@@ -3249,7 +3293,7 @@
     },
     {
       "filename": "202610121800_acct_econ_05_qbo_vendors_canonical_backfill.sql",
-      "checksum": "acct-econ-05-backfill-manual"
+      "checksum": "c3c14c527dbecfa44c827ef95e8aa6d8d60da0f77d5b28f4f716527faaa04218"
     },
     {
       "filename": "202610130000_vendor_types_canonical_catalog_shape.sql",
@@ -3366,6 +3410,10 @@
     {
       "filename": "202611021200_vendors_vendor_type_check_relax.sql",
       "checksum": "92a4520874bd6414c27883b29f9a5f21737a4efc71b7ca8c2e5e4a270a85e815"
+    },
+    {
+      "filename": "202611031200_lease_bridge_rent_expense_coa_role.sql",
+      "checksum": "03b6a7aabe46f0a12784cbe4427cef323ea55394e68f8fdbef2a828b85f1d132"
     },
     {
       "filename": "202611040000_catalogs_company_scope_rls_bypass_lucia.sql",
@@ -3805,7 +3853,7 @@
     },
     {
       "filename": "202612640000_vendor_payment_methods_master_data.sql",
-      "checksum": "a8c74cc18bdd3f972817d371a7e60d64dba35fd5a70269733580ff9d3b089ca2"
+      "checksum": "5c57ca74505c5c6554581d466def0406d5d65d32f581545371fa12eaecc443ba"
     },
     {
       "filename": "202612650000_worm_public_grant_leak_and_banking_gap_trigger.sql",
@@ -3821,7 +3869,7 @@
     },
     {
       "filename": "202612690000_usmca_faro_factoring_canonical_agreement.sql",
-      "checksum": "161f0d9631c08e832d91f137284b7f3af065772dc73eb96594c16af454377211"
+      "checksum": "a6f54c8037e96150f1152620fc9ca9f3e29370bb922f89539da9f4ed5f0f4792"
     },
     {
       "filename": "202612691400_worm_revoke_direct_delete_ih35_app_banking_driver_finance.sql",
@@ -3962,6 +4010,554 @@
     {
       "filename": "202612960000_acct_banking_driver_escrow_source_repoint.sql",
       "checksum": "9f465264badc85576443012cdaab4ea4c1692276610ca74b4686de26b3910142"
+    },
+    {
+      "filename": "202612970000_acct_f5753_factoring_recourse_view_real_cents_columns.sql",
+      "checksum": "f427b1de4dc109b93774b18f4c8fbf1b299c927c95b7bd638d8d16372dc9343b"
+    },
+    {
+      "filename": "202612980000_acct_f5756_parts_invoice_links_void_not_delete.sql",
+      "checksum": "767c49e9e5b2bd510a9e7826e4371cb1f63ce6db43b29434f782a7d653e5941f"
+    },
+    {
+      "filename": "202612990000_customer_shipping_country_drop_not_null.sql",
+      "checksum": "5129f59225b68f829c3fd54969710343cbec23526f646f13c783cdb62c22808d"
+    },
+    {
+      "filename": "202613000000_acct_f5759_audit_trigger_abandonment_chargebacks_settlement_disputes.sql",
+      "checksum": "7c553b8ba6d968dd0e5e2494f72620eb884e31d4ef6721530b5fb770dc7f5ab4"
+    },
+    {
+      "filename": "202613010000_acct_f5760_factoring_chargebacks_fees_view_real_cents_columns.sql",
+      "checksum": "6722ab6e128b5b7f656dfaab57b3111b3bbf35fe44085b98c9c195c92227d462"
+    },
+    {
+      "filename": "202613020000_acct_f5761_factoring_statements_settings_phantom_empty_gate.sql",
+      "checksum": "fedbd92038df6224eb959a40a9ad503de1ad8f5df2acc75c613b43177c4d7962"
+    },
+    {
+      "filename": "202613030000_acct_f5764_vendor_payment_methods_revoke_delete.sql",
+      "checksum": "eb709f26962e023b918ca4ca5566bc9df3da883cf0ac02d4ac57ab68ba84c2e3"
+    },
+    {
+      "filename": "202613040000_acct_f5767_vendor_detail_readable_when_deactivated.sql",
+      "checksum": "a6a432d058e005f3d15fae4d147c01fed951ba0e76a0bc348a1dda9ba8fd79fa"
+    },
+    {
+      "filename": "202613050000_acct_f5768_vendors_list_inactive_status_same_company.sql",
+      "checksum": "5cdf03611071fc1dee44d723d46e5e125894f52365b73b3c2a2c315a03637760"
+    },
+    {
+      "filename": "202613060000_acct_f5787_customer_same_company_full_row_resolver.sql",
+      "checksum": "8464c64985f03ff43294c17782f7254e46cd201e57f7eabd1cb35432089fc278"
+    },
+    {
+      "filename": "202613070000_acct_f5789_customers_list_inactive_status_same_company.sql",
+      "checksum": "b39de7fce5e7d65301516a92ac962744184548c49932ba1f8bf7a145bdec594c"
+    },
+    {
+      "filename": "202613080000_acct_f5901_factoring_chargebacks_fees_advance_amount.sql",
+      "checksum": "1721ceed9b7ccdf16c8f60337db9836fa305a9f6ad5c4f17a8ba60e84c88fda6"
+    },
+    {
+      "filename": "202613090000_dispatch_load_cancellations_charged_by_user_id_fkey.sql",
+      "checksum": "99da79db6745a546172f3074b264717a8d76bc65e402bab5ff1c4535a56ced4e"
+    },
+    {
+      "filename": "202613100000_cust_f5974_archived_customer_contacts_read_scope.sql",
+      "checksum": "b6c1c6a76b703389c93a93c21d2b01347ec0e198e1a6e827c1301f925665a9ec"
+    },
+    {
+      "filename": "202613110000_orph003_mdata_vendor_payment_methods_structured_ach_replaces_notes_heuristic.sql",
+      "checksum": "ee52143fc3c124bd579161aef1bd259ed0a48ef1220018fb816446ac7849c1ee"
+    },
+    {
+      "filename": "202613120000_orph003_vendor_payment_methods_revoke_delete_from_public_default_priv.sql",
+      "checksum": "3be16e9ba882b4224244c82d4dac0ad5569de276e5175b7b8754c558a76b8cc0"
+    },
+    {
+      "filename": "202613130000_srch_f6231_company_scoped_universal_index_shared_drivers.sql",
+      "checksum": "f7ce967917d3ea3a7eec1084c12478259af56632872e16be390b0c537311ffd5"
+    },
+    {
+      "filename": "202613131400_form425c_profile_petition_date.sql",
+      "checksum": "27bb89e9604fa1b0333e36659647c98ea8e063da9c151c509bf1a72b31308e73"
+    },
+    {
+      "filename": "202613140000_fleet_equipment_is_sample_data.sql",
+      "checksum": "09b509a09d7d43a35bb5172098e465a9170738ea4892f7adce6fe2d3b551d792"
+    },
+    {
+      "filename": "202613141200_invoice_display_id_allows_load_number.sql",
+      "checksum": "7613051a1794ab1348162be8d5920b39a721dae01007a367b3ca29cfe0aadd9b"
+    },
+    {
+      "filename": "202613150000_safety_training_program_recertify_months.sql",
+      "checksum": "4b437281b4bbb273cc5cc0971bea8a7f2249012d768bd71ce2db8b096ae127b1"
+    },
+    {
+      "filename": "202613160000_cash_entries_party_ref_kind_allow_customer.sql",
+      "checksum": "5e266fc295b8f90ad52f3fc7e21fac22770cbed3c30c7f9a4a18cd2f2fd22360"
+    },
+    {
+      "filename": "202613170000_factoring_summary_outstanding_liability_balance.sql",
+      "checksum": "8db6b5eb45ea476a04e31b1d8ec92cc46166101079bc9680b9769d2495bbf227"
+    },
+    {
+      "filename": "202613180000_cash_flow_projection_snapshots.sql",
+      "checksum": "82ff8a7ba7aec7a4213bdd29b9c19c531b1dd917bdfcb0f7d13144328661cc66"
+    },
+    {
+      "filename": "202613190000_vendor_balances_exclude_draft_bills.sql",
+      "checksum": "175841cf177c153357cc839a95bf24442b03becb24f7cf4c0c9ff0a411a91c7d"
+    },
+    {
+      "filename": "202613201200_dispatch_driver_historical_label_resolver.sql",
+      "checksum": "3bb25b191a5e5e31944d915054ced078f2254727c3a7dbb9c402aa1210edbd70"
+    },
+    {
+      "filename": "202613210000_audit_events_event_class_trgm_index.sql",
+      "checksum": "df9c08afe0fc20b360f90ef1774a3cf246c51e6fd10452c3eee8bad8acff9b00"
+    },
+    {
+      "filename": "202613210000_wo_line_void_not_delete.sql",
+      "checksum": "fc03e84362c3a4e0d9fa9d717a6dcf7a26a0ab5b2ef23cb550b7c6c4774f4d5f"
+    },
+    {
+      "filename": "202613220000_loads_commodity_cargo_weight.sql",
+      "checksum": "2f8412af2abe9195af66a9db4a9b6ee0d2d1a2c19149e7925274b180776e4022"
+    },
+    {
+      "filename": "202613230000_drop_stale_select_all_rls_equipment_dls.sql",
+      "checksum": "6dfdef4ccac68de9855217d881c9c0148094bf4351719c9773f51c9c25c3f77a"
+    },
+    {
+      "filename": "202613240000_reconciliation_findings_ledger_integration.sql",
+      "checksum": "727d06852fb8056c07f17553f86bcf5b5889dff7dc4e513a4372da06aaa9b781"
+    },
+    {
+      "filename": "202613241200_transp_operating_bank_wf6103_acct_f345.sql",
+      "checksum": "4a3cc87463ae3df93ffef2e0b1337e13e818edb146d14e660cb194c0af9e4eda"
+    },
+    {
+      "filename": "202613250000_factoring_batch_is_sample_data.sql",
+      "checksum": "066dae2e3947125355c36dde5e7201e0ad0773f0b52bd76f3dbb18d7718f854e"
+    },
+    {
+      "filename": "202613250100_vendor_balances_exclude_sample_data.sql",
+      "checksum": "c886112854fb772b8fa57f192199c9b1abf36b515797e881464fb123bc425942"
+    },
+    {
+      "filename": "202613260000_reconciliation_findings_ledger_detector_types.sql",
+      "checksum": "a585fe7276630a5f05c02b4458be98aebe74ff7ef9b2fc1d4007c512cb7032cd"
+    },
+    {
+      "filename": "202613270100_dsp_money_f7175_uq_invoices_source_load_active.sql",
+      "checksum": "29685d7ea01de69e9a9effa4fc2e1cb81a24b60785c49bfd84c65f55876c87f0"
+    },
+    {
+      "filename": "202613270200_settlement_lines_detention_pay_line_type.sql",
+      "checksum": "98e92dc07d7fee9edc181d2c98160d7deb73f21a3e5e539bd0445210299fd255"
+    },
+    {
+      "filename": "202613280900_load_stops_actual_arrival_departure_source.sql",
+      "checksum": "6f239ae99cbb0a71cfa64817fe11e7fe4c76541e88e63111e4b6573d6804c0b3"
+    },
+    {
+      "filename": "202613290000_doc01_medical_card_background_check_doc_columns.sql",
+      "checksum": "7c36f5d96051ebb9199a4568506f8674f44de1b8f1228df2d98c6adf5c613ea9"
+    },
+    {
+      "filename": "202613290100_dqf01_required_document_types_seed_and_dqf_file_fks.sql",
+      "checksum": "a99fa7964bd0660453924c74807ded1eba30a20120d4c45122f7fc01aa44ffe7"
+    },
+    {
+      "filename": "202613290200_doc01_fine_company_violation_file_links_widen.sql",
+      "checksum": "17fe2b1868e3bd00d0e0b710ab3b37f8d4e82d4a6358b681611206ba5bc6258c"
+    },
+    {
+      "filename": "202613290300_doc01_drug_test_hos_violation_doc_columns.sql",
+      "checksum": "2321f547d6542616493de551ae11262d42bc51440494b191ef9dcd47ce2c7172"
+    },
+    {
+      "filename": "202613290400_doc01_dot_inspection_fuel_transaction_doc_columns.sql",
+      "checksum": "3a1f54cb6fab8870418feea669dfd7c153c4292632a711f3494622320d84be16"
+    },
+    {
+      "filename": "202613290500_doc01_expense_bill_file_links_widen.sql",
+      "checksum": "4304603666fc949a7e52c392019b033901af65e517769786df374b180f4bc9c2"
+    },
+    {
+      "filename": "202613290600_maintenance_kpis_view_dead_where_false_fix.sql",
+      "checksum": "c51ed6e21c4f0a77bdb6f6dbc84b9d7d5b37c5920e073601215938e427e8d755"
+    },
+    {
+      "filename": "202613290700_doc01_border_credentials_fast_card_file_category_seed.sql",
+      "checksum": "47413af3df4fa2e83ca1f71ec0532ba8f4b74fb51c4bd2cdf612b015a4a38267"
+    },
+    {
+      "filename": "202613290800_wonum_d1_next_wo_display_id_refuse_missing_unit_number.sql",
+      "checksum": "482e49fefb6beb49fa085d52857b01f6061f803730d2a1711d9f38dfba831df8"
+    },
+    {
+      "filename": "202613290900_wonum_d2_v5_lock_on_first_set_and_refresh_uuid_fallback_fix.sql",
+      "checksum": "29f945a451fdf622f2e5bbe4270560dc4906b2580899a1b503e60dfc9cd515f2"
+    },
+    {
+      "filename": "202613291100_acct_defect_b_amex_cc_ledger_account_dedupe.sql",
+      "checksum": "9a8567139d14903219e4422c41156618489f6d1c5817d8988822e60701b17671"
+    },
+    {
+      "filename": "202613291110_g1_is_sample_data_name_backfill.sql",
+      "checksum": "bb9bf9f955aa26eed06ad8cdb107f978ba94ab7ce037b9908e64848a4f7db883"
+    },
+    {
+      "filename": "202613300700_go_acct_01_recon_sessions_void_status_and_unique.sql",
+      "checksum": "621fe94eb5dcc21b51b784bc21e953b7a89efdae1dc3ea2b4910ac32873540c1"
+    },
+    {
+      "filename": "202613300800_coa_roles_unique_per_company_role.sql",
+      "checksum": "2fa902b9b406d86582c616a58b76e7ebfe8b472432d648472eb29e2328a16ac9"
+    },
+    {
+      "filename": "202613300900_fleet_lease_08_unit_status_repossessed_returned_to_lessor.sql",
+      "checksum": "30799fdd5bb6500a0ff8335c5b04aeb7af202f2363b8c33d72db58e12951dbc6"
+    },
+    {
+      "filename": "202613301000_fleet_lease_08_lease_contract_rate_per_unit_basis.sql",
+      "checksum": "3551922d4a646831ef08335baa6cdf3e5843215e37e3410fc82a1da624908f99"
+    },
+    {
+      "filename": "202613301100_fact_assign_05_correction_opco_backfill_and_not_null.sql",
+      "checksum": "12fa7cecf7bdb61fea5dc8d828a36cd2c4eedba48a0d929edbc9a8957e28c161"
+    },
+    {
+      "filename": "202613301500_faro_factoring_wallet_usmca.sql",
+      "checksum": "e5d2ba8e3f044aadad715d2082335bbbb925525a6a8e1d0a9a80fbec662118c5"
+    },
+    {
+      "filename": "202613301600_shortpay_accountability_close_the_gaps.sql",
+      "checksum": "f0b6e4bce79fd4f91ad61561911d0dbf2959864c3bbd72c5adcce6c67f6e3ed5"
+    },
+    {
+      "filename": "202613301900_sync_alerts_severity_check_add_error.sql",
+      "checksum": "400952bd7c59d55b06c9dd09e9eb577d6935f8d9c80a0ad23c2150c37025a430"
+    },
+    {
+      "filename": "202613310000_loads_mileage_columns_numeric_widen.sql",
+      "checksum": "2530df928f623cfa126606ec360e37c678e616e74dfedc64feab1b63e018f4ee"
+    },
+    {
+      "filename": "202613310100_mdata_assets_equipment_id_and_fks.sql",
+      "checksum": "f9651b2cfc94620e24c45ede6f399c4443a9168b8d6adf30a18bc7a7a7c021a9"
+    },
+    {
+      "filename": "202613310200_drop_duplicate_mdata_assets_fks.sql",
+      "checksum": "aed0fdd4b3763f8149234ba096b8706addf7676db7aece3992a6e16e6e2afb05"
+    },
+    {
+      "filename": "202613310300_inv_open_void_amount_columns_respect_void.sql",
+      "checksum": "07688d9ab7b0f3601a1c0881fd9f4a2e83cac49dbdd6a525dfc884674cbed572"
+    },
+    {
+      "filename": "202613310400_three_dates_cleared_date_payments_bill_payments.sql",
+      "checksum": "ac8fb259c2985f1007b0a1a8168018d2e081443d7c200db8fa72ba0f2b30a72f"
+    },
+    {
+      "filename": "202613310500_expenses_bills_posted_requires_je_check_not_valid.sql",
+      "checksum": "6046be37f98b54ce52f694775a67f62e7877fe85fd6ac6bd088d6359dadeb085"
+    },
+    {
+      "filename": "202613311200_insurance_driver_schedule_and_confirmations.sql",
+      "checksum": "65d7e47d24acc5f2cef963d0a6d8e8347b137dc6f8e660c219b3a860e701ba83"
+    },
+    {
+      "filename": "202613311300_insurance_driver_schedule_revoke_delete_grants.sql",
+      "checksum": "46061727f8cf8d366dcbd9fd393918f8e23cbf19045846ee621500dd4e3c194b"
+    },
+    {
+      "filename": "202613311300_insurance_schedule_confirmations_unit_only.sql",
+      "checksum": "66f78d7e73a3fb2455515d35de44e71cd50b903acb53b258c00e1b976a37e327"
+    },
+    {
+      "filename": "202613312000_permission_model.sql",
+      "checksum": "60598aed12cef33888d353f49498e94700fcddd21651e3bd4f8debf56dfdc63f"
+    },
+    {
+      "filename": "202613320000_go01_usmca_insurance_acv_trailers_drivers.sql",
+      "checksum": "1f26766c28d599f3095a4ddc0f9a58c5907bfcc9e7131aec2dac9600014e424a"
+    },
+    {
+      "filename": "202613330000_go08_dual_numbering_trace_key.sql",
+      "checksum": "4845ff309767da3e2901d0ef3bb50b587fe77e8f9924a2d9fbff15d89efa3d5b"
+    },
+    {
+      "filename": "202613330001_go09_expenses_vendor_document_number.sql",
+      "checksum": "181a967f3f9859cc20046c6a483463dee82c40c8c5ab6388c443318ed7328291"
+    },
+    {
+      "filename": "202613340001_settlement_cash_advance_display_id_advisory_lock.sql",
+      "checksum": "f3fd57ff2a541c0ec94eb11d1d5c403bee2b2a61a166f55d1a58662637feb471"
+    },
+    {
+      "filename": "202613342200_go16_rev_b_lane_mileage.sql",
+      "checksum": "127429ed6df03939275da692de8f118c7d0d4666e124fef26b2c0a9709dea0ad"
+    },
+    {
+      "filename": "202613350001_linkage_integrity_law_reconciliation_matches_widen.sql",
+      "checksum": "75eedf7daed185739dfb8b52ade19624ffb3084c76e496a523c92bf2b8e7cc07"
+    },
+    {
+      "filename": "202613360001_go18_bill_driver_trailer_load_required.sql",
+      "checksum": "c7634008405a881e8fa0b9301c37ef3792f936b64937cd6807998c2faa1a947d"
+    },
+    {
+      "filename": "202613370001_go19_02_bank_transactions_is_sample_data.sql",
+      "checksum": "6cd543726d37b43b7305cac0eefe13ca02438c0a91ea16b164e34ecc0d5dbc74"
+    },
+    {
+      "filename": "202613370002_go19_bill_driver_recovery_parity.sql",
+      "checksum": "ca8d6ff41e2cedc79753cfa6d113705b93c059ae66df1d8b2f149acc9bdcb9a7"
+    },
+    {
+      "filename": "202613380001_go19_09_expense_class_id.sql",
+      "checksum": "91179a5864e08caa10bad60535296dfa979c80aceaa99c25bdf2f9731f442cbc"
+    },
+    {
+      "filename": "202613390001_go19_accessorial_parent_id_under_4200.sql",
+      "checksum": "fa62f484b542f80fc6dbdf869356cfca5289edb1a446f521303306db2a6b80ae"
+    },
+    {
+      "filename": "202613390002_go20_d_cargo_sensor_incidents.sql",
+      "checksum": "ed47a76cd79f6e7b62923533e00d83f7dcee9efdfb28e04f8aa466307d4e7eda"
+    },
+    {
+      "filename": "202613390003_go20_late_arrival_aggregates.sql",
+      "checksum": "5672691aa3045d66c5a6327960829cd94c57fdcce6650e06835896a1565c426d"
+    },
+    {
+      "filename": "202613400001_go20_slice_c_accident_liabilities.sql",
+      "checksum": "0bb055877d185e258270dd04b33ffdf1829ae00a939a031c85fd438191f27c92"
+    },
+    {
+      "filename": "202613410001_go20_b_maintenance_predictive_alerts.sql",
+      "checksum": "dde8784ab8f0217fbda1edf0c84a8ed530295f42646883501fd2d259b0a75820"
+    },
+    {
+      "filename": "202613420001_go20_slice_a_bank_reconciliation_drift_alerts.sql",
+      "checksum": "51598dc23656a9e71a070441abbf86a83fe59e98243013a39f51fed486e59162"
+    },
+    {
+      "filename": "202613430001_driver_f7334_canonical_driver_tags.sql",
+      "checksum": "5a6967468ad7c48cf8adcc0c511a11c7524901784bf37f9355f6c118d299e306"
+    },
+    {
+      "filename": "202613440001_go21_a1_trailer_interchange_data_layer.sql",
+      "checksum": "a8cc24846fe16427783c2cc1e227cb163c5d712273b17e8daf8477eaa2abb053"
+    },
+    {
+      "filename": "202613450001_go22_presettlement_link_suggestions.sql",
+      "checksum": "ada00e7fa46181c86011daf049312838326c1cd0d40a29b9ac0f268d8ff8b3c5"
+    },
+    {
+      "filename": "202613460001_go21_b5_driver_pay_rate_override_reason.sql",
+      "checksum": "baf8c86625eefb0ec1553f3d1d3f29d44bf9d7d57c0d2c0ec1125b3edf49f96d"
+    },
+    {
+      "filename": "202613470001_go21_b8_cash_advance_receipt_upload.sql",
+      "checksum": "83e111b8ee8bbed372019cbd39f9d280572968c25fd53b1b36ce60c75538014b"
+    },
+    {
+      "filename": "202613480001_go21_b3_historical_import_reason_catalog.sql",
+      "checksum": "fe331004b5fda74a688e250bb719fb2467e80c43379805eb1737c2dd8d4ebccb"
+    },
+    {
+      "filename": "202613490001_go22_void_wiring_driver_finance_liability_chain.sql",
+      "checksum": "3519d0d67f9d36f1f36139b8a26ccaa7aa857f4c30f23aaf5da562915ea482ca"
+    },
+    {
+      "filename": "202613500001_miles_invert_01_short_miles_trust_flag.sql",
+      "checksum": "4943a242c3dd446c5c7c00ae98833ea5b1f30d080d6ddb283a19d5934efcb3b5"
+    },
+    {
+      "filename": "202613510001_miles_spec_deadhead_driver_pay.sql",
+      "checksum": "5e88cd4ae0c62f62fc2265ada7fd8f45a73c68bf1049528ae2eb74c09292dc93"
+    },
+    {
+      "filename": "202613520001_tour_close_yard_geofence.sql",
+      "checksum": "1af294c57e8c119d7998d679fe60b118fc5fa32547d708c2fb5cc49c2683be93"
+    },
+    {
+      "filename": "202613530001_kill_abandonment_double_fire.sql",
+      "checksum": "461ce131ba20143c2877ce8192c36ecd1a1fd9955253b6a1493cb59c94a996b6"
+    },
+    {
+      "filename": "202613550001_bank_categorization_who_column.sql",
+      "checksum": "611008cd2af67b5e22a75943722b412f2b6d78ffd4bd4cea6a4cf56ae78b57a1"
+    },
+    {
+      "filename": "202613560001_company_settlements_header_table.sql",
+      "checksum": "99dc4bd81dd797437478f8f43d62db5f9b2c6723bcccd81ca3e9638fdde3cbde"
+    },
+    {
+      "filename": "202613570001_acct_f5684_class_go18_gap5_deferred_worm_bind.sql",
+      "checksum": "93c9a041a80f40bf1526e48f43f3becb5fd7e243f854c97804dd197679dc9144"
+    },
+    {
+      "filename": "202613580001_usmca_fixed_asset_default_trucks_tractors.sql",
+      "checksum": "966f995b6cd80c25cca4535fb780f95c0fe63babd655a1a7b13efa8db610f33c"
+    },
+    {
+      "filename": "202613590001_lane_mileage_short_miles_check.sql",
+      "checksum": "5adf8879c90ca28ad725b797b3040adafc3a558c943063d4dce40d05dcfe2fb1"
+    },
+    {
+      "filename": "202613600001_point_mileage_table.sql",
+      "checksum": "4e4d10d7f9763f64b40535db5debf258e14344cbd7dc96003dc3c66caa77659e"
+    },
+    {
+      "filename": "202613611500_usmca_customer_mojibake_and_active.sql",
+      "checksum": "7fa72ec423e355b3889b328bc84e8bf66968f56633e5d6043e1dc9cda976c734"
+    },
+    {
+      "filename": "202613612300_company_settlements_worm.sql",
+      "checksum": "b26e73d69dc51168d39e591f0320830d8c2e873c70e414cf1a6d74c09017c0bf"
+    },
+    {
+      "filename": "202613620001_cc3_ddl_handoff_retention_grant_leave_safety_deactivated_at.sql",
+      "checksum": "4bf24f5f6851fcac95ef7af4a756eb682dc24d2f036c87c5c60af8314d962965"
+    },
+    {
+      "filename": "202613630001_accounting_broker_advances.sql",
+      "checksum": "0b3c14dc737ddfdf1f49bbb8ae2608ae4e70ed5e18dbee6a15f89b541283b730"
+    },
+    {
+      "filename": "202613631500_wiz24_load_commodities_catalog.sql",
+      "checksum": "0f2e97203cae13fe6064574842b430b7e5664b7b1ea306c2a319d31adbf70589"
+    },
+    {
+      "filename": "202613650001_invoices_display_id_check_widen_plain_digits.sql",
+      "checksum": "28349aad9ced6c5b29430ebce068dce549eb44df65094364d5da73ae059351dc"
+    },
+    {
+      "filename": "202613660001_driver_bills_miles_basis_widen_numeric.sql",
+      "checksum": "cb295b2ee0ed8d9b38ef705c4a84d47dbba9a64bf6422233e0c98f6c30afd575"
+    },
+    {
+      "filename": "202613670001_lane_mileage_drop_practical_notnull_and_short_over_practical_check.sql",
+      "checksum": "a16beefc0ebd7d6c7469fa90da1f394bf242464cda5ce565a673cb2f97715794"
+    },
+    {
+      "filename": "202613680001_lane_mileage_restore_null_short_miles_and_reapply_constraints.sql",
+      "checksum": "d9a391a144cd837af86ccdf96cf92e2c099ee0d2f5609c10392a482712db6169"
+    },
+    {
+      "filename": "202613690001_deactivate_usmca_driver_advance_accounts.sql",
+      "checksum": "c925e05bcf4ce1a669fa5eb6a5d6ecfbc9bc78204c934b31497e55fc8aff5b34"
+    },
+    {
+      "filename": "202613700001_broker_advances_driver_disbursement_columns.sql",
+      "checksum": "e4dd60d0a7c561d80706d87ce2531e9039f7906bd571eed5f62170c873c5ce6a"
+    },
+    {
+      "filename": "202613700100_reactivate_usmca_driver_advance_accounts.sql",
+      "checksum": "d924518ea812ffbde14a91865ec10e3306d0ed6fa63defb9c5a005cd67ca0629"
+    },
+    {
+      "filename": "202613700200_loads_miles_shortest_not_over_practical_check.sql",
+      "checksum": "65759a3dfb5a08a7ee35840a4823bb2dfa77566b25dc9d155cbc6a6f0641b4b0"
+    },
+    {
+      "filename": "202613720001_broker_advance_customer_deposit_account_and_gl_wiring.sql",
+      "checksum": "c883c3b36cc554e5cc10fdad5f88047ee31d0e74e0ccf1f8b95009ec2e72f6a6"
+    },
+    {
+      "filename": "202613740001_coa_roles_widen_detention_and_fuel_advance.sql",
+      "checksum": "d3ac3be07eef93801ac8523473077556bade7b1393cae114ed7741204c5c5f3b"
+    },
+    {
+      "filename": "202613750001_usmca_seed_company_fuel_advance_expense_role.sql",
+      "checksum": "68873d3813f077f737ded2eabb29764ac176bc9c883202907ce2fbe608c128ac"
+    },
+    {
+      "filename": "202613760001_samsara_geofence_import_drafts_batch.sql",
+      "checksum": "4b1d4aa2578c88e9bbde7b31d6f859119581cddebed2da4d3d63c1f3e6ccc0e1"
+    },
+    {
+      "filename": "202613761200_geofence_engine_rebuild_per_vehicle_state.sql",
+      "checksum": "4d1b5fd217eb7c119e7e3151577b5cde95ce5357889bd07cd3051d678d2f05ae"
+    },
+    {
+      "filename": "202613761300_samsara_usmca_retag.sql",
+      "checksum": "ab5483638241c0d6a9f14a36eb749128976765a2228f598c3f99122d0da93d25"
+    },
+    {
+      "filename": "202613770000_escrow_ledger_correction_transaction_type.sql",
+      "checksum": "8c28de1607a76539fd55893b8bf6e477d5a9729a879ead7a0af9d2cf5b24be71"
+    },
+    {
+      "filename": "202613772200_samsara_driver_activation_status.sql",
+      "checksum": "e0c8eabcd1e79a6f0320cca805b010b7f423b63a43c75fe12509ceca419762c3"
+    },
+    {
+      "filename": "202613772300_tel40_stop_geocode_evidence_and_radii.sql",
+      "checksum": "989e22c222041b2fd07d60ba8d328b20c76363d59e13d240220f59f1c3867f42"
+    },
+    {
+      "filename": "202613780000_mdata_load_stop_legs.sql",
+      "checksum": "7ca43c8f879b3d7603e01d099ff36a1330015de4504d082419f75b9f089b7837"
+    },
+    {
+      "filename": "202613790000_tel40b_stop_geocode_precision.sql",
+      "checksum": "b2beeea73d641519a72b778b2c5afab55d28e6e3bf5b44dbc62e984d80e8cd19"
+    },
+    {
+      "filename": "202613790001_tel42_ih35_yard_location.sql",
+      "checksum": "41983dd0b96b14e017f6948eca539a1c389c49914c6d5e273c7477696467f109"
+    },
+    {
+      "filename": "202613800000_posting_hold_reason.sql",
+      "checksum": "ab17ed8d103bab796fb6f3cc6b9bd938d922639a765db3eba687d3cc5bd6375c"
+    },
+    {
+      "filename": "202613800100_ldt5_settlement_model_backfill.sql",
+      "checksum": "9c88ebd6d52ccc498addd1abd72d3dea9610ea2f66dff4f5d91ad7211d17b349"
+    },
+    {
+      "filename": "202613810000_coa_roles_widen_bank_fee_recovery.sql",
+      "checksum": "464300d51bd7651fbf30c2ba1d7ae2e672f1df5a1ad1ac7e98da19dce91a17e9"
+    },
+    {
+      "filename": "202613810001_usmca_seed_bank_fee_recovery_role.sql",
+      "checksum": "7614258b0efe71f9328d7b28c3801f1006d9a01658a65129abbb61c12cacd37b"
+    },
+    {
+      "filename": "202613820000_driver_settlements_source_document_ref.sql",
+      "checksum": "13620af5894f11ca94f10927641d4b17c81de575a4a8f729366ffae52fab3f0c"
+    },
+    {
+      "filename": "202613830000_expenses_merchant_address_source_settlement_ref.sql",
+      "checksum": "fff7dfdc4ea26f3fe1669a608bc82196df6a8b6ed242f198470b6cbdc5a44c71"
+    },
+    {
+      "filename": "202613840000_broker_advances_canonical_check_driver_finance.sql",
+      "checksum": "437bdf5b0984f19ba623b31c006145736f1294126bcdd19aa31feae915d19e83"
+    },
+    {
+      "filename": "202613850000_trip_type_local_enum.sql",
+      "checksum": "d049cca1cdf078de5037e03b084746072d5e0ff2abc52361d7d8832a0552c6da"
+    },
+    {
+      "filename": "202613860000_cash_flow_row_adjustments.sql",
+      "checksum": "f8d96120eee6e3a8eef35cb9f61d8a5a1d393380b35c08a3b74e9b8a8b47a3e7"
+    },
+    {
+      "filename": "202613870000_cash_flow_row_adjustments_seq.sql",
+      "checksum": "ad713b182e5915ab86c37a1165037f41a09c09a9048731c45dd0c64f9356e31d"
+    },
+    {
+      "filename": "202613881200_cash_flow_row_adjustments_worm.sql",
+      "checksum": "c3838bbd13fdc61b841b9da8661b1806580b8879915c5227f806fc051bbf1e15"
     }
   ]
 }

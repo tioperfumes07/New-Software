@@ -154,6 +154,14 @@ export function createSettlement(payload: Record<string, unknown>) {
   return apiRequest<Record<string, unknown>>("/api/v1/driver-finance/settlements", { method: "POST", body: payload });
 }
 
+// SETL-DETAIL-01 — NUMBER box, typed-wins (blank body = no-op, keeps the auto-assigned number).
+export function patchSettlementDisplayId(id: string, companyId: string, displayId: string) {
+  return apiRequest<{ updated: boolean; display_id: string }>(`/api/v1/driver-finance/settlements/${id}/display-id?${q(companyId)}`, {
+    method: "PATCH",
+    body: { operating_company_id: companyId, display_id: displayId },
+  });
+}
+
 export function acknowledgeSettlement(id: string, companyId: string, etag?: string) {
   return apiRequest<Record<string, unknown>>(`/api/v1/driver-finance/settlements/${id}/acknowledge?${q(companyId)}`, {
     method: "PATCH",
@@ -499,6 +507,10 @@ export type SettlementDeductionListRow = {
   load_number: string | null;
   applied_to_settlement_id: string | null;
   applied_to_settlement_display_id: string | null;
+  /** SET-24 GL ROUTING: set only when deduction_type === 'reimbursement_reversal'. */
+  reversed_reimbursement_id: string | null;
+  /** Display name of the account this reversal credits ("<number> <name>"), resolved server-side. */
+  reimbursement_reversal_expense_account: string | null;
   created_at: string;
 };
 
@@ -513,6 +525,46 @@ export function listSettlementDeductions(
   if (filters?.limit != null) params.set("limit", String(filters.limit));
   return apiRequest<{ deductions: SettlementDeductionListRow[] }>(
     `/api/v1/driver-finance/deductions?${params.toString()}`
+  );
+}
+
+// SETL-DED-UI (owner item, deadline 05:30Z) — the deduction creator, typed kinds only (no 'other').
+export type CreateSettlementDeductionTypedType = "wire_fee" | "ach_fee" | "company_vehicle_fuel" | "escrow_contribution";
+export type CreateSettlementDeductionInput = {
+  operating_company_id: string;
+  driver_id: string;
+  deduction_type: CreateSettlementDeductionTypedType;
+  amount_cents: number;
+  reason: string;
+  load_id?: string;
+  /** Draft id ReceiptAttach's "source doc" control uploaded against before this row existed. */
+  attachment_draft_id?: string;
+};
+export type CreatedSettlementDeductionRow = {
+  id: string;
+  operating_company_id: string;
+  driver_id: string;
+  deduction_type: string;
+  amount_cents: number;
+  reason: string;
+  applied_to_settlement_id: string | null;
+  load_id: string | null;
+  created_at: string;
+};
+export function createSettlementDeduction(input: CreateSettlementDeductionInput) {
+  return apiRequest<CreatedSettlementDeductionRow>(
+    `/api/v1/driver-finance/settlement-deductions?${q(input.operating_company_id)}`,
+    {
+      method: "POST",
+      body: {
+        driver_id: input.driver_id,
+        deduction_type: input.deduction_type,
+        amount_cents: input.amount_cents,
+        reason: input.reason,
+        load_id: input.load_id,
+        attachment_draft_id: input.attachment_draft_id,
+      },
+    }
   );
 }
 

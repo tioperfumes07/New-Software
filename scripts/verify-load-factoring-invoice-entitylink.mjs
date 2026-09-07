@@ -36,7 +36,12 @@ function audit(src, api, route, matrix, self) {
   if (!/listInvoices\(operatingCompanyId, \{ source_load_id: loadId, limit: 1 \}\)/.test(src)) {
     failures.push(`${TARGET}: must read the exact load invoice server-side, not client-filter a capped customer list`);
   }
-  if (!/kind="invoice" id=\{linkedInvoice\.id\} name=\{linkedInvoice\.display_id\}/.test(src)) {
+  // PR #20895 (FACTORING-GUARDS 1/2) swapped the plain <EntityLink> for <EntityLinkOrTombstone>
+  // (never mounts a dead-drill EntityLink when the label is an unresolved tombstone — a real
+  // correctness improvement, LV-SAFETY-ENTITYLINK-UNRESOLVED-TOMBSTONE) and spread the JSX
+  // attributes onto separate lines — match either component name and allow whitespace between
+  // attrs, but still require the exact same id/display-id binding.
+  if (!/<EntityLink(?:OrTombstone)?[\s\S]{0,120}kind="invoice"[\s\S]{0,120}id=\{linkedInvoice\.id\}[\s\S]{0,120}name=\{linkedInvoice\.display_id\}/.test(src)) {
     failures.push(`${TARGET}: invoice drill must bind the exact returned id and human display id`);
   }
   if (!/export function listInvoices\([\s\S]{0,420}source_load_id\?: string;/.test(api) || !/export function listInvoices\([\s\S]{0,900}params\.source_load_id\) query\.set\("source_load_id", params\.source_load_id\)/.test(api)) {

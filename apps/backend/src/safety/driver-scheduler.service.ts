@@ -1032,7 +1032,8 @@ export async function getFleetSchedule(
         concat_ws(' ', d.first_name, d.last_name) AS driver_name,
         d.status::text AS driver_status,
         u.id AS unit_id,
-        u.unit_number
+        u.unit_number,
+        lah.last_activity_at AS last_dispatch_activity_at
       FROM mdata.drivers d
       -- DRIVERHUB-3: the CURRENT tractor for a driver is the unit assigned on their most-recent ACTIVE
       -- dispatch load (mdata.loads.assigned_unit_id where assigned_primary_driver_id = d.id), NOT the
@@ -1052,6 +1053,17 @@ export async function getFleetSchedule(
         ON u.id = al.assigned_unit_id
         AND u.deactivated_at IS NULL
         AND (u.owner_company_id = $1 OR u.currently_leased_to_company_id = $1)
+      -- ROUND 16.19: "why is/isn't a driver active" — the most recent dispatch assignment event
+      -- that TOUCHED this driver, either side (assigned onto a load, or taken off one).
+      -- dispatch.load_assignment_history is the real assignment audit trail (verified live on
+      -- Neon prod: 154 rows, 77 with new_driver_id set); a computed MAX(), not a new column —
+      -- CC-2 cannot author migrations and this needs none.
+      LEFT JOIN LATERAL (
+        SELECT MAX(lah_row.assigned_at) AS last_activity_at
+        FROM dispatch.load_assignment_history lah_row
+        WHERE lah_row.operating_company_id = $1::uuid
+          AND (lah_row.new_driver_id = d.id OR lah_row.previous_driver_id = d.id)
+      ) lah ON TRUE
       WHERE (
           d.operating_company_id = $1::uuid
           OR EXISTS (

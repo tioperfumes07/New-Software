@@ -38,20 +38,24 @@ function toCsvCell(value: string): string {
 }
 
 function exportVendorsCsv(rows: VendorOption[], openByVendorId: Map<string, number>, rollupByVendorId: Map<string, VendorRollup>) {
-  const header = ["Name", "Email", "Phone", "Vendor Type", "Open Balance", "Quality", "FMCSA Authority", "Purchases YTD", "Last Purchase", "Last Transaction", "Created"];
+  const header = ["Name", "Code", "Type", "Category", "Open Balance", "Spend MTD", "Spend YTD", "Last activity", "Email", "Phone", "Quality", "FMCSA Authority", "Purchases YTD", "Created"];
   const body = rows.map((v) => {
     const rollup = rollupByVendorId.get(v.id);
+    const lastActivity = rollup?.last_activity_date ?? rollup?.last_purchase_date;
     return [
       v.name ?? "",
+      v.vendor_code ?? "",
+      v.vendor_type ?? "",
+      v.vendor_category ?? "",
+      fmtMoney(openByVendorId.get(v.id) ?? 0),
+      fmtMoney(rollup?.spend_mtd_cents ?? 0),
+      fmtMoney(rollup?.spend_ytd_cents ?? 0),
+      lastActivity ? mmmDd(lastActivity) : "",
       v.email ?? "",
       v.phone ?? "",
-      v.vendor_type ?? "",
-      fmtMoney(openByVendorId.get(v.id) ?? 0),
       vendorQualityLabel(v.notes).label,
       isCarrier(v) ? "Carrier" : "",
       fmtMoney(rollup?.purchases_ytd_cents ?? 0),
-      rollup?.last_purchase_date ? mmmDd(rollup.last_purchase_date) : "",
-      rollup?.last_purchase_date ? mmmDd(rollup.last_purchase_date) : "",
       v.created_at ? mmmDd(v.created_at) : "",
     ].map(toCsvCell).join(",");
   });
@@ -160,6 +164,9 @@ export function VendorsListView({ companyId, vendors, status, openByVendorId, ro
         rows={filteredRows}
         rowKey={(row) => row.id}
         storageKey="vendors-list"
+        exportFilename="vendors"
+        pageSizeOptions={[25, 50, 100, 250, 300]}
+        allowAllPageSize
         initialPageSize={50}
         sortKey={sortKey}
         sortDirection={sortDirection}
@@ -263,9 +270,14 @@ export function VendorsListView({ companyId, vendors, status, openByVendorId, ro
               </span>
             ),
           },
-          { key: "email", label: "Email", sortable: true, render: (row) => row.email ?? "—" },
-          { key: "phone", label: "Phone", sortable: true, render: (row) => row.phone ?? "—" },
-          { key: "vendor_type", label: "Vendor Type", sortable: true, render: (row) => row.vendor_type ?? "—" },
+          // VC-LIST-01 (owner ROUND 11): Code is a required visible column (Name · Code · Type ·
+          // Category · Open balance · Spend MTD · Spend YTD · Last activity · Status).
+          { key: "vendor_code", label: "Code", sortable: true, render: (row) => row.vendor_code ?? "—" },
+          { key: "email", label: "Email", sortable: true, defaultHidden: true, render: (row) => row.email ?? "—" },
+          { key: "phone", label: "Phone", sortable: true, defaultHidden: true, render: (row) => row.phone ?? "—" },
+          { key: "vendor_type", label: "Type", sortable: true, render: (row) => row.vendor_type ?? "—" },
+          // VC-LIST-01 — Category is a required visible column.
+          { key: "vendor_category", label: "Category", sortable: true, render: (row) => row.vendor_category ?? "—" },
           {
             key: "open_balance",
             label: "Open Balance",
@@ -273,23 +285,55 @@ export function VendorsListView({ companyId, vendors, status, openByVendorId, ro
             cellClass: "text-right tabular-nums",
             render: (row) => fmtMoney(row.open_balance),
           },
+          // VC-LIST-01 — Spend MTD / Spend YTD are REAL (bills + expenses) from the extended
+          // vendor-rollups endpoint. LOVES proof (Neon 2026-09-06, bypass_rls=lucia, USMCA): 183
+          // expenses + 0 bills → spend_ytd $67,003.86, spend_mtd $6,336.80, open balance $0.
+          {
+            key: "spend_mtd",
+            label: "Spend (MTD)",
+            sortable: true,
+            cellClass: "text-right tabular-nums",
+            sortValue: (row) => rollupByVendorId.get(row.id)?.spend_mtd_cents ?? 0,
+            render: (row) => fmtMoney(rollupByVendorId.get(row.id)?.spend_mtd_cents ?? 0),
+          },
+          {
+            key: "spend_ytd",
+            label: "Spend (YTD)",
+            sortable: true,
+            cellClass: "text-right tabular-nums",
+            sortValue: (row) => rollupByVendorId.get(row.id)?.spend_ytd_cents ?? 0,
+            render: (row) => fmtMoney(rollupByVendorId.get(row.id)?.spend_ytd_cents ?? 0),
+          },
+          {
+            key: "last_activity",
+            label: "Last activity",
+            sortable: true,
+            cellClass: "text-right tabular-nums",
+            sortValue: (row) => rollupByVendorId.get(row.id)?.last_activity_date ?? rollupByVendorId.get(row.id)?.last_purchase_date ?? "",
+            render: (row) => {
+              const rollup = rollupByVendorId.get(row.id);
+              const date = rollup?.last_activity_date ?? rollup?.last_purchase_date;
+              return date ? mmmDd(date) : <span className="text-gray-400">—</span>;
+            },
+          },
           {
             key: "quality_label",
             label: "Quality",
             sortable: true,
+            defaultHidden: true,
             render: (row) => {
               const q = vendorQualityLabel(row.notes);
               return <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${q.className}`}>{q.label}</span>;
             },
           },
-          { key: "fmcsa_label", label: "FMCSA Authority", sortable: true, render: (row) => row.fmcsa_label },
-          // CC-3 V.1 / Wave 3 Step 3 — roll-up columns wired to the vendor-rollups endpoint.
-          // Purchases YTD shows $0.00 for vendors with no expenses (not "—"); Last Purchase / Last
-          // Transaction show a dash only when the date is null.
+          { key: "fmcsa_label", label: "FMCSA Authority", sortable: true, defaultHidden: true, render: (row) => row.fmcsa_label },
+          // CC-3 V.1 / Wave 3 Step 3 — expenses-only roll-up columns (kept, default hidden now that
+          // Spend MTD/YTD carry bills + expenses). Never deleted (§7).
           {
             key: "purchases_ytd",
             label: "Purchases YTD",
             sortable: false,
+            defaultHidden: true,
             cellClass: "text-right tabular-nums",
             render: (row) => {
               const rollup = rollupByVendorId.get(row.id);
@@ -300,17 +344,7 @@ export function VendorsListView({ companyId, vendors, status, openByVendorId, ro
             key: "last_purchase",
             label: "Last Purchase",
             sortable: false,
-            cellClass: "text-right tabular-nums",
-            render: (row) => {
-              const rollup = rollupByVendorId.get(row.id);
-              const date = rollup?.last_purchase_date;
-              return date ? mmmDd(date) : <span className="text-gray-400">—</span>;
-            },
-          },
-          {
-            key: "updated_at",
-            label: "Last Transaction",
-            sortable: true,
+            defaultHidden: true,
             cellClass: "text-right tabular-nums",
             render: (row) => {
               const rollup = rollupByVendorId.get(row.id);
@@ -322,6 +356,7 @@ export function VendorsListView({ companyId, vendors, status, openByVendorId, ro
             key: "created_at",
             label: "Created",
             sortable: true,
+            defaultHidden: true,
             cellClass: "text-right tabular-nums",
             render: (row) => {
               const label = row.created_at ? mmmDd(row.created_at) : "";
@@ -333,6 +368,7 @@ export function VendorsListView({ companyId, vendors, status, openByVendorId, ro
             key: "eligible_1099",
             label: "1099?",
             sortable: true,
+            defaultHidden: true,
             render: (row) => (row.eligible_1099 ? "Yes" : "No"),
           },
           {

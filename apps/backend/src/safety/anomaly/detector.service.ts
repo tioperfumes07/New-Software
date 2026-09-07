@@ -46,11 +46,18 @@ async function detectDvirMajorOpen(client: Parameters<DetectorFn>[0], oci: strin
   // carries a precomputed `has_major_defect` boolean. The old query joined a non-existent dvir_reports +
   // dd.dvir_report_id (the FK is dvir_defects.dvir_submission_id) and filtered a non-existent resolved_at,
   // so it threw 42P01/42703 every run. Use the major-defect flag directly.
+  //
+  // ROUND 16.4 (42P10) — "for SELECT DISTINCT, ORDER BY expressions must appear in select list".
+  // `d.id::text AS dvir_id` (a CAST) is a different expression than the bare `d.id` the ORDER BY
+  // clause used — Postgres does not treat them as the same select-list item under DISTINCT, so
+  // every run threw, aborting the transaction, so EVERY OTHER rule for that tenant then failed
+  // with "current transaction is aborted" (evaluateRulesForTenant runs every rule on one client).
+  // Fix: order by the output alias, which IS the exact select-list expression.
   const res = await client.query<{ unit_id: string; dvir_id: string }>(
     `SELECT DISTINCT d.unit_id::text AS unit_id, d.id::text AS dvir_id
      FROM safety.dvir_submissions d
      WHERE d.operating_company_id = $1::uuid AND d.has_major_defect = true
-     ORDER BY d.id`,
+     ORDER BY dvir_id`,
     [oci]
   );
   return res.rows.map((row) => ({
@@ -61,6 +68,9 @@ async function detectDvirMajorOpen(client: Parameters<DetectorFn>[0], oci: strin
 }
 
 async function detectInactiveDriverAssignment(client: Parameters<DetectorFn>[0], oci: string, _config: Record<string, unknown>) {
+  // ROUND 16.4 (42P10) — same class of bug as detectDvirMajorOpen above: `d.id::text AS driver_id`
+  // is a cast, a different expression than the bare `d.id` the ORDER BY clause used. Order by the
+  // output alias instead.
   const res = await client.query<{ driver_id: string; status: string }>(
     `SELECT DISTINCT d.id::text AS driver_id, d.status::text AS status
      FROM mdata.drivers d
@@ -69,7 +79,7 @@ async function detectInactiveDriverAssignment(client: Parameters<DetectorFn>[0],
      WHERE d.operating_company_id = $1::uuid
        AND (d.status <> 'Active' OR d.deactivated_at IS NOT NULL OR d.archived_at IS NOT NULL)
        AND l.status IN ('assigned','dispatched','in_transit')
-     ORDER BY d.id`,
+     ORDER BY driver_id`,
     [oci]
   );
   return res.rows.map((row) => ({

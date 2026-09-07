@@ -117,7 +117,7 @@ const COLUMNS: Array<ParityColumn<RowGroup>> = [
     sortable: true,
     className: "text-right",
     sortValue: (g) => g.income.actual_cents,
-    render: (g) => <span className="text-gray-700">{formatCents(g.income.actual_cents)}</span>,
+    render: (g) => <ActualCell line={g.income} />,
   },
   {
     key: "income_variance",
@@ -125,7 +125,12 @@ const COLUMNS: Array<ParityColumn<RowGroup>> = [
     sortable: true,
     className: "text-right",
     sortValue: (g) => g.income.variance_cents,
-    render: (g) => <VarianceCell variance_cents={g.income.variance_cents} variance_pct={g.income.variance_pct} />,
+    render: (g) =>
+      g.income.actual_unavailable ? (
+        <span className="text-xs text-gray-400">—</span>
+      ) : (
+        <VarianceCell variance_cents={g.income.variance_cents} variance_pct={g.income.variance_pct} />
+      ),
   },
   {
     key: "projected_expenses",
@@ -141,7 +146,7 @@ const COLUMNS: Array<ParityColumn<RowGroup>> = [
     sortable: true,
     className: "text-right",
     sortValue: (g) => g.expenses.actual_cents,
-    render: (g) => <span className="text-gray-700">{formatCents(g.expenses.actual_cents)}</span>,
+    render: (g) => <ActualCell line={g.expenses} />,
   },
   {
     key: "expense_variance",
@@ -149,7 +154,12 @@ const COLUMNS: Array<ParityColumn<RowGroup>> = [
     sortable: true,
     className: "text-right",
     sortValue: (g) => g.expenses.variance_cents,
-    render: (g) => <VarianceCell variance_cents={g.expenses.variance_cents} variance_pct={g.expenses.variance_pct} />,
+    render: (g) =>
+      g.expenses.actual_unavailable ? (
+        <span className="text-xs text-gray-400">—</span>
+      ) : (
+        <VarianceCell variance_cents={g.expenses.variance_cents} variance_pct={g.expenses.variance_pct} />
+      ),
   },
   {
     key: "net",
@@ -157,13 +167,31 @@ const COLUMNS: Array<ParityColumn<RowGroup>> = [
     sortable: true,
     className: "text-right",
     sortValue: (g) => g.net.actual_cents,
-    render: (g) => (
-      <span className={`font-bold ${g.net.actual_cents >= 0 ? "text-slate-700" : "text-red-700"}`}>
-        {formatCents(g.net.actual_cents, { sign: true })}
-      </span>
-    ),
+    render: (g) =>
+      g.income.actual_unavailable || g.expenses.actual_unavailable ? (
+        <span className="text-xs text-gray-400" title="Actual net depends on actual income/expenses, both unavailable">—</span>
+      ) : (
+        <span className={`font-bold ${g.net.actual_cents >= 0 ? "text-slate-700" : "text-red-700"}`}>
+          {formatCents(g.net.actual_cents, { sign: true })}
+        </span>
+      ),
   },
 ];
+
+// CASH-FLOW-01 (owner order 2026-09-06, LAW §8 "zero is a claim"): actual_unavailable means the
+// backend measured 0 categorized bank lines company-wide -- a bare $0 here would read as
+// "confirmed zero cash moved" when the truth is "we cannot see actuals yet". Render the honest
+// state instead of the number.
+function ActualCell({ line }: { line: AvpLineItem }) {
+  if (line.actual_unavailable) {
+    return (
+      <span className="text-xs text-gray-400" title="0 bank lines categorized — actuals unavailable, not a confirmed zero">
+        unavailable
+      </span>
+    );
+  }
+  return <span className="text-gray-700">{formatCents(line.actual_cents)}</span>;
+}
 
 type VarianceFilter = "all" | "over" | "under" | "flat";
 type AvpFilterDraft = {
@@ -268,6 +296,15 @@ export function ActualVsProjectedTab({ operatingCompanyId }: Props) {
         )}
       </CollapsedListFilters>
 
+      {/* CASH-FLOW-01 (owner order 2026-09-06): honest coverage banner -- a $0 actual on 0
+          categorized bank lines is "actuals unavailable", not "confirmed zero cash moved". */}
+      {!isLoading && data && data.bank_categorization_coverage.categorized_count === 0 ? (
+        <div className="rounded-sm border border-slate-200 bg-slate-100 px-3 py-2 text-xs text-slate-700">
+          {data.bank_categorization_coverage.categorized_count} of {data.bank_categorization_coverage.total_count} bank
+          lines categorized — actuals unavailable, not zero. Categorize transactions in Banking to see real actuals here.
+        </div>
+      ) : null}
+
       {/* Accuracy Summary */}
       {!isLoading && acc && (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -291,6 +328,9 @@ export function ActualVsProjectedTab({ operatingCompanyId }: Props) {
               pct: acc.income_variance_pct,
             },
           ].map((card) => {
+            // CASH-FLOW-01: 0 categorized bank lines means the "Act:"/variance figures on this
+            // card are not real actuals — show the honest state instead of a misleading $0/100%.
+            const actualsUnavailable = data?.bank_categorization_coverage.categorized_count === 0;
             const varCents = card.actual - card.projected;
             const pos = varCents >= 0;
             return (
@@ -301,14 +341,18 @@ export function ActualVsProjectedTab({ operatingCompanyId }: Props) {
                     Proj: <strong>{formatCents(card.projected)}</strong>
                   </span>
                   <span className="text-xs text-gray-600">
-                    Act: <strong>{formatCents(card.actual)}</strong>
+                    Act: <strong>{actualsUnavailable ? "unavailable" : formatCents(card.actual)}</strong>
                   </span>
                 </div>
-                <div className={`mt-1 flex items-center gap-1 text-xs font-bold ${pos ? "text-slate-700" : "text-red-700"}`}>
-                  {pos ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
-                  {formatCents(varCents, { sign: true })}
-                  <span className="ml-1 text-xs font-medium">{formatPct(card.pct)}</span>
-                </div>
+                {actualsUnavailable ? (
+                  <p className="mt-1 text-xs text-gray-400">actuals unavailable</p>
+                ) : (
+                  <div className={`mt-1 flex items-center gap-1 text-xs font-bold ${pos ? "text-slate-700" : "text-red-700"}`}>
+                    {pos ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
+                    {formatCents(varCents, { sign: true })}
+                    <span className="ml-1 text-xs font-medium">{formatPct(card.pct)}</span>
+                  </div>
+                )}
               </div>
             );
           })}

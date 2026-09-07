@@ -150,6 +150,17 @@ export const COA_ROLE_VALUES = [
   // owner designation, never name-matched; fails closed (control disables, names the missing role)
   // anywhere it is not bound.
   "company_fuel_advance_expense",
+  // SETL-DED-UI (owner item, deadline 05:30Z) — wire/ACH fee recovery from the driver credits the
+  // SAME expense account the fee itself posted to (6300 Bank Service Charges & Wire Fees), never a
+  // new revenue line. NOT yet admitted by the DB CHECK constraint (accounting.chart_of_accounts_
+  // roles_role_check) — CC-3 has no migration lane (verify-migration-lane-band.mjs: cc-3/ = chrome-
+  // only, authorMigrations:false); a ready-to-apply draft migration + seed live in
+  // docs/audit/migration-drafts/BANK-FEE-RECOVERY-*.sql for a migration-lane seat to author. Adding
+  // the TS member now is safe/inert (isCoaRole() accepting the string does not INSERT anything) and
+  // means the code needs ZERO further change the moment the migration lands and the role is bound —
+  // resolveRoleAccountOptional correctly returns null (never guessed) until then.
+  // DELIBERATELY absent from ROLE_FALLBACKS — owner designates; fails closed until then.
+  "bank_fee_recovery",
 ] as const;
 
 export type CoaRole = (typeof COA_ROLE_VALUES)[number];

@@ -20,7 +20,7 @@ export function LoadLivePositionCell({
   if (unavailable) return <span className="text-xs font-semibold text-amber-700">Unavailable</span>;
   if (!position) return <span className="text-xs text-slate-400">No GPS</span>;
   return (
-    <div className="inline-flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs" data-testid="load-live-gps-cell">
+    <div className="inline-flex flex-nowrap items-center gap-x-2 whitespace-nowrap text-xs" data-testid="load-live-gps-cell">
       <span className={position.stale ? "font-semibold text-red-600" : "text-slate-700"}>
         {position.lat.toFixed(4)}, {position.lng.toFixed(4)}
       </span>

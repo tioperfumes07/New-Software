@@ -404,9 +404,10 @@ export function FleetTablePage({ operatingCompanyId, defaultActiveOnly = false, 
       <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-5">
         <DrillKpiCard label="Total Units" value={counters.total} active={effectiveStatus === ""} onClick={() => setStatus("all")} />
         <DrillKpiCard label="Active" value={counters.active} active={effectiveStatus === "InService"} onClick={() => setStatus("InService")} />
-        <DrillKpiCard label="In-Shop" value={counters.inShop} active={effectiveStatus === "InMaintenance"} onClick={() => setStatus("InMaintenance")} />
+        <DrillKpiCard label="In-Shop" tone="in-shop" value={counters.inShop} active={effectiveStatus === "InMaintenance"} onClick={() => setStatus("InMaintenance")} />
         <DrillKpiCard
           label="Out-of-Service"
+          tone="oos"
           valueTone="critical"
           value={counters.outOfService}
           active={effectiveStatus === "OutOfService"}

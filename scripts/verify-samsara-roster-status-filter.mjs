@@ -11,7 +11,8 @@ function audit(r = route, a = api, p = page, c = collector) {
     [r.includes('/api/v1/integrations/samsara/drivers'), "entity-scoped roster route"],
     [r.includes('z.enum(["all", "active", "deactivated"])'), "closed status vocabulary"],
     [r.includes("sd.operating_company_id = $1::uuid"), "tenant predicate"],
-    [r.includes("driverActivationStatus"), "canonical Samsara activation field"],
+    [r.includes("sd.driver_activation_status") && r.includes("AS activation_status"), "canonical persisted activation field"],
+    [c.includes('readString(raw, "driverActivationStatus", "driver_activation_status")'), "canonical Samsara activation payload mapping"],
     [a.includes("getSamsaraDriverRoster"), "frontend API client"],
     [p.includes('data-testid="samsara-driver-roster"'), "rendered roster"],
     [p.includes('(["active", "deactivated", "all"] as const)') && p.includes("samsara-roster-filter-${status}"), "deactivated filter"],
@@ -26,6 +27,8 @@ if (failures.length) { console.error(`FAIL: ${failures.join(", ")}`); process.ex
 if (process.argv.includes("--selftest")) {
   const mutations = [
     [route.replace("sd.operating_company_id = $1::uuid", "TRUE"), api, page, collector],
+    [route.replace("sd.driver_activation_status", "sd.status"), api, page, collector],
+    [route, api, page, collector.replace('readString(raw, "driverActivationStatus", "driver_activation_status")', 'readString(raw, "status")')],
     [route, api, page.replace('["active", "deactivated", "all"]', '["active", "all"]'), collector],
     [route, api, page, collector.replace("'-infinity'::timestamptz", "now()")],
   ];

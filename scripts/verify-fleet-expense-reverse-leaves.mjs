@@ -22,7 +22,14 @@ function audit(s) {
   if (!/<ExpensesReverseSection[\s\S]*?filter=\{\{ trailer_id: id \}\}/.test(s.trailer)) failures.push("trailer profile expense reverse mount missing");
   if (!/listExpenses\(operatingCompanyId, \{ \.\.\.filter \}\)/.test(s.section)) failures.push("entity-scoped filtered expense query missing");
   if (!/<EntityLink\s+(?=[^>]*kind="expense")(?=[^>]*id=\{row\.id\})[^>]*>/.test(s.section)) failures.push("canonical expense drill missing");
-  if (!/to=\{`\/accounting\/expenses\?\$\{filterKey\}=\$\{encodeURIComponent\(filterValue\)\}`\}/.test(s.section)) failures.push("filtered Expenses forward route missing");
+  // The inline `to={`/accounting/expenses?...`}` was later extracted into a named
+  // openExpensesRoute variable (DRY refactor, same URL built once and reused) — accept either the
+  // inline literal or the variable-declaration + `to={openExpensesRoute}` reference shape.
+  const forwardRouteInline = /to=\{`\/accounting\/expenses\?\$\{filterKey\}=\$\{encodeURIComponent\(filterValue\)\}`\}/.test(s.section);
+  const forwardRouteVar =
+    /const openExpensesRoute = `\/accounting\/expenses\?\$\{filterKey\}=\$\{encodeURIComponent\(filterValue\)\}`;/.test(s.section) &&
+    /to=\{openExpensesRoute\}/.test(s.section);
+  if (!forwardRouteInline && !forwardRouteVar) failures.push("filtered Expenses forward route missing");
   if (!/expensesQ\.isLoading/.test(s.section) || !/expensesQ\.isError/.test(s.section) || !/No expenses linked to/.test(s.section)) failures.push("honest reverse states missing");
   if (!/unit_id\?: string/.test(s.api) || !/trailer_id\?: string/.test(s.api)) failures.push("typed unit/trailer list filters missing");
   if (!/if \(params\.unit_id\) query\.set\("unit_id", params\.unit_id\)/.test(s.api) || !/if \(params\.trailer_id\) query\.set\("trailer_id", params\.trailer_id\)/.test(s.api)) failures.push("unit/trailer query serialization missing");

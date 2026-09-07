@@ -422,6 +422,10 @@ export async function registerMaintenanceDashboardRoutes(app: FastifyInstance) {
             wo.id::text AS work_order_id,
             wo.display_id AS work_order_display_id,
             COALESCE(wo.work_started_at, wo.opened_at, wo.created_at)::text AS opened_at,
+            GREATEST(
+              0,
+              FLOOR(EXTRACT(EPOCH FROM (NOW() - COALESCE(wo.work_started_at, wo.opened_at, wo.created_at))) / 86400)
+            )::int AS days_down,
             estimate.estimated_completion_date::text AS expected_ready_at,
             COALESCE(
               mdata.resolve_vendor_label_same_company(COALESCE(wo.external_vendor_id, wo.vendor_id), wo.operating_company_id),

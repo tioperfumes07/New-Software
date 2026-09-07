@@ -100,24 +100,26 @@ function dsp02ScheduleColumnIssues(content) {
 }
 
 function sectionControlIssues(content) {
+  // LB-DESIGN-1 (owner 2026-09-06, DISPATCH-BOARD-PREVIEW-2026-09-05.pdf § 2): the List board is ONE grouped table —
+  // the status sections are band rows inside the grid, never a stacked header row + filter + pager per section.
   const issues = [];
-  if (!content.includes('data-testid={`dispatch-board-headers-${section.key}`}')) {
-    issues.push("each live section must render its own column-header row");
+  if (!content.includes('tableTestId="dispatch-board-section-table-all"')) {
+    issues.push("the List board must render ONE table (dispatch-board-section-table-all)");
   }
-  if (!content.includes('data-testid={`dispatch-board-filter-${section.key}`}')) {
-    issues.push("each live section must render its own filter control");
+  if (/tableTestId=\{`dispatch-board-section-table-\$\{section\.key\}`\}/.test(content)) {
+    issues.push("per-section tables are back — the sections must be band rows in one table");
   }
-  if (!content.includes("visibleSectionRows(section.key, allRows)")) {
-    issues.push("each live section must derive its own visible row set");
+  if (!/groupBy=\{\{[\s\S]{0,1200}orderedKeys: boardSections\.map\(\(s\) => s\.key\)/.test(content)) {
+    issues.push("every section (including an empty one, e.g. IN SHOP 0) must render as a band via groupBy.orderedKeys");
   }
-  if (!content.includes("toggleSectionSort(section.key, columnKey)")) {
-    issues.push("each live section header must update section-local sort state");
+  if (!content.includes("data-testid={`dispatch-board-section-${key}`}")) {
+    issues.push("each band must carry data-testid dispatch-board-section-<key> with its count");
   }
-  if (!/const \[sectionFilters, setSectionFilters\] = useState<Record<string, string>>\(\{\}\)/.test(content)) {
-    issues.push("section filters must be independent state keyed by section");
+  if (!content.includes("visibleSectionRows(section.key, section.rows)")) {
+    issues.push("band rows must come from visibleSectionRows(section.key, section.rows)");
   }
-  if (!/const \[sectionSorts, setSectionSorts\] = useState<Record<string, SectionSort>>\(\{\}\)/.test(content)) {
-    issues.push("section sorts must be independent state keyed by section");
+  if (!/cellClass: "whitespace-nowrap"/.test(content)) {
+    issues.push('board cells must be single-line (cellClass: "whitespace-nowrap") — owner: no stacked rows');
   }
   return issues;
 }
@@ -325,12 +327,12 @@ if (process.argv.includes("--selftest")) {
     fail("selftest mutation escaped pre-settlement panel read-honesty guard");
   }
   const sectionMutants = [
-    src.replace('data-testid={`dispatch-board-headers-${section.key}`}', 'data-testid="dispatch-board-headers"'),
-    src.replace('data-testid={`dispatch-board-filter-${section.key}`}', 'data-testid="dispatch-board-filter"'),
-    src.replace("visibleSectionRows(section.key, allRows)", "allRows"),
-    src.replace("toggleSectionSort(section.key, columnKey)", "toggleDispatchSort(columnKey)"),
-    src.replace("const [sectionFilters, setSectionFilters]", "const [filters, setSectionFilters]"),
-    src.replace("const [sectionSorts, setSectionSorts]", "const [sorts, setSectionSorts]"),
+    src.replace('tableTestId="dispatch-board-section-table-all"', 'tableTestId="dispatch-board-table"'),
+    src + '\n// tableTestId={`dispatch-board-section-table-${section.key}`}',
+    src.replace("orderedKeys: boardSections.map((s) => s.key)", "orderedKeys: []"),
+    src.replace("data-testid={`dispatch-board-section-${key}`}", 'data-testid="band"'),
+    src.replace("visibleSectionRows(section.key, section.rows)", "section.rows"),
+    src.replace('cellClass: "whitespace-nowrap"', 'cellClass: "whitespace-normal"'),
   ];
   if (!sectionMutants.every((mutant) => sectionControlIssues(mutant).length > 0)) {
     fail("selftest mutation escaped DSP-04 per-section control guard");
@@ -359,7 +361,7 @@ if (process.argv.includes("--selftest")) {
     src.replace('storageKey={`dispatch-assignment-${band}`}', 'storageKey="dispatch-board"'),
     src.replace('key: "location", label: "Location"', 'key: "location_removed", label: "Location"'),
     src.replace("function renderUnitLocationCell(", "function renderUnitLocationCellRemoved("),
-    src.replace('sortMode="external"', 'sortMode="internal"'),
+    src.replaceAll('sortMode="external"', 'sortMode="internal"'),
     src.replace("setAssignmentBandSorts((current)", "setAssignmentBandSortsRemoved((current)"),
   ];
   if (!assignmentMutants.every((mutant) => assignmentHeaderSortIssues(mutant).length > 0)) {

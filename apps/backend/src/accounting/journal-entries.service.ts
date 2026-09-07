@@ -1101,6 +1101,105 @@ export async function getJournalEntryDetail(userId: string, operatingCompanyId: 
       `,
       [journalEntryId, operatingCompanyId]
     );
-    return { ...header, postings: postingsRes.rows };
+    // ACC-49 — the detail response never carried debit_total_cents/credit_total_cents at all
+    // (JournalEntryDetailPage.tsx's own void-modal label already referenced entry.debit_total_cents,
+    // silently rendering $0.00 — a real, live symptom of this exact gap). Computed here from the
+    // SAME postings just fetched, never a second, competing query against journal_entry_postings.
+    let debitTotalCents = 0;
+    let creditTotalCents = 0;
+    for (const posting of postingsRes.rows as Array<{ debit_or_credit: string; amount_cents: number | string }>) {
+      const cents = Number(posting.amount_cents ?? 0);
+      if (posting.debit_or_credit === "debit") debitTotalCents += cents;
+      else if (posting.debit_or_credit === "credit") creditTotalCents += cents;
+    }
+
+    return { ...header, postings: postingsRes.rows, debit_total_cents: debitTotalCents, credit_total_cents: creditTotalCents };
+  });
+}
+
+export type PostingsBySourceGroup = {
+  journal_entry_id: string;
+  entry_date: string;
+  status: string;
+  postings: Array<Record<string, unknown>>;
+  debit_total_cents: number;
+  credit_total_cents: number;
+};
+
+/**
+ * ACC-49 — postings resolved by (source_transaction_type, source_transaction_id), grouped by their
+ * real parent journal entry so PostingGrid.tsx's balance check (one grid = one JE, always
+ * debit==credit by construction) is never asked to sum postings across unrelated entries. Powers the
+ * Journal tab on Expense/Bill/Invoice detail — the SAME accounting.journal_entry_postings table
+ * JournalEntryDetailPage.tsx reads, just filtered the other direction (by source doc instead of by
+ * journal_entry_uuid). source_transaction_id is TEXT on this table (verified live schema) — every
+ * real writer stores a uuid string in it, cast ::text on the uuid-side param to match.
+ */
+export async function getJournalEntryPostingsBySource(
+  userId: string,
+  operatingCompanyId: string,
+  sourceTransactionType: string,
+  sourceTransactionId: string
+): Promise<PostingsBySourceGroup[]> {
+  return withCurrentUser(userId, async (client) => {
+    await client.query(`SELECT set_config('app.operating_company_id', $1::text, true)`, [operatingCompanyId]);
+    const res = await client.query(
+      `
+        SELECT
+          p.journal_entry_uuid::text AS journal_entry_uuid,
+          je.entry_date::text AS entry_date,
+          je.status AS je_status,
+          p.id,
+          p.line_sequence,
+          p.account_id::text,
+          a.account_number,
+          a.account_name,
+          p.class_id::text,
+          c.class_name,
+          p.entity_uuid::text,
+          p.entity_type,
+          p.debit_or_credit,
+          p.amount_cents,
+          p.description
+        FROM accounting.journal_entry_postings p
+        JOIN accounting.journal_entries je
+          ON je.id = p.journal_entry_uuid
+         AND je.operating_company_id = p.operating_company_id
+        -- ENTITY PREDICATE (CLS-JOIN-ENTITY-UNSCOPED), same pattern getJournalEntryDetail already
+        -- uses: the posting is scoped, the account/class it resolves to must be pinned too.
+        LEFT JOIN catalogs.accounts a ON a.id = p.account_id
+                                     AND a.operating_company_id = p.operating_company_id
+        LEFT JOIN catalogs.classes c ON c.id = p.class_id
+                                    AND c.operating_company_id = p.operating_company_id
+        WHERE p.operating_company_id = $1::uuid
+          AND p.source_transaction_type = $2
+          AND p.source_transaction_id = $3::text
+        ORDER BY je.entry_date ASC, p.journal_entry_uuid ASC, p.line_sequence ASC
+      `,
+      [operatingCompanyId, sourceTransactionType, sourceTransactionId]
+    );
+
+    const groups = new Map<string, PostingsBySourceGroup>();
+    for (const row of res.rows as Array<Record<string, unknown>>) {
+      const jeId = String(row.journal_entry_uuid);
+      let group = groups.get(jeId);
+      if (!group) {
+        group = {
+          journal_entry_id: jeId,
+          entry_date: String(row.entry_date),
+          status: String(row.je_status),
+          postings: [],
+          debit_total_cents: 0,
+          credit_total_cents: 0,
+        };
+        groups.set(jeId, group);
+      }
+      const { journal_entry_uuid: _jeId, je_status: _status, ...posting } = row;
+      group.postings.push(posting);
+      const cents = Number(row.amount_cents ?? 0);
+      if (row.debit_or_credit === "debit") group.debit_total_cents += cents;
+      else if (row.debit_or_credit === "credit") group.credit_total_cents += cents;
+    }
+    return [...groups.values()];
   });
 }

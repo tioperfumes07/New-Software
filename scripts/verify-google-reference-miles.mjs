@@ -2,6 +2,19 @@
 // DSP-48 (owner ruling 2026-09-05, "LAW §2 row: Google distance = REFERENCE ONLY"). This guard
 // enforces the one thing that actually matters about this feature: the reference path can NEVER
 // touch a real money-adjacent miles field. Source-scan, comments masked.
+//
+// DSP-48b (owner ruling 2026-09-05) adds the backend persistence half: legs are now actually
+// upserted into mdata.load_stop_legs on save, INCLUDING the new "empty" leg_kind (yard -> first
+// pickup). Two things landed elsewhere WHILE this task was in flight, so this guard defers to
+// them rather than re-building or re-checking either:
+//   - The frontend wizard-wiring half (the grey reference lines under Practical/Short/Empty, for
+//     BOTH the practical route and the Empty leg) was already shipped by PR #20801 (LDT-1,
+//     GLB-13526) — its own guard (verify-ldt-1-costs-cards.mjs, step 8056) locks it.
+//   - The yard's canonical coordinate source (mdata/yard-location.service.ts's
+//     getYardBiasCoordinates(), warmed from the real mdata.locations is_ih35_yard row) shipped
+//     via Codex's TEL-42 (#20804) — its own guard (verify-yard-location-and-fence.mjs) locks the
+//     live-DB half. This guard only asserts THIS service actually calls it, never a second
+//     hardcoded coordinate of its own.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -10,19 +23,23 @@ import { maskComments } from "./lib/mask-comments.mjs";
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const LABEL = "verify-google-reference-miles";
 
+const SERVICE_FILE = "apps/backend/src/dispatch/google-reference-miles.service.ts";
 const REFERENCE_FILES = [
   "apps/backend/src/integrations/google/routes-api-client.ts",
   "apps/backend/src/integrations/google/route-reference.routes.ts",
-  "apps/backend/src/dispatch/google-reference-miles.service.ts",
+  SERVICE_FILE,
 ];
 const MILES_STRIP = "apps/frontend/src/pages/dispatch/components/book-load-v4/MilesStrip.tsx";
 const CRON = "apps/backend/src/cron/google-reference-miles-expiry-cron.ts";
 const INDEX = "apps/backend/src/index.ts";
 
-// The exact fields a reference path must never write. "miles_deadhead" is intentionally NOT in
-// this list -- the Empty-leg reference is a distinct, still-open extension (see the service's
-// own REMAINING note); when it lands it will need the same boundary, but nothing computes it yet.
+// The exact fields a reference path must never write.
 const FORBIDDEN_MONEY_FIELDS = ["miles_practical", "miles_shortest", "driver_pay", "linehaul", "rate_per_mile", "ratePerMile", "settlement"];
+
+// DSP-48b — this service must never reintroduce its own hardcoded yard coordinate now that
+// TEL-42's getYardBiasCoordinates() exists. Digit-bounded (no leading/trailing digit) so a
+// coincidentally-similar-but-different number elsewhere never false-positives.
+const YARD_COORD_TOKENS = [/(?<!\d)27\.65149(?!\d)/, /(?<!\d)99\.63094(?!\d)/];
 
 function read(rel, root = ROOT) {
   return maskComments(readFileSync(join(root, rel), "utf8"));
@@ -75,6 +92,24 @@ export function collectProblems(root = ROOT) {
     }
   }
 
+  // 2b. DSP-48b's own persistence-on-save requirement: the service must upsert BOTH leg_kinds,
+  // and the empty leg's origin must come from TEL-42's canonical getYardBiasCoordinates(), never
+  // a second hardcoded coordinate of this file's own.
+  const serviceSrc = files[SERVICE_FILE];
+  if (!/["']empty["']/.test(serviceSrc)) {
+    problems.push(`${SERVICE_FILE}: must persist an "empty" leg_kind row (yard -> first pickup) alongside "practical" legs`);
+  }
+  if (!/getYardBiasCoordinates/.test(serviceSrc)) {
+    problems.push(`${SERVICE_FILE}: the empty leg must source its origin from TEL-42's getYardBiasCoordinates(), never a hardcoded coordinate`);
+  }
+  for (const token of YARD_COORD_TOKENS) {
+    if (token.test(serviceSrc)) {
+      problems.push(
+        `${SERVICE_FILE}: reintroduces a hardcoded yard coordinate ("${token.source}") — this service must call getYardBiasCoordinates() (mdata/yard-location.service.ts, TEL-42), not carry its own`
+      );
+    }
+  }
+
   // 3. Expiry job exists and is actually registered (a guard file with no wiring proves nothing).
   if (!/export function initializeGoogleReferenceMilesExpiryCron/.test(files[CRON])) {
     problems.push(`${CRON}: must export initializeGoogleReferenceMilesExpiryCron`);
@@ -82,8 +117,8 @@ export function collectProblems(root = ROOT) {
   if (!/expireStaleGoogleReferenceMiles/.test(files[CRON])) {
     problems.push(`${CRON}: must call expireStaleGoogleReferenceMiles`);
   }
-  if (!/interval '30 days'/.test(files["apps/backend/src/dispatch/google-reference-miles.service.ts"])) {
-    problems.push("apps/backend/src/dispatch/google-reference-miles.service.ts: expiry must be exactly 30 days (Google ToS)");
+  if (!/interval '30 days'/.test(files[SERVICE_FILE])) {
+    problems.push(`${SERVICE_FILE}: expiry must be exactly 30 days (Google ToS)`);
   }
   if (!/initializeGoogleReferenceMilesExpiryCron\(app\)/.test(files[INDEX])) {
     problems.push(`${INDEX}: initializeGoogleReferenceMilesExpiryCron must actually be called at boot, not just importable`);
@@ -109,7 +144,15 @@ if (process.argv.includes("--selftest")) {
   const GOOD = {
     "apps/backend/src/integrations/google/routes-api-client.ts": `export async function computeRouteReference() { return null; }`,
     "apps/backend/src/integrations/google/route-reference.routes.ts": `export async function registerRouteReferenceRoutes() {}`,
-    "apps/backend/src/dispatch/google-reference-miles.service.ts": `export async function computeAndPersistLoadRouteReference() {}\nexport async function expireStaleGoogleReferenceMiles() { return client.query("WHERE x < now() - interval '30 days'"); }`,
+    [SERVICE_FILE]: [
+      `import { getYardBiasCoordinates } from "../mdata/yard-location.service.js";`,
+      `export async function computeAndPersistLoadRouteReference() {`,
+      `  await upsertLeg({ legKind: "practical" });`,
+      `  const yard = getYardBiasCoordinates();`,
+      `  await upsertLeg({ legKind: "empty", from: yard });`,
+      `}`,
+      `export async function expireStaleGoogleReferenceMiles() { return client.query("WHERE x < now() - interval '30 days'"); }`,
+    ].join("\n"),
     [MILES_STRIP]: [
       `export function MilesStrip({ googleReferencePractical = null }) {`,
       `  return (`,
@@ -142,7 +185,15 @@ if (process.argv.includes("--selftest")) {
     {
       name: "reference path writes into miles_practical (the exact regression class this guard exists to catch)",
       overrides: {
-        "apps/backend/src/dispatch/google-reference-miles.service.ts": `export async function computeAndPersistLoadRouteReference(form) { form.setValue("miles_practical", 100); }\nexport async function expireStaleGoogleReferenceMiles() { return client.query("WHERE x < now() - interval '30 days'"); }`,
+        [SERVICE_FILE]: [
+          `import { getYardBiasCoordinates } from "../mdata/yard-location.service.js";`,
+          `export async function computeAndPersistLoadRouteReference(form) {`,
+          `  form.setValue("miles_practical", 100);`,
+          `  await upsertLeg({ legKind: "practical" });`,
+          `  await upsertLeg({ legKind: "empty", from: getYardBiasCoordinates() });`,
+          `}`,
+          `export async function expireStaleGoogleReferenceMiles() { return client.query("WHERE x < now() - interval '30 days'"); }`,
+        ].join("\n"),
       },
       expectProblems: 1,
     },
@@ -175,6 +226,34 @@ if (process.argv.includes("--selftest")) {
       },
       expectProblems: 2,
     },
+    {
+      name: "empty leg never persisted at all (DSP-48b's own regression class)",
+      overrides: {
+        [SERVICE_FILE]: [
+          `import { getYardBiasCoordinates } from "../mdata/yard-location.service.js";`,
+          `const unused = getYardBiasCoordinates;`,
+          `export async function computeAndPersistLoadRouteReference() {`,
+          `  await upsertLeg({ legKind: "practical" });`,
+          `}`,
+          `export async function expireStaleGoogleReferenceMiles() { return client.query("WHERE x < now() - interval '30 days'"); }`,
+        ].join("\n"),
+      },
+      expectProblems: 1,
+    },
+    {
+      name: "empty leg reintroduces its own hardcoded coordinate instead of calling getYardBiasCoordinates()",
+      overrides: {
+        [SERVICE_FILE]: [
+          `export async function computeAndPersistLoadRouteReference() {`,
+          `  await upsertLeg({ legKind: "practical" });`,
+          `  await upsertLeg({ legKind: "empty", from: { lat: 27.65149, lng: -99.63094 } });`,
+          `}`,
+          `export async function expireStaleGoogleReferenceMiles() { return client.query("WHERE x < now() - interval '30 days'"); }`,
+        ].join("\n"),
+      },
+      // Missing getYardBiasCoordinates usage (1) AND both hardcoded tokens present (2 more).
+      expectProblems: 3,
+    },
   ];
 
   for (const { name, overrides, expectProblems } of cases) {
@@ -196,5 +275,5 @@ if (process.argv.includes("--selftest")) {
 } else {
   const problems = collectProblems();
   if (problems.length > 0) fail(problems);
-  console.log(`${LABEL} OK — Google reference miles never touch money fields; the wizard shows them read-only; the 30-day expiry cron is wired`);
+  console.log(`${LABEL} OK — Google reference miles never touch money fields; the wizard shows them read-only; legs persist on save; the 30-day expiry cron is wired`);
 }

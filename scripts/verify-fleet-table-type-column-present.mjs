@@ -17,7 +17,10 @@ function audit(text) {
     ["filter options", /new Set\(rows\.map\(displayType\)\)/],
     ["filter predicate", /typeListFilter && displayType\(r\) !== typeListFilter/],
     ["CSV export", /const cell = \(row: FleetRow, key: string\)[\s\S]{0,300}case "type": return displayType\(row\)/],
-    ["visible table cell", /isVisible\("type"\)[\s\S]{0,100}\{displayType\(row\)\}/],
+    // 2026-09-06 (lead): #20538 (MAINT-X7-01) moved cell rendering into renderFleetCell's switch — the old
+    // `isVisible("type") ? <td>` shape no longer exists, so this pin went stale and reddened build-typecheck-heavy on
+    // main for every PR. Pin the real render edge: the "type" case returns a <td> whose content is displayType(row).
+    ["visible table cell", /case "type": return <td[^>]*>\{displayType\(row\)\}<\/td>;/],
   ];
   return checks.filter(([, pattern]) => !pattern.test(text)).map(([label]) => label);
 }
@@ -32,7 +35,7 @@ if (process.argv.includes("--selftest")) {
     source.replace("new Set(rows.map(displayType))", "new Set([])"),
     source.replace("typeListFilter && displayType(r) !== typeListFilter", "false"),
     source.replaceAll('case "type": return displayType(row);', 'case "type": return "";'),
-    source.replace('isVisible("type") ? <td className="truncate px-2 py-1">{displayType(row)}</td>', 'isVisible("type") ? <td />'),
+    source.replace('case "type": return <td key={key} className="truncate px-2 py-1">{displayType(row)}</td>;', 'case "type": return <td key={key} />;'),
   ];
   const escaped = mutations.filter((fixture) => audit(fixture).length === 0);
   if (audit(source).length || escaped.length) {

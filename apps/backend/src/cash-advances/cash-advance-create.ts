@@ -33,7 +33,13 @@ export type CreateDriverCashAdvanceCoreInput = {
   driver_id: string;
   amount: number;
   purpose: CashAdvancePurpose;
-  disbursement_method: "direct_bank_transfer" | "wire" | "comdata" | "comchek" | "in_person_check";
+  // CLOSE-POST-A-2 (owner ruling 2026-09-06 ROUND 16.9) — "historical_backfill": a real,
+  // already-happened wire the signed settlement document evidences, but with no matching
+  // banking.bank_transactions row to point at today (the owner matches it in Banking later; see
+  // driver_finance.driver_advances.matched_advance_id for that). Distinct from "wire" (a wire
+  // WITH a real bank match) so the two never get confused in a report — same list-never-hides
+  // spirit as every other typed status in this codebase.
+  disbursement_method: "direct_bank_transfer" | "wire" | "comdata" | "comchek" | "in_person_check" | "historical_backfill";
   recipient_info: {
     recipient_type: "driver" | "vendor" | "third_party";
     recipient_name?: string | null;
@@ -278,7 +284,12 @@ export async function createDriverCashAdvanceCore(
   // match this advance to what actually cleared the bank — required, not optional, for every
   // disbursement method that produces a real external instrument. in_person_check is the one
   // legitimate exception (a physical handoff with no clearing-network reference to capture).
-  if (body.disbursement_method !== "in_person_check" && !body.recipient_info.bank_reference?.trim()) {
+  // historical_backfill is the SECOND legitimate exception (CLOSE-POST-A-2, owner ruling
+  // 2026-09-06 ROUND 16.9): a real wire genuinely happened, evidenced by the signed settlement
+  // document, but the bank side was never identified — inventing a bank_reference here would be
+  // exactly the fabricated-instrument-number the owner ruled against; the source-document citation
+  // belongs in recipient_info.notes instead, which this branch does not require.
+  if (body.disbursement_method !== "in_person_check" && body.disbursement_method !== "historical_backfill" && !body.recipient_info.bank_reference?.trim()) {
     return {
       ok: false,
       code: 400,

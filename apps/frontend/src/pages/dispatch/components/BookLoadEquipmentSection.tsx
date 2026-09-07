@@ -5,6 +5,7 @@ import { listDriverTeams } from "../../../api/mdata";
 import { DriverPickerWithCreate } from "../../../components/drivers/DriverPickerWithCreate";
 import { EntityPicker } from "../../../components/EntityPicker";
 import { SelectCombobox } from "../../../components/Combobox";
+import { OptimalDriversPanel } from "../../../components/dispatch/OptimalDriversPanel";
 import { DriverHosClocksBlock } from "../../../components/dispatch/hos/DriverHosClocks";
 import { DeadheadOptimizerPanel } from "../../../components/dispatch/DeadheadOptimizerPanel";
 import { DriverInstructionsTextarea } from "./book-load-v4/DriverInstructionsTextarea";
@@ -43,13 +44,22 @@ type Props = {
   }) => void;
 };
 
-export function BookLoadEquipmentSection({ register, watch, setValue, operatingCompanyId, deadheadAfterAt, deadheadDropCity, deadheadDropState, onOptionsResolved }: Props) {
+export function BookLoadEquipmentSection({ register, watch, setValue, operatingCompanyId, optimizerLoadId, deadheadAfterAt, deadheadDropCity, deadheadDropState, onOptionsResolved }: Props) {
   const assignmentMode = watch ? watch("assignment_mode") : "solo";
   const primaryDriverId = watch ? String(watch("assigned_primary_driver_id") ?? "").trim() : "";
   const secondaryDriverId = watch ? String(watch("assigned_secondary_driver_id") ?? "").trim() : "";
   const hosOperatingCompanyId = operatingCompanyId?.trim() || undefined;
   const assignedUnitId = watch ? String(watch("assigned_unit_id") ?? "") : "";
   const assignedTrailerUnitId = watch ? String(watch("assigned_trailer_unit_id") ?? "") : "";
+  // OPT-PANEL-01 (restored 2026-09-06, LEAD ROUND 13 -- LST-F6134/#20187 dropped this embed with
+  // no owner remove line; additive law requires restoring it). Preview seam: a new (not-yet-booked)
+  // load has no id yet, so the optimizer keys off the in-progress reservation_uuid instead; an
+  // edit-mode caller can still pass a real optimizerLoadId to key off the load itself.
+  const reservationUuid = watch ? String(watch("reservation_uuid") ?? "") : "";
+  const hazmat = watch ? Boolean(watch("hazmat")) : false;
+  const stops = watch ? (watch("stops") as Array<{ city?: string; state?: string }> | undefined) : undefined;
+  const pickupStop = stops?.find((s) => s) ?? stops?.[0];
+  const optimizerLoadKey = optimizerLoadId || reservationUuid || "00000000-0000-4000-8000-000000000000";
   const [primaryDriverOption, setPrimaryDriverOption] = useState<EntityPickerOption | null>(null);
   const [secondaryDriverOption, setSecondaryDriverOption] = useState<EntityPickerOption | null>(null);
   const [unitOption, setUnitOption] = useState<EntityPickerOption | null>(null);
@@ -352,6 +362,22 @@ export function BookLoadEquipmentSection({ register, watch, setValue, operatingC
           <DriverHosClocksBlock driverId={secondaryDriverId} operatingCompanyId={hosOperatingCompanyId} heading="Team driver HOS" />
         ) : null}
       </div>
+      {/* OPT-PANEL-01: restored embed (D8 driver assignment optimizer) — needs a pickup city to
+          rank against, so it only renders once §A's first stop has one. */}
+      {operatingCompanyId && pickupStop?.city ? (
+        <OptimalDriversPanel
+          loadId={optimizerLoadKey}
+          operatingCompanyId={operatingCompanyId}
+          selectedDriverId={primaryDriverId}
+          onSelectDriver={(id) => setValue?.("assigned_primary_driver_id", id, { shouldDirty: true })}
+          preview={{
+            pickup_city: pickupStop.city,
+            pickup_state: pickupStop.state,
+            hazmat,
+            trailer_type: trailerType,
+          }}
+        />
+      ) : null}
       {/* RENDER-A-v2 §B: deadhead-optimizer aid sits with the driver-assignment helpers, before reefer/flatbed. */}
       {assignedUnitId && operatingCompanyId ? (
         <DeadheadOptimizerPanel

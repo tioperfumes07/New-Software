@@ -14,7 +14,21 @@ export type PlannerDriverRow = {
   unit_id?: string | null;
   hos_status: "ok" | "warning_1hr" | "warning_15min" | "violation";
   blackouts: Array<{ start_at: string; end_at: string; reason: string }>;
+  last_dispatch_activity_at: string | null;
 };
+
+// ROUND 16.16 (owner, 2026-09-06 22:3xZ): "active" for the planner roster means real dispatch
+// activity — a load pickup/delivery actual or scheduled inside this window, or a load currently
+// in an active/in-transit status — never Samsara telemetry (most drivers never log into the
+// Samsara driver app: measured live, 151/164 real drivers have last_samsara_login_at IS NULL).
+const PLANNER_ACTIVE_WINDOW_DAYS = 15;
+// mdata.load_status_enum values confirmed live (pg_enum, 2026-09-06) — never guessed.
+const PLANNER_ACTIVE_LOAD_STATUSES = [
+  "dispatched",
+  "at_pickup",
+  "in_transit",
+  "at_delivery",
+];
 
 export type PlannerLoadEvent = {
   id: string;
@@ -125,7 +139,8 @@ export async function getPlannerWeek(userId: string, operatingCompanyId: string,
           d.id::text AS id,
           TRIM(CONCAT_WS(' ', d.first_name, d.last_name)) AS name,
           u.unit_number,
-          u.id::text AS unit_id
+          u.id::text AS unit_id,
+          activity.last_dispatch_activity_at::text AS last_dispatch_activity_at
         FROM mdata.drivers d
         -- §4 landmine: mdata.units has NO operating_company_id (it carries owner_company_id +
         -- currently_leased_to_company_id). The old "u.operating_company_id = d.operating_company_id" join
@@ -135,6 +150,21 @@ export async function getPlannerWeek(userId: string, operatingCompanyId: string,
                                 AND COALESCE(u.currently_leased_to_company_id, u.owner_company_id) = $1::uuid
                                 AND u.deactivated_at IS NULL
                                 AND u.status IN ('InService', 'OutOfService', 'InMaintenance')
+        -- ROUND 16.16: real dispatch-activity recency, replaces Samsara-login as the "active" signal
+        -- (most drivers never log into the Samsara driver app). Considers the driver's own or a
+        -- currently in-progress load's actual/scheduled stop timestamps, most-recent first.
+        LEFT JOIN LATERAL (
+          SELECT GREATEST(
+            MAX(ls.actual_arrival_at),
+            MAX(ls.actual_departure_at),
+            MAX(ls.scheduled_arrival_at),
+            MAX(ls.scheduled_departure_at)
+          ) AS last_dispatch_activity_at
+          FROM mdata.loads pl
+          JOIN mdata.load_stops ls ON ls.load_id = pl.id AND ls.soft_deleted_at IS NULL
+          WHERE pl.operating_company_id = $1::uuid
+            AND (pl.assigned_primary_driver_id = d.id OR pl.assigned_secondary_driver_id = d.id)
+        ) activity ON true
         WHERE (
           d.operating_company_id = $1::uuid
           OR EXISTS (
@@ -148,10 +178,20 @@ export async function getPlannerWeek(userId: string, operatingCompanyId: string,
         )
           AND d.deactivated_at IS NULL
           AND d.archived_at IS NULL
+          AND d.is_sample_data IS NOT TRUE
           AND d.status = 'Active'::mdata.driver_status
+          AND (
+            activity.last_dispatch_activity_at >= (now() - make_interval(days => ${PLANNER_ACTIVE_WINDOW_DAYS}))
+            OR EXISTS (
+              SELECT 1 FROM mdata.loads cl
+              WHERE cl.operating_company_id = $1::uuid
+                AND (cl.assigned_primary_driver_id = d.id OR cl.assigned_secondary_driver_id = d.id)
+                AND cl.status = ANY($2::mdata.load_status_enum[])
+            )
+          )
         ORDER BY d.last_name NULLS LAST, d.first_name NULLS LAST
       `,
-      [operatingCompanyId]
+      [operatingCompanyId, PLANNER_ACTIVE_LOAD_STATUSES]
     );
 
     const loadsRes = await client.query(
@@ -220,6 +260,7 @@ export async function getPlannerWeek(userId: string, operatingCompanyId: string,
         unit_id: row.unit_id ? String(row.unit_id) : null,
         hos_status: clocks ? clocks.status : "ok",
         blackouts: blackoutsByDriver.get(driverId) ?? [],
+        last_dispatch_activity_at: row.last_dispatch_activity_at ? String(row.last_dispatch_activity_at) : null,
       };
     });
 

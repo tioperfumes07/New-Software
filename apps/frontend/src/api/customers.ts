@@ -87,6 +87,39 @@ export async function listAllCustomerPayments(customerId: string, operatingCompa
 export { unapplyPayment as unapplyCustomerPaymentApplication } from "./accounting";
 
 
+// LST-CUST-ACT: GET /api/v1/accounting/customers/:customerId/activity — read-only union of every
+// customer money event (invoices, payments, credit memos, broker advances, factoring advances).
+// Mirrors the vendor read model (CC-1 ACC-45) so the customer "Activity" tab is the same shape.
+export type CustomerActivityType =
+  | "invoice"
+  | "payment"
+  | "credit_memo"
+  | "broker_advance"
+  | "factoring_advance";
+
+export type CustomerActivityRow = {
+  id: string;
+  date: string;
+  type: CustomerActivityType;
+  reference: string;
+  load_number: string | null;
+  /** Signed: positive = charge (invoice), negative = payment/credit/advance. */
+  amount_cents: number;
+  /** Cumulative running A/R balance after this event (chronological). */
+  balance_after_cents: number;
+  status: string;
+};
+
+export function getCustomerActivity(params: {
+  operating_company_id: string;
+  customer_id: string;
+}): Promise<{ rows: CustomerActivityRow[]; total: number }> {
+  const qs = new URLSearchParams({ operating_company_id: params.operating_company_id });
+  return apiRequest<{ rows: CustomerActivityRow[]; total: number }>(
+    `/api/v1/accounting/customers/${encodeURIComponent(params.customer_id)}/activity?${qs.toString()}`
+  );
+}
+
 export function listCoiRequests(customerId: string, params: { operating_company_id: string; status?: CoiRequestStatus }) {
   return listInsuranceCoiRequests(customerId, params);
 }

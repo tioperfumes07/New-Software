@@ -15,6 +15,8 @@ export const PHASE_6_REPORT_HREFS: Record<string, string> = {
   "geofence-dwell": "/reports/geofence-dwell",
   deadhead: "/reports/deadhead",
   "scheduled-reports": "/reports/scheduled",
+  // ACC-51 (LAW §2 reversal plan, read-only) — Accounting → Reports → "Posted while tour open".
+  "posted-while-tour-open": "/reports/posted-while-tour-open",
 };
 
 export function phase6ReportHref(reportId: string): string | undefined {

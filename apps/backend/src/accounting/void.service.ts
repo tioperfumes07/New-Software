@@ -334,9 +334,23 @@ const BANK_MATCH_REVERSE_TABLE: Partial<Record<VoidableEntityType, string>> = {
 // voided already had ITS journal entry reversed by postVoidReversal above (or by the caller, for a
 // direct GL void) before this runs, so clearing the pointer here cannot orphan a live, unreversed
 // JE — it only clears a categorization/link field on the bank-transaction side.
+//
+// ACC-20 (owner-defect register 2026-09-03, "no automatic un-categorize in either direction when a
+// match is reversed"): this reset used to leave `review_state` completely untouched — every
+// matched_*_id/categorization_* field cleared and status flipped to 'pending_categorization', but a
+// row whose review_state was 'matched' (or 'categorized') stayed exactly that, forever. Two real
+// consumers read review_state as authoritative, not status: match.service.ts's confirm-match
+// idempotency guard (`if (txn.review_state === "matched") throw`) would permanently refuse to
+// re-match a transaction this exact reset just released, and reconciliation.routes.ts's own manual
+// /unmatch route (the ONLY other place a match is released) already resets review_state = 'for_review'
+// for the identical "match reversed" concept — this was the one inconsistent path. Bringing it in
+// line: 'for_review' is the correct "back in the queue" state (session-scoped comment above already
+// established this same fact for the sibling route); 'unmatched' is not a legal review_state per the
+// CHECK constraint.
 const BANK_TX_UNMATCH_RESET_SQL = `
   UPDATE banking.bank_transactions
      SET status = 'pending_categorization',
+         review_state = 'for_review',
          matched_journal_entry_id = NULL,
          matched_load_id = NULL,
          matched_bill_id = NULL,
@@ -520,15 +534,11 @@ export async function postVoidReversal(
   // document with zero posted lines could still (in principle) carry a bank match, and the owner's
   // rule has no "only if something reversed" exception: "no voided document may leave a bank
   // transaction categorized against it."
-  await unmatchBankTransactionsForVoid(
-    client,
-    {
-      operatingCompanyId: params.operatingCompanyId,
-      entityType: params.entityType,
-      entityId: params.entityId,
-    },
-    actor
-  );
+  await unmatchBankTransactionsForVoid(client, {
+    operatingCompanyId: params.operatingCompanyId,
+    entityType: params.entityType,
+    entityId: params.entityId,
+  }, actor);
 
   const originalLines = await readOriginalGlPostings(client, params.operatingCompanyId, params.entityType, params.entityId);
   if (originalLines.length === 0) {

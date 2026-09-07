@@ -55,6 +55,14 @@ export type DrillKpiCardProps = KpiDrillTarget & {
   /** Selected state for filter-style KPI tiles (FleetTable, SafetyEvents). */
   active?: boolean;
   testId?: string;
+  /**
+   * PACKET-C (Fleet OOS/in-shop columns, 2026-09-03) — In-Shop and OOS are two DIFFERENT
+   * severities (in-shop = expected/planned maintenance, OOS = the unit cannot run) and must read
+   * as visually distinct, not two identically-styled counters. Reuses the SAME §7-locked
+   * warning/critical shades VALUE_TONE already carries (never a new color) as a left accent bar —
+   * `accent` above still wins if a call site passes both.
+   */
+  tone?: "in-shop" | "oos";
 };
 
 /** §7-locked tones already in use on the R&M status board. Red stays reserved; amber is warning. */
@@ -62,6 +70,13 @@ const VALUE_TONE: Record<NonNullable<DrillKpiCardProps["valueTone"]>, string> = 
   default: "",
   critical: "text-[#A32D2D]",
   warning: "text-[#854F0B]",
+};
+
+/** PACKET-C tone -> the same §7-locked accent shades, so In-Shop (amber/warning) and OOS
+ *  (red/critical) are always distinguishable at a glance. */
+const KPI_TONE_ACCENT: Record<NonNullable<DrillKpiCardProps["tone"]>, string> = {
+  "in-shop": "#854F0B",
+  oos: "#A32D2D",
 };
 
 export function DrillKpiCard({
@@ -76,7 +91,9 @@ export function DrillKpiCard({
   to,
   onClick,
   unavailable,
+  tone,
 }: DrillKpiCardProps) {
+  const resolvedAccent = accent ?? (tone ? KPI_TONE_ACCENT[tone] : undefined);
   const compact = size === "sm";
   const shell = [
     // CENTER-EVERYTHING + KPI-TILE-SIZE LAW (owner ruling 2026-09-04, ORCH-measured): centered,
@@ -110,8 +127,8 @@ export function DrillKpiCard({
       {hint ? <div className="mt-0.5 text-[11px] leading-snug text-gray-500">{hint}</div> : null}
     </>
   );
-  const style = accent
-    ? { ...maxHeightStyle, ...kpiTileStyle, borderLeft: `3px solid ${accent}` }
+  const style = resolvedAccent
+    ? { ...maxHeightStyle, ...kpiTileStyle, borderLeft: `3px solid ${resolvedAccent}` }
     : { ...maxHeightStyle, ...kpiTileStyle };
 
   if (unavailable) {

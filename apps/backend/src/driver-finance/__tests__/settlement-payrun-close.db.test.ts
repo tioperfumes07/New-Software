@@ -444,6 +444,15 @@ describeIntegration("SETTLEMENT PAY-RUN CLOSE net-zero (real Postgres)", () => {
     // exactly ONE payrun_gl_runs anchor
     const runs = await read<{ c: string }>(`SELECT count(*)::text AS c FROM driver_finance.payrun_gl_runs WHERE settlement_id=$1::uuid`, [below.settlementId]);
     expect(Number(runs[0]!.c)).toBe(1);
+
+    // SETL-POST-01 — a real post through this poster stamps the header's posted_at/posted_by_user_id
+    // (migration 202607520000 added the columns; this is the writer-repoint that never landed until now).
+    const posted = await read<{ posted_at: string | null; posted_by_user_id: string | null }>(
+      `SELECT posted_at::text, posted_by_user_id::text FROM driver_finance.driver_settlements WHERE id=$1::uuid`,
+      [below.settlementId]
+    );
+    expect(posted[0]!.posted_at).toBeTruthy();
+    expect(posted[0]!.posted_by_user_id).toBe(flagActor);
   });
 
   it("(1b) idempotent: a second flag-ON close does not double-post (one JE, advance recovered once)", async () => {
@@ -520,6 +529,12 @@ describeIntegration("SETTLEMENT PAY-RUN CLOSE net-zero (real Postgres)", () => {
       [off.advanceId]
     );
     expect(adv[0]!.recovered).toBeNull();
+    // SETL-POST-01 — preview must never stamp posted_at either (flag-OFF writes NOTHING).
+    const posted = await read<{ posted_at: string | null }>(
+      `SELECT posted_at::text FROM driver_finance.driver_settlements WHERE id=$1::uuid`,
+      [off.settlementId]
+    );
+    expect(posted[0]!.posted_at).toBeNull();
   });
 
   it("(4) maker==checker cash-advance is rejected; authority (reviewer NULL) and distinct maker<>checker allowed", async () => {

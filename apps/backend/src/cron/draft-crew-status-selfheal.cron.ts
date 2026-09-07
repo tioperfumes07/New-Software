@@ -71,11 +71,11 @@ export async function runDraftCrewStatusSelfHealTick(
                   WHERE db.load_id = l.id AND db.operating_company_id = l.operating_company_id
                     AND db.status <> 'void'
                )
-               OR EXISTS (
-                 SELECT 1 FROM accounting.invoices inv
-                  WHERE inv.load_id = l.id AND inv.operating_company_id = l.operating_company_id
-                    AND inv.status = 'proforma'
-               )
+              OR EXISTS (
+                SELECT 1 FROM accounting.invoices inv
+                 WHERE inv.source_load_id = l.id AND inv.operating_company_id = l.operating_company_id
+                   AND inv.status = 'proforma'
+              )
              )
            ORDER BY l.id
            LIMIT 500

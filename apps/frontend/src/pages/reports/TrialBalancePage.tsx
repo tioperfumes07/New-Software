@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import { DatePicker } from "../../components/forms/DatePicker";
+import { Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "../../components/Button";
 import { PageHeader } from "../../components/layout/PageHeader";
@@ -13,7 +12,7 @@ import {
 } from "../../api/reports";
 import { ReportBlockTPendingBanner } from "./ReportBlockTPendingBanner";
 import { ReportsSubNav } from "./ReportsSubNav";
-import { CollapsedListFilters, useStagedListFilters } from "../../components/table";
+import { ReportFilterBar } from "../../components/reports/ReportFilterBar";
 import { formatAccountTypeLabel } from "../../lib/formatAccountTypeLabel";
 import { mmmDd, mmmDdTime } from "../../lib/formatDate";
 import { printLetterHtml } from "../../lib/openPrintableDocument";
@@ -52,14 +51,11 @@ export function TrialBalancePage() {
   const { selectedCompanyId } = useCompanyContext();
   const companyId = selectedCompanyId ?? "";
   const [showCodes] = useShowAccountNumbers();
+  const [searchParams, setSearchParams] = useSearchParams();
   const emptyFilters = { ...currentQuarterRange(), basis: "accrual" as AccountingBasis };
   const [applied, setApplied] = useState(emptyFilters);
   const exportAction = useExportAction();
-  const staged = useStagedListFilters({
-    applied,
-    empty: emptyFilters,
-    onApply: setApplied,
-  });
+  const [reportSearch, setReportSearch] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("account_code");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
@@ -104,8 +100,10 @@ export function TrialBalancePage() {
         });
       }
     }
+    const q = reportSearch.toLowerCase();
+    const filtered = q ? input.filter((row) => String(row.account_name ?? "").toLowerCase().includes(q) || String(row.account_code ?? "").toLowerCase().includes(q)) : input;
     const mul = sortDir === "asc" ? 1 : -1;
-    const output = [...input];
+    const output = [...filtered];
     output.sort((a, b) => {
       if (sortKey === "account_code" || sortKey === "account_name" || sortKey === "account_type") {
         return String(a[sortKey]).localeCompare(String(b[sortKey])) * mul;
@@ -113,7 +111,7 @@ export function TrialBalancePage() {
       return ((a[sortKey] as number) - (b[sortKey] as number)) * mul;
     });
     return output;
-  }, [query.data?.rows, sortDir, sortKey]);
+  }, [query.data?.rows, sortDir, sortKey, reportSearch, applied.basis]);
 
   function toggleSort(next: SortKey) {
     if (sortKey === next) {
@@ -242,39 +240,25 @@ export function TrialBalancePage() {
         </p>
       ) : null}
 
-      <CollapsedListFilters
-        activeFilterCount={JSON.stringify(applied) !== JSON.stringify(emptyFilters) ? 1 : 0}
-        onApply={staged.apply}
-        onReset={staged.reset}
-        onCancel={staged.cancel}
-        applyDisabled={!staged.dirty}
-        defaultOpen={true}
+      <ReportFilterBar
         testIdPrefix="reports-trial-balance"
-        className="no-print rounded-sm border border-gray-200 bg-white p-3"
+        fromDate={applied.start}
+        toDate={applied.end}
+        onFromDateChange={(d) => setApplied((p) => ({ ...p, start: d ?? "" }))}
+        onToDateChange={(d) => setApplied((p) => ({ ...p, end: d ?? "" }))}
+        onPresetSelect={(preset) => {
+          const next = new URLSearchParams(searchParams);
+          next.set("preset", preset);
+          setSearchParams(next, { replace: true });
+        }}
+        search={reportSearch}
+        onSearchChange={setReportSearch}
       >
-        <div className="flex flex-wrap items-end gap-3">
-          <BasisSelector
-            value={staged.draft.basis}
-            onChange={(next) => staged.setDraft((previous) => ({ ...previous, basis: next }))}
-          />
-          <label className="text-xs text-gray-600">
-            From
-            <DatePicker
-              className="mt-1 block h-9"
-              value={staged.draft.start}
-              onChange={(next) => staged.setDraft((previous) => ({ ...previous, start: next }))}
-            />
-          </label>
-          <label className="text-xs text-gray-600">
-            To
-            <DatePicker
-              className="mt-1 block h-9"
-              value={staged.draft.end}
-              onChange={(next) => staged.setDraft((previous) => ({ ...previous, end: next }))}
-            />
-          </label>
-        </div>
-      </CollapsedListFilters>
+        <BasisSelector
+          value={applied.basis}
+          onChange={(next) => setApplied((p) => ({ ...p, basis: next }))}
+        />
+      </ReportFilterBar>
 
       {summary ? (
         <div className="grid gap-2 md:grid-cols-3">

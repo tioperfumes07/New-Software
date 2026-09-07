@@ -1,7 +1,9 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import pg from "pg";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { buildPgClientConfig } from "../../lib/pg-connection-options.js";
 import { DETECTOR_REGISTRY } from "./detector.service.js";
 
 /**
@@ -47,4 +49,50 @@ describe("anomaly detector — phantom-relation guard", () => {
       expect(findings).toEqual([]);
     });
   }
+});
+
+/**
+ * ROUND 16.4 (owner 2026-09-06 21:15Z) — Render logs every cadence: detectDvirMajorOpen threw
+ * Postgres 42P10 "for SELECT DISTINCT, ORDER BY expressions must appear in select list" (a CAST in
+ * the select list, `d.id::text AS dvir_id`, is a different expression than the bare `d.id` the
+ * ORDER BY clause used), then "current transaction is aborted" cascaded across every other rule.
+ * detectInactiveDriverAssignment had the identical bug. Runs only in CI (GITHUB_ACTIONS=true)
+ * against a fully-migrated Postgres, same convention as settlement-payrun-close.db.test.ts.
+ */
+const describeIntegration = describe.skipIf(process.env.GITHUB_ACTIONS !== "true");
+const NIL_UUID = "00000000-0000-0000-0000-000000000000";
+
+describeIntegration("anomaly detector — SELECT DISTINCT / ORDER BY (real Postgres, 42P10 regression)", () => {
+  let client: pg.Client;
+
+  beforeAll(async () => {
+    client = new pg.Client(buildPgClientConfig(process.env.DATABASE_URL!));
+    await client.connect();
+  });
+
+  afterAll(async () => {
+    await client.end();
+  });
+
+  it("dvir_major_open_unit executes without 42P10 (empty result on a nil company is fine — proving it PARSES/RUNS is the point)", async () => {
+    const detector = DETECTOR_REGISTRY.dvir_major_open_unit;
+    await expect(detector(client, NIL_UUID, {})).resolves.toEqual([]);
+  });
+
+  it("inactive_driver_assignment executes without 42P10", async () => {
+    const detector = DETECTOR_REGISTRY.inactive_driver_assignment;
+    await expect(detector(client, NIL_UUID, {})).resolves.toEqual([]);
+  });
+
+  it("the ORIGINAL (unfixed) shape genuinely throws 42P10 — proves this is a real Postgres rule, not a guessed fix", async () => {
+    await expect(
+      client.query(
+        `SELECT DISTINCT d.unit_id::text AS unit_id, d.id::text AS dvir_id
+           FROM safety.dvir_submissions d
+          WHERE d.operating_company_id = $1::uuid AND d.has_major_defect = true
+          ORDER BY d.id`,
+        [NIL_UUID]
+      )
+    ).rejects.toMatchObject({ code: "42P10" });
+  });
 });

@@ -41,6 +41,7 @@ export type CompanySettlementDriverPaymentRow = {
   load_id: string | null;
   load_number: string | null;
   driver_id: string;
+  driver_name: string | null;
   line_type: string;
   description: string | null;
   amount_cents: number;
@@ -206,16 +207,19 @@ export async function buildCompanySettlementReport(
     load_id: string | null;
     load_number: string | null;
     driver_id: string;
+    driver_name: string | null;
     line_type: string;
     description: string | null;
     amount_dollars: string;
   }>(
     `
       SELECT sl.load_id::text AS load_id, l.load_number, ds.driver_id::text AS driver_id,
+             NULLIF(TRIM(COALESCE(dr.first_name, '') || ' ' || COALESCE(dr.last_name, '')), '') AS driver_name,
              sl.line_type, sl.description, sl.amount::text AS amount_dollars
       FROM driver_finance.settlement_lines sl
       JOIN driver_finance.driver_settlements ds ON ds.id = sl.settlement_id
       LEFT JOIN mdata.loads l ON l.id = sl.load_id
+      LEFT JOIN mdata.drivers dr ON dr.id = ds.driver_id AND dr.operating_company_id = ds.operating_company_id
       WHERE sl.settlement_id = ANY($1::uuid[])
         AND sl.is_active = true
       ORDER BY l.load_number NULLS LAST, sl.line_type
@@ -226,6 +230,7 @@ export async function buildCompanySettlementReport(
     load_id: r.load_id,
     load_number: r.load_number,
     driver_id: r.driver_id,
+    driver_name: r.driver_name,
     line_type: r.line_type,
     description: r.description,
     amount_cents: Math.round(Number(r.amount_dollars) * 100),
@@ -237,6 +242,7 @@ export async function buildCompanySettlementReport(
       load_id: l.load_id,
       load_number: l.load_number,
       driver_id: l.driver_id,
+      driver_name: l.driver_name,
       line_type: l.line_type,
       description: l.description,
       amount_cents: l.amount_cents,

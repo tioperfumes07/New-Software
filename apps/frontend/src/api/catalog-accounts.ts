@@ -6,6 +6,9 @@ export type CatalogAccount = {
   account_name: string;
   account_type: string;
   account_subtype: string | null;
+  /** catalogs.accounts.system_purpose — role tag (bank_operating, relay_fuel_wallet, …). LDT-1 reads it
+   *  to decide which accounts may appear under "Paid with". */
+  system_purpose?: string | null;
   /** LINK-02 — FK to catalogs.detail_types when Neon mig applied. */
   detail_type_id?: string | null;
   parent_account_id: string | null;

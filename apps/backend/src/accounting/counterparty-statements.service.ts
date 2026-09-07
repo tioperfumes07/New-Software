@@ -284,8 +284,8 @@ async function vendorLedgerLines(
 ): Promise<Omit<StatementLine, "running_balance_cents">[]> {
   const billRows = await client.query<{ date: string; reference: string; description: string; amount_cents: string | number; id: string }>(
     `
-      SELECT b.bill_date::text AS date, COALESCE(b.display_id, b.bill_number, b.id::text) AS reference,
-             ('Bill ' || COALESCE(b.display_id, b.bill_number, b.id::text)) AS description,
+      SELECT b.bill_date::text AS date, COALESCE(b.bill_number, b.display_id, b.id::text) AS reference,
+             ('Bill ' || COALESCE(b.bill_number, b.display_id, b.id::text)) AS description,
              b.amount_cents AS amount_cents, b.id::text AS id
       FROM accounting.bills b
       WHERE b.operating_company_id = $1::uuid

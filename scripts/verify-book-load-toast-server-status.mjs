@@ -143,9 +143,14 @@ export function auditStopFieldsSent(sectionSrc, modalSrc, serviceSrc) {
     return [`${STOPS_SECTION}: found ZERO registered stop fields — refusing to pass vacuously.`];
   }
 
-  const m = modalSrc.match(/stops:\s*values\.stops\.map\(\(stop, index\) => \(\{([\s\S]*?)\}\)\),/);
+  // RE-PIN 2026-09-06: the code evolved to use `submitStops` (a derived variable) instead of
+  // `values.stops` directly, and a block body `=> {` instead of an arrow expression `=> ({`. The
+  // contract is that the stops payload is a field-by-field mapping — the source variable and body
+  // syntax are implementation details.
+  const m = modalSrc.match(/stops:\s*(?:values\.stops|submitStops)\.map\(\(stop, index\) => \{?[\s\S]*?(?:\{([\s\S]*?)\}|return \{([\s\S]*?)\})/);
   if (!m) return [`${MODAL}: could not read the stops payload mapping — refusing to pass vacuously.`];
-  const sent = new Set([...m[1].matchAll(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:/gm)].map((x) => x[1]));
+  const mappingBody = m[1] ?? m[2] ?? "";
+  const sent = new Set([...mappingBody.matchAll(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:/gm)].map((x) => x[1]));
 
   for (const field of registered) {
     if (sent.has(field)) continue;

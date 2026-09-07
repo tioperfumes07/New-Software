@@ -1,21 +1,29 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { useState, type ReactElement } from "react";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as bankingApi from "../../../api/banking";
 import { ToastProvider } from "../../../components/Toast";
 import { BankingTransactionsDesignView, spentReceived } from "./BankingTransactionsDesignView";
+
+// BANK-TOOLBAR-ONE: column visibility now persists via ParityTable's own storageKey
+// ("banking-transactions", same convention as ParityTable.test.tsx/ParityTable.footer.test.tsx) —
+// clear it between tests so one test's gear toggles can't leak into the next.
+beforeEach(() => {
+  window.localStorage.clear();
+});
 
 vi.mock("../../../api/banking", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../../api/banking")>();
   return {
     ...actual,
     getPlaidCompanyTransactions: vi.fn(),
-    getBankingSuggestions: vi.fn().mockResolvedValue({ suggestions: [] }),
+    getBankingSuggestions: vi.fn().mockResolvedValue({ suggestions: [], rule_match: null }),
     getMatchCandidates: vi.fn().mockResolvedValue({ candidates: [], match_candidates_count: 0 }),
     getCoaAccounts: vi.fn().mockResolvedValue({ accounts: [] }),
     categorizeTransaction: vi.fn().mockResolvedValue({ ok: true }),
+    categorizeBankTransaction: vi.fn().mockResolvedValue({ ok: true }),
     skipBankTransactionInvestigation: vi.fn().mockResolvedValue({ ok: true }),
     splitTransaction: vi.fn().mockResolvedValue({ ok: true }),
     uploadBankStatementCsv: vi.fn().mockResolvedValue({ added: 0, errors: [] }),
@@ -421,6 +429,86 @@ describe("BankingTransactionsDesignView ParityTable Phase B shell", () => {
   });
 });
 
+// B2 BANK-REGISTER-COLUMNS (owner CONSOLIDATED 2026-09-06 18:30Z, item 3): "Check No., Vendor,
+// Memo, Category, Match status, Reference and Posted JE are real columns, Check No. and Vendor on
+// by default."
+describe("BankingTransactionsDesignView B2 register columns", () => {
+  const account = {
+    id: "acct-1",
+    operating_company_id: "company-1",
+    institution_name: "Chase",
+    account_name: "Operating",
+    account_mask: "1234",
+    account_type: "depository",
+    current_balance_cents: 100000,
+    available_balance_cents: 100000,
+    currency_code: "USD",
+    is_active: true,
+    sync_status: "active" as const,
+    last_synced_at: null,
+    plaid_item_id: "item-1",
+    created_at: "2026-05-01T00:00:00.000Z",
+    updated_at: "2026-05-01T00:00:00.000Z",
+  };
+
+  it("Check No. and Payee (Vendor) render by default; the 5 new columns stay hidden until toggled on", async () => {
+    // Un-matched, so it stays on the default "For review" tab (a matched transaction is bucketed
+    // out of that tab entirely — hasPersistedMatch/matched_kind — a different, real behavior this
+    // test isn't exercising).
+    vi.mocked(bankingApi.getPlaidCompanyTransactions).mockResolvedValue({
+      transactions: [
+        {
+          ...tx("tx-b2-1", "acct-1", 2500, "2026-05-17T00:00:00.000Z", "B2 columns txn"),
+          source_ref: "REF-9001",
+        },
+      ],
+    });
+
+    render(
+      wrap(
+        <BankingTransactionsDesignView
+          companyId="company-1"
+          accounts={[account]}
+          selectedAccountId="acct-1"
+          onSelectAccount={() => {}}
+          onManageConnections={() => {}}
+          onDataChanged={() => {}}
+        />
+      )
+    );
+
+    expect(await screen.findByText("B2 columns txn")).toBeInTheDocument();
+    // Check No. and Payee columns are ON by default — their <th> header renders without any gear
+    // interaction. Scoped to each column's own testId throughout this test: several of these
+    // labels (e.g. "Category") also appear as plain toolbar text ("Categorize by ▾
+    // Category/Item"), which a bare screen.getByText/getByRole("columnheader") would collide with.
+    expect(screen.getByTestId("banking-register-col-checkNo")).toBeInTheDocument();
+    expect(screen.getByTestId("banking-register-col-payee")).toBeInTheDocument();
+    // The 5 new columns are OFF by default — no such <th> exists yet.
+    expect(screen.queryByTestId("banking-register-col-memo")).toBeNull();
+    expect(screen.queryByTestId("banking-register-col-category")).toBeNull();
+    expect(screen.queryByTestId("banking-register-col-matchStatus")).toBeNull();
+    expect(screen.queryByTestId("banking-register-col-reference")).toBeNull();
+    expect(screen.queryByTestId("banking-register-col-postedJe")).toBeNull();
+
+    // BANK-TOOLBAR-ONE: the page's own second "View settings" gear is gone — Memo/Category/Match
+    // status/Reference/Posted JE are now unconditional, defaultHidden columns toggled from
+    // ParityTable's own single gear (the "Also show"/columns list rendered inside it).
+    fireEvent.click(screen.getByTestId("banking-transactions-gear"));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Memo" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Category" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Match status" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Reference" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Posted JE" }));
+    // ParityTable's own gear is draft + Apply (unlike the old page-level ToggleLine, which applied
+    // each click immediately) — commit the column-visibility draft before asserting.
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+
+    await waitFor(() => expect(screen.getByText("REF-9001")).toBeInTheDocument());
+    expect(screen.getByText("Unmatched")).toBeInTheDocument();
+  });
+});
+
 describe("BankingTransactionsDesignView inline class create (FIX-4)", () => {
   it("keeps the new class label after inline create, without needing a reselect", async () => {
     vi.mocked(bankingApi.getPlaidCompanyTransactions).mockResolvedValue({
@@ -458,10 +546,11 @@ describe("BankingTransactionsDesignView inline class create (FIX-4)", () => {
       )
     );
 
-    // Turn on the Class column (hidden by default) via the view-settings gear.
+    // Turn on the Class column (hidden by default) via the ONE gear (BANK-TOOLBAR-ONE).
     expect(await screen.findByText("Class create test txn")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "View settings" }));
+    fireEvent.click(screen.getByTestId("banking-transactions-gear"));
     fireEvent.click(screen.getByRole("checkbox", { name: "Class" }));
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
 
     // Expand the row (Categorize is the default mode) to reveal the Class ReferenceSelect.
     fireEvent.click(screen.getByText("Class create test txn"));
@@ -478,4 +567,72 @@ describe("BankingTransactionsDesignView inline class create (FIX-4)", () => {
     // The collapsed row's Class cell must show the new name immediately — no reopen/reselect.
     expect(await screen.findByText("TRK-101-SMITH")).toBeInTheDocument();
   });
+});
+
+describe("BankingTransactionsDesignView rule-match pre-fill (ROUND 16.21)", () => {
+  it("pre-fills Category from a real accounting.banking_rules match (ACCT-F375) without writing anything until Save", async () => {
+    vi.mocked(bankingApi.getPlaidCompanyTransactions).mockResolvedValue({
+      transactions: [tx("tx-rule-1", "acct-1", 5000, "2026-08-20T00:00:00.000Z", "LOVE'S TRAVEL STOP #123")],
+    });
+    vi.mocked(bankingApi.getCoaAccounts).mockResolvedValue({
+      accounts: [{ id: "acct-6300", account_number: "6300", account_name: "Fuel & Diesel", account_type: "expense" }],
+    });
+    vi.mocked(bankingApi.getBankingSuggestions).mockResolvedValue({
+      suggestions: [],
+      rule_match: { rule_id: "rule-1", then_account_id: "acct-6300", then_vendor_id: null },
+    });
+
+    render(
+      wrap(
+        <BankingTransactionsDesignView
+          companyId="company-1"
+          accounts={[
+            {
+              id: "acct-1",
+              operating_company_id: "company-1",
+              institution_name: "Chase",
+              account_name: "Operating",
+              account_mask: "1234",
+              account_type: "depository",
+              current_balance_cents: 100000,
+              available_balance_cents: 100000,
+              currency_code: "USD",
+              is_active: true,
+              sync_status: "active",
+              last_synced_at: null,
+              plaid_item_id: "item-1",
+              created_at: "2026-05-01T00:00:00.000Z",
+              updated_at: "2026-05-01T00:00:00.000Z",
+            },
+          ]}
+          selectedAccountId="acct-1"
+          onSelectAccount={() => {}}
+          onManageConnections={() => {}}
+          onDataChanged={() => {}}
+        />
+      )
+    );
+
+    // Expand the row (Categorize is the default mode) — this triggers the /suggestions fetch.
+    expect(await screen.findByText("LOVE'S TRAVEL STOP #123")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("LOVE'S TRAVEL STOP #123"));
+
+    // The honesty note confirms the pre-fill actually ran (not just that data arrived).
+    expect(await screen.findByTestId("banking-rule-match-prefill-note")).toBeInTheDocument();
+    // The Category picker itself now shows the matched account — pre-filled, not blank; the
+    // operator still has to click the real Save/Categorize action for anything to persist (this
+    // test asserts only the form state, never calls categorizeBankTransaction). ReferenceSelect
+    // renders its current value as a combobox <input value="…">, so this checks the input's value,
+    // not rendered text content.
+    expect(
+      await within(screen.getByTestId("banking-categorize-picker-category")).findByDisplayValue("Fuel & Diesel")
+    ).toBeInTheDocument();
+    expect(bankingApi.categorizeBankTransaction).not.toHaveBeenCalled();
+  });
+
+  // The "never clobber an operator's own pick" guarantee (the pre-fill effect's own
+  // `if (existing?.accountId || existing?.vendorId) return;` early-out) is pinned by
+  // scripts/verify-round1621-rule-match-prefill.mjs instead of here — driving the real
+  // ReferenceSelect/Combobox through a manual override in this test harness fights portal timing
+  // that isn't the thing actually under test; the guard reads the one-line invariant directly.
 });

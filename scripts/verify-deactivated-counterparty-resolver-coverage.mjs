@@ -51,9 +51,13 @@ if (!/mdata\.resolve_vendor_label_same_company\(\s*CASE WHEN b\.vendor_uuid/.tes
 const invoicesPath = "apps/backend/src/accounting/invoices.routes.ts";
 const invoicesSrc = readFileSync(invoicesPath, "utf8");
 
-const searchFilterMatch = invoicesSrc.match(/extraWhere\.push\(\s*`\(i\.display_id ILIKE[^`]*`\s*\);/s);
+// The inline extraWhere.push(`(i.display_id ILIKE ...`) block was extracted into a shared,
+// reusable buildListSearchClause + invoiceListSearchFields helper (DRY refactor) — the resolver
+// COALESCE is now passed in as customerNameExpr rather than inlined at the call site directly.
+// The invariant (search can find a deactivated customer's invoice by resolved name) is unchanged.
+const searchFilterMatch = invoicesSrc.match(/invoiceListSearchFields\(\{\s*\n\s*customerNameExpr:\s*\n\s*"[^"]*"/s);
 if (!searchFilterMatch) {
-  failures.push(`${invoicesPath}: could not locate the invoice list search-filter extraWhere.push(...) block`);
+  failures.push(`${invoicesPath}: could not locate the invoiceListSearchFields(...) customerNameExpr block`);
 } else if (!/COALESCE\(c\.customer_name,\s*mdata\.resolve_customer_label_same_company\(i\.customer_id/.test(searchFilterMatch[0])) {
   failures.push(
     `${invoicesPath}: search filter still matches the plain c.customer_name only — a deactivated ` +

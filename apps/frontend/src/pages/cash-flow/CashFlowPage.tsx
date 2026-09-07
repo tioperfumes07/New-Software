@@ -6,12 +6,18 @@ import { useCompanyContext } from "../../contexts/CompanyContext";
 import { DailyPredictionTab } from "./tabs/DailyPredictionTab";
 import { ActualVsProjectedTab } from "./tabs/ActualVsProjectedTab";
 import { ManualDailyProjectionsTab } from "./tabs/ManualDailyProjectionsTab";
+import { RollingLedgerTab } from "./tabs/RollingLedgerTab";
 import { useFeatureFlag } from "../../hooks/useFeatureFlag";
 import { CASH_FORECAST_ENABLED_FLAG } from "../../api/forecast";
 
-type CashFlowTabId = "daily_prediction" | "actual_vs_projected" | "manual_daily_projections";
+type CashFlowTabId = "daily_prediction" | "actual_vs_projected" | "manual_daily_projections" | "rolling_ledger";
 
-const ALL_TAB_IDS = new Set<CashFlowTabId>(["daily_prediction", "actual_vs_projected", "manual_daily_projections"]);
+const ALL_TAB_IDS = new Set<CashFlowTabId>([
+  "daily_prediction",
+  "actual_vs_projected",
+  "manual_daily_projections",
+  "rolling_ledger",
+]);
 
 function parseCashFlowTab(raw: string | null, allowManual: boolean): CashFlowTabId {
   if (raw && ALL_TAB_IDS.has(raw as CashFlowTabId)) {
@@ -36,6 +42,7 @@ export function CashFlowPage() {
   const TABS: { id: CashFlowTabId; label: string }[] = [
     { id: "daily_prediction", label: "Projected (Auto)" },
     { id: "actual_vs_projected", label: "Actual vs Projected" },
+    { id: "rolling_ledger", label: "Rolling Ledger" },
     ...(manualForecastEnabled ? [{ id: "manual_daily_projections" as const, label: "Manual Daily Projections" }] : []),
   ];
 
@@ -91,6 +98,9 @@ export function CashFlowPage() {
       )}
       {activeTab === "actual_vs_projected" && (
         <ActualVsProjectedTab operatingCompanyId={selectedCompanyId} />
+      )}
+      {activeTab === "rolling_ledger" && (
+        <RollingLedgerTab operatingCompanyId={selectedCompanyId} />
       )}
       {activeTab === "manual_daily_projections" && manualForecastEnabled && (
         <ManualDailyProjectionsTab operatingCompanyId={selectedCompanyId} />

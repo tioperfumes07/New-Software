@@ -80,8 +80,8 @@ export async function listSubmissionQueueInvoices(
         i.due_date::text,
         i.total_cents::bigint,
         i.source_load_id::text              AS load_id,
-        fv.id::text                         AS factor_id,
-        fv.vendor_name                      AS factor_name,
+        assigned_factor.id::text            AS factor_id,
+        assigned_factor.name                AS factor_name,
         -- POD gate: at least one approved POD on this load
         COALESCE((
           SELECT true
@@ -109,24 +109,41 @@ export async function listSubmissionQueueInvoices(
       -- ACCT-F5787 — mdata.customers' customers_select RLS excludes a deactivated customer for a
       -- non-bypass reader, and a plain JOIN here silently dropped this real, currently-sendable
       -- invoice from the operator's "submit to Faro" queue the moment its customer was archived. Same
-      -- class as ACCT-F5611/5767/5768/5784/5785/5786, but this consumer needs the FULL customer row
-      -- (c.factoring_company_vendor_id drives the second JOIN below AND the WHERE clause), not just a
-      -- label, so it uses the new full-row resolver (mdata.get_customer_same_company, mirrors
-      -- mdata.get_vendor_same_company / ACCT-F5767 exactly) via a LATERAL fallback that only runs when
-      -- the primary RLS-scoped join already found nothing.
+      -- class as ACCT-F5611/5767/5768/5784/5785/5786, so it uses the full-row resolver
+      -- (mdata.get_customer_same_company, mirrors mdata.get_vendor_same_company / ACCT-F5767 exactly)
+      -- via a LATERAL fallback that only runs when the primary RLS-scoped join already found nothing.
       LEFT JOIN mdata.customers c ON c.id = i.customer_id
                                   AND c.operating_company_id = $1::uuid
       LEFT JOIN LATERAL (
         SELECT * FROM mdata.get_customer_same_company(i.customer_id, i.operating_company_id)
         WHERE c.id IS NULL
       ) c2 ON true
-      LEFT JOIN mdata.vendors fv ON fv.id = COALESCE(c.factoring_company_vendor_id, c2.factoring_company_vendor_id)
-                                 AND fv.operating_company_id = $1::uuid
+      -- ACCT-F26011 (owner, 2026-09-06, root-caused live via Cursor + independently re-verified):
+      -- this used to gate submittability on mdata.customers.factoring_company_vendor_id, a
+      -- denormalized mirror column populated on 2 of 1,226 customers actually assigned in the
+      -- authoritative factoring.customer_factor_assignment table (measured live, USMCA prod) — so
+      -- ~99.9% of Faro-assigned invoices silently never reached this queue. batch.service.ts's
+      -- getFactorForCustomer already reads customer_factor_assignment correctly; this now uses the
+      -- SAME authoritative, effective-dated source instead of the dead mirror — no new lookup
+      -- invented, no backfill of a column that has no reliable 1:1 mapping to guess from
+      -- (factoring.factor carries no vendor_id back to mdata.vendors).
+      LEFT JOIN LATERAL (
+        SELECT f.id, f.name
+        FROM factoring.customer_factor_assignment cfa
+        JOIN factoring.factor f ON f.id = cfa.factor_id AND f.voided_at IS NULL
+        WHERE cfa.customer_id = COALESCE(c.id, c2.id)
+          AND cfa.tenant_id   = $1::uuid
+          AND cfa.voided_at   IS NULL
+          AND cfa.effective_from <= COALESCE(i.issue_date, CURRENT_DATE)
+          AND (cfa.effective_to IS NULL OR cfa.effective_to > COALESCE(i.issue_date, CURRENT_DATE))
+        ORDER BY cfa.effective_from DESC
+        LIMIT 1
+      ) assigned_factor ON true
       WHERE i.operating_company_id = $1::uuid
         AND i.status                = 'sent'
         AND COALESCE(i.factoring_status, 'not_factored') = 'not_factored'
         AND i.voided_at            IS NULL
-        AND COALESCE(c.factoring_company_vendor_id, c2.factoring_company_vendor_id) IS NOT NULL
+        AND assigned_factor.id     IS NOT NULL
         AND NOT EXISTS (
           SELECT 1
           FROM factoring.batch b

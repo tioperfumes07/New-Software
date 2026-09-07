@@ -42,10 +42,24 @@ export type ParityColumn<T> = {
   render?: (row: T) => ReactNode;
   className?: string;
   cellClass?: string;
+  /** ROUND 16.25 (owner-reported row-height defect, live-confirmed root cause 2026-09-07):
+   *  body cells truncate (nowrap + ellipsis) by default so one wrapped cell can't inflate an
+   *  entire row's height. Set true ONLY for a column that legitimately needs multi-line text
+   *  (a long description/reason/notes column) — it opts back into wrap-break-word. Default
+   *  false/omitted = truncate, matching every existing column's actual data shape. */
+  allowWrap?: boolean;
+  /** Optional native tooltip on the header cell (ROUND 16.1) — lets a column explain itself
+   *  (e.g. "Legs = the loads in this tour, in order …"). Additive: omit for no tooltip. */
+  headerTitle?: string;
   /** Floor for the auto-fit measured width (never shrinks it, only widens) — a user manual
    *  drag-resize still overrides this completely, same as autoFitWidths always did. Additive:
    *  omitting it preserves today's pure-measured width for every existing column. */
   minWidth?: number;
+  /** Ceiling for the auto-fit measured width (ROUND 16.1) — caps a column so one long value can't
+   *  let it occupy the whole screen (the owner's Load-Costs "a column occupies all screen" report).
+   *  Overrides the global AUTO_FIT_MAX_WIDTH for this column only. A user manual drag-resize still
+   *  overrides it. Additive: omitting it preserves today's global-capped measured width. */
+  maxWidth?: number;
   /** Initial hidden state in the gear column-toggle (still toggleable on). */
   defaultHidden?: boolean;
   /** Exclude from the gear column-toggle list (always shown). */
@@ -80,6 +94,13 @@ export type ParityTableProps<T> = {
 
   density?: ParityDensity;
   pageSizeOptions?: number[];
+  /**
+   * VC-LIST-02 (owner "ALL PAGE SIZE", 2026-09-06): append an "All" option to the page-size
+   * control that renders every matching row on one page. Sort survives it (sorting runs on the
+   * full row set before slicing, and "All" simply stops slicing). Off by default so existing
+   * lists are unchanged.
+   */
+  allowAllPageSize?: boolean;
   initialPageSize?: number;
   /** localStorage key to persist column visibility + density + per-page. */
   storageKey?: string;
@@ -174,12 +195,40 @@ export type ParityTableProps<T> = {
    */
   gearButtonTestId?: string;
   /**
+   * BANK-TOOLBAR-ONE (owner ROUND 16.19, 2026-09-06): additional page-specific settings rendered
+   * inside THIS gear's own popover, below "Columns" and above the Reset/Cancel/Apply footer — lets
+   * a page fold its own extra settings (a forced-visible column toggle, a page-size the page itself
+   * paginates by, a feature flag) into the ONE canonical gear instead of standing up a second,
+   * competing "View settings" gear button next to it. Additive: omitting it renders nothing extra,
+   * every existing consumer is byte-identical.
+   */
+  gearExtra?: ReactNode;
+  /**
    * Optional per-row data-testid on the rendered `<tr>`. Lets a migrated page preserve existing
    * row-level test/e2e selectors. Additive — omitting it renders no per-row testid.
    */
   rowTestId?: (row: T) => string;
-  /** Optional tfoot (KPI drill sums). Additive — omit for unchanged tables. */
+  /**
+   * @deprecated DSP-TBL (owner ruling 2026-09-05, "totals stay stuck"): a raw ReactNode footer
+   * is one hand-built `<tr>` the caller must keep in sync with column order/visibility by hand —
+   * reorder or hide a column and the totals silently misalign with the header above them. Use
+   * `footerCells` instead (keyed by column, follows the same ordered visible-column list the
+   * header does). Kept for back-compat; still renders, but logs a dev-only console.warn once per
+   * mount so a caller update is visible without a red build. Never delete (Rule 07).
+   */
   footer?: ReactNode;
+  /**
+   * DSP-TBL (owner ruling 2026-09-05): per-column footer content, keyed by `column.key` (as a
+   * string — same convention every other column-keyed lookup in this file uses). A value may be
+   * a plain ReactNode or `(visibleRows: T[]) => ReactNode` when the total depends on the current
+   * rows (sorted/filtered, pre-pagination — the same rows a "grand total" caption already summed
+   * over in every existing caller). Rendered as one `<td>` per column in `visibleColumns`' own
+   * order — reorder/hide the column and its footer cell moves/disappears with it, automatically.
+   * Money/right-aligned columns inherit their own `cellClass`/`className` in the footer cell too,
+   * so a numeric total right-aligns without a separate flag. A column with no entry renders an
+   * empty `<td>` in its slot (never omitted — that would desync colSpan-free alignment).
+   */
+  footerCells?: Partial<Record<string, ReactNode | ((visibleRows: T[]) => ReactNode)>>;
 
   /**
    * OPTIONAL controlled-sort mode (BANK-SORT-ROLLOUT-ACCT). Omitting these three props keeps the
@@ -219,6 +268,12 @@ export type ParityTableProps<T> = {
    * other row when one expands. Applies in both controlled and uncontrolled modes.
    */
   expandMode?: "multi" | "single";
+  /**
+   * LDT-EXPAND (owner 2026-09-06 03:5xZ "I DO NOT SEE THE APP LIKE THE PICTURES … THE BOXES"): the only expand
+   * target was the 6px "▸" glyph, so clicking the row did nothing. When true, a click anywhere on the row
+   * (outside links / buttons / inputs) toggles the expanded panel. Ignored when onRowClick is supplied.
+   */
+  expandOnRowClick?: boolean;
 
   /**
    * OPTIONAL QBO-style group bands (ParityTable Phase A2). Omitting keeps byte-identical current
@@ -240,6 +295,11 @@ export type ParityTableProps<T> = {
     collapsedKeys?: string[];
     /** Presence = controlled mode (mirrors onExpandedChange / onSortChange). */
     onCollapsedChange?: (keys: string[]) => void;
+    /**
+     * LB-DESIGN-1: fixed band order; keys listed here render a band even with ZERO rows on the page (the approved
+     * Dispatch board shows "IN SHOP 0"). Keys not listed follow in first-seen order.
+     */
+    orderedKeys?: string[];
   };
 
   /**
@@ -356,6 +416,14 @@ const DENSITY_LABEL: Record<ParityDensity, string> = {
 // a short numeric/status column from shrinking to illegible; MAX stops one long free-text column
 // (a memo/description) from eating the whole table — a user who genuinely needs more still has the
 // existing manual drag-resize, which always wins once used (see colWidths vs autoFitWidths below).
+// VC-LIST-02 — the "All" page-size value. A large FINITE sentinel (never Infinity, which would
+// make offset = 0 * Infinity = NaN and break slicing): pageCount = ceil(total / ALL_PAGE_SIZE) = 1,
+// offset = 0, and slice(0, ALL_PAGE_SIZE) returns every row. Labeled "All" in the UI.
+export const ALL_PAGE_SIZE = 1_000_000;
+// Above this many rendered rows, mark each data row content-visibility:auto so the browser skips
+// layout/paint for offscreen rows (native, no JS windowing — keeps the locked sticky-header /
+// colgroup-width / resizable-th contract intact). Honors VC-LIST-02 "virtualized if >1,000".
+const LARGE_RENDER_ROW_THRESHOLD = 1000;
 const AUTO_FIT_MIN_WIDTH = 64;
 const AUTO_FIT_MAX_WIDTH = 320;
 // Cell horizontal padding (px-2 = 0.5rem each side) + the sort arrow glyph + a small buffer so a
@@ -451,6 +519,7 @@ export function ParityTable<T>({
   emptyText = "No records found.",
   density: densityProp = "regular",
   pageSizeOptions = [25, 50, 100, 300],
+  allowAllPageSize = false,
   initialPageSize,
   storageKey,
   toolbar,
@@ -478,6 +547,7 @@ export function ParityTable<T>({
   renderExpanded,
   tableTestId,
   gearButtonTestId,
+  gearExtra,
   rowTestId,
   sortKey: controlledSortKey,
   sortDirection: controlledSortDirection,
@@ -486,6 +556,7 @@ export function ParityTable<T>({
   expandedKeys: controlledExpandedKeys,
   onExpandedChange,
   expandMode = "multi",
+  expandOnRowClick = false,
   groupBy,
   page: controlledPage,
   onPageChange,
@@ -498,8 +569,22 @@ export function ParityTable<T>({
   headerInk,
   headerWeight,
   footer,
+  footerCells,
 }: ParityTableProps<T>) {
   const persisted = useMemo(() => loadPersisted(storageKey), [storageKey]);
+
+  // DSP-TBL — dev-only, once-per-mount nudge toward footerCells. Never in prod (bundlers strip
+  // NODE_ENV-gated blocks like this one), never a build failure, never more than one line.
+  const warnedRawFooter = useRef(false);
+  if (footer != null && !warnedRawFooter.current) {
+    warnedRawFooter.current = true;
+    if (!import.meta.env.PROD) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `ParityTable: the "footer" prop is deprecated (DSP-TBL, owner ruling 2026-09-05) — a raw footer desyncs from column reorder/hide. Use "footerCells" (keyed by column) instead. storageKey="${storageKey ?? "(none)"}"`
+      );
+    }
+  }
 
   const isSortControlled = onSortChange != null;
   // Phase A4: external sort passthrough REQUIRES controlled sort — without onSortChange the
@@ -523,6 +608,12 @@ export function ParityTable<T>({
     persisted.pageSize ?? initialPageSize ?? pageSizeOptions[0] ?? 25,
   );
   const pageSize = isPageSizeControlled ? controlledPageSize : internalPageSize;
+  // VC-LIST-02 — page-size options as rendered: append the "All" sentinel when allowed (dedup-safe).
+  const renderedPageSizeOptions =
+    allowAllPageSize && !pageSizeOptions.includes(ALL_PAGE_SIZE)
+      ? [...pageSizeOptions, ALL_PAGE_SIZE]
+      : pageSizeOptions;
+  const pageSizeOptionLabel = (opt: number) => (opt >= ALL_PAGE_SIZE ? "All" : String(opt));
   const [hidden, setHidden] = useState<Set<string>>(
     () =>
       new Set(
@@ -705,6 +796,8 @@ export function ParityTable<T>({
   const offset = (safePage - 1) * pageSize;
   const pageRows = sortedRows.slice(offset, offset + pageSize);
   const d = DENSITY[density];
+  // VC-LIST-02 — when "All" renders a large set, let the browser skip offscreen row paint/layout.
+  const virtualizeRows = pageRows.length > LARGE_RENDER_ROW_THRESHOLD;
 
   // AUTO-FIT — only for columns the user has NOT manually resized (colWidths, still the source of
   // truth once set — see the `w = colWidths[key] ?? autoFitWidths[key]` lookup below). Recomputed
@@ -725,7 +818,11 @@ export function ParityTable<T>({
         const w = measureTextWidth(text, d.font);
         if (w > widest) widest = w;
       }
-      widths[key] = Math.min(AUTO_FIT_MAX_WIDTH, Math.max(AUTO_FIT_MIN_WIDTH, Math.ceil(widest + AUTO_FIT_CHROME_PX)));
+      // ROUND 16.1 — a per-column maxWidth (when set) caps the auto-fit below the global ceiling so
+      // one long value can't stretch the column across the whole screen; minWidth still floors it.
+      const ceiling = Math.min(AUTO_FIT_MAX_WIDTH, column.maxWidth ?? AUTO_FIT_MAX_WIDTH);
+      const floor = Math.max(AUTO_FIT_MIN_WIDTH, column.minWidth ?? 0);
+      widths[key] = Math.max(floor, Math.min(ceiling, Math.max(AUTO_FIT_MIN_WIDTH, Math.ceil(widest + AUTO_FIT_CHROME_PX))));
     }
     return widths;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- colWidths only gates which columns are
@@ -754,6 +851,7 @@ export function ParityTable<T>({
   // Phase A2: group the CURRENT page's rows in their CURRENT order (stable — first appearance of
   // each key sets group order; rows are never re-sorted). Pagination math above is untouched.
   const groupGetKey = groupBy?.getKey;
+  const groupOrderedKeys = groupBy?.orderedKeys;
   const groupedPageRows = useMemo(() => {
     if (!groupGetKey) return null;
     const order: string[] = [];
@@ -767,8 +865,13 @@ export function ParityTable<T>({
         order.push(key);
       }
     }
+    if (groupOrderedKeys && groupOrderedKeys.length > 0) {
+      const fixed = groupOrderedKeys.map((key) => ({ key, rows: byKey.get(key) ?? [] }));
+      const rest = order.filter((key) => !groupOrderedKeys.includes(key)).map((key) => ({ key, rows: byKey.get(key)! }));
+      return [...fixed, ...rest];
+    }
     return order.map((key) => ({ key, rows: byKey.get(key)! }));
-  }, [groupGetKey, pageRows]);
+  }, [groupGetKey, groupOrderedKeys, pageRows]);
 
   const selectedRows = useMemo(
     () => rows.filter((r) => selected.has(rowKey(r))),
@@ -1062,12 +1165,19 @@ export function ParityTable<T>({
         // near-invisible hairline next to every other border in this app (gray-200, the same
         // weight the table's own outer frame/toolbar/pager already use). One border weight.
         className={`border-t border-gray-200 ${
-          onRowClick ? "cursor-pointer hover:bg-gray-50" : ""
+          onRowClick || (expandOnRowClick && renderExpanded) ? "cursor-pointer hover:bg-gray-50" : ""
         } ${rowClassName ? rowClassName(row) : ""}`}
-        style={{ height: d.rowH, ...(selected.has(id) ? { backgroundColor: colors.accentTint } : {}) }}
+        style={{
+          height: d.rowH,
+          ...(virtualizeRows ? { contentVisibility: "auto", containIntrinsicSize: `${d.rowH}px` } : {}),
+          ...(selected.has(id) ? { backgroundColor: colors.accentTint } : {}),
+        }}
         onClick={onRowClick ? (event) => {
           if (isParityTableInteractiveTarget(event.target)) return;
           onRowClick(row);
+        } : (expandOnRowClick && renderExpanded) ? (event) => {
+          if (isParityTableInteractiveTarget(event.target)) return;
+          toggleExpanded(id);
         } : undefined}
         onContextMenu={onRowContextMenu ? (event) => onRowContextMenu(row, event) : undefined}
       >
@@ -1077,7 +1187,8 @@ export function ParityTable<T>({
               type="button"
               aria-label={isExpanded ? "Collapse row" : "Expand row"}
               aria-expanded={isExpanded}
-              className="text-gray-500 hover:text-gray-800"
+              className="parity-expand-toggle-box flex items-center justify-center text-gray-500 hover:text-gray-800"
+              data-testid="parity-expand-toggle"
               onClick={() => toggleExpanded(id)}
             >
               {isExpanded ? "▾" : "▸"}
@@ -1117,9 +1228,14 @@ export function ParityTable<T>({
           return (
           <td
             key={String(column.key)}
-            className={`overflow-hidden wrap-break-word px-2 align-top text-gray-800 ${
-              column.cellClass ?? column.className ?? ""
-            }`}
+            title={
+              !column.allowWrap && column.render == null
+                ? String((row as Record<string, unknown>)[String(column.key)] ?? "")
+                : undefined
+            }
+            className={`overflow-hidden px-2 align-top text-gray-800 ${
+              column.allowWrap ? "wrap-break-word" : "whitespace-nowrap text-ellipsis"
+            } ${column.cellClass ?? column.className ?? ""}`}
             style={{
               paddingTop: d.padY,
               paddingBottom: d.padY,
@@ -1264,9 +1380,9 @@ export function ParityTable<T>({
                       savePersisted(storageKey, { hidden: [...draftHidden], density: draftDensity, pageSize: next, colWidths, colOrder });
                     }}
                   >
-                    {pageSizeOptions.map((opt) => (
+                    {renderedPageSizeOptions.map((opt) => (
                       <option key={opt} value={opt}>
-                        {opt}
+                        {pageSizeOptionLabel(opt)}
                       </option>
                     ))}
                   </select>
@@ -1310,6 +1426,11 @@ export function ParityTable<T>({
                       );
                     })}
                 </div>
+                {gearExtra ? (
+                  <div className="mt-2 border-t border-gray-200 pt-2" data-testid="parity-gear-extra">
+                    {gearExtra}
+                  </div>
+                ) : null}
                 <div className="mt-2 flex items-center justify-end gap-2 border-t border-gray-200 pt-2">
                   <button type="button" className="rounded-sm px-2 py-1 text-xs font-semibold text-gray-600 hover:bg-gray-100" onClick={resetGear}>Reset</button>
                   <button type="button" className="rounded-sm border border-gray-300 bg-white px-2 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50" onClick={cancelGear}>Cancel</button>
@@ -1426,6 +1547,7 @@ export function ParityTable<T>({
                 <th
                   key={key}
                   data-testid={column.testId}
+                  title={column.headerTitle}
                   // REORDER — draggable on the whole <th>, not a separate handle: the sort button
                   // (a click, no movement) and the resize grip (its own onMouseDown + stopPropagation)
                   // both already coexist fine with a draggable ancestor; a real drag gesture bubbles
@@ -1588,7 +1710,36 @@ export function ParityTable<T>({
             pageRows.map((row, i) => renderDataRow(row, i))
           )}
         </tbody>
-        {footer ? (
+        {footerCells ? (
+          <tfoot data-testid="parity-table-footer">
+            <tr
+              className="border-t-2 border-slate-700 font-semibold"
+              // Same shade as the group-band row (colors.tableGroupBandBg, --grp-bg) — a totals
+              // row reads as its own "band" of the same visual language, not a plain data row.
+              style={{ backgroundColor: colors.tableGroupBandBg }}
+            >
+              {renderExpanded ? <td className="w-8 px-2" /> : null}
+              {selectable ? <td className="w-8 px-2" /> : null}
+              {visibleColumns.map((column) => {
+                const key = String(column.key);
+                const entry = footerCells[key];
+                const content = typeof entry === "function" ? entry(sortedRows) : entry;
+                return (
+                  <td
+                    key={key}
+                    data-testid={column.testId ? `${column.testId}-footer` : undefined}
+                    // Same alignment class as this column's own body cells (cellClass ?? className)
+                    // — a money/right-aligned column's total right-aligns with zero extra config.
+                    className={`px-2 py-1.5 font-mono ${column.cellClass ?? column.className ?? ""}`}
+                  >
+                    {content ?? null}
+                  </td>
+                );
+              })}
+              {rowActions ? <td className="w-10 px-2" /> : null}
+            </tr>
+          </tfoot>
+        ) : footer ? (
           <tfoot data-testid="parity-table-footer">
             <tr className="border-t-2 border-slate-700 bg-slate-50 font-semibold">{footer}</tr>
           </tfoot>
@@ -1611,9 +1762,9 @@ export function ParityTable<T>({
               value={pageSize}
               onChange={(e) => changePageSize(Number(e.target.value))}
             >
-              {pageSizeOptions.map((opt) => (
+              {renderedPageSizeOptions.map((opt) => (
                 <option key={opt} value={opt}>
-                  {opt}
+                  {pageSizeOptionLabel(opt)}
                 </option>
               ))}
             </select>

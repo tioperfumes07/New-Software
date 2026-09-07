@@ -1,35 +1,30 @@
 import { formatUsdCents } from "../../../lib/money";
 
 /**
- * L5 — driver settlement detail KPI grid, an exact transcription of the owner-approved reference
- * `docs/design/reference/DRIVER-SETTLEMENT-DETAIL-REFERENCE-2026-09-05.html` (.kpis / .kpi block).
- * Six tiles, 6-column grid, each 93px tall on `--kpi-bg #F4F7FA` with a `--th-rule #C7D2DC` border,
- * radius 4px: Loaded pay · Empty miles pay · Additional pay · Reimbursements · Deductions · Net pay.
- * Values are tabular-nums 20px/600; labels 11px/700 uppercase #4B5563; sub 11px muted.
+ * SETL-DETAIL-01 (lead ROUND 14, 2026-09-06 17:0xZ — owner: "the Settlements module must be created
+ * in the correct format, following much of Load Costs"). Six 93px KPI tiles, matching Load Costs'
+ * own KPI framing (LoadDetailCostsTab's "Line haul revenue / Costs on this load / Driver pay /
+ * Approximate margin"), not the older Loaded-pay/Empty-miles-pay split this grid carried before:
+ * Revenue · Driver pay · Reimbursements · Deductions · Net pay · Company margin.
  *
- * Colours/sizes are inline-styled straight from the reference contract (not Tailwind palette classes)
- * so this screen matches the locked reference and the design-contract guard can assert computed styles.
- * Dash-never-zero is a table rule (dash for a not-measured CELL); KPI money tiles are true totals and
- * legitimately read $0.00 when a section has no lines (that is a fact, not a missing measurement).
+ * Colours/sizes stay the locked reference contract this grid has always used (93px tall,
+ * --kpi-bg #F4F7FA, --th-rule #C7D2DC border, radius 4px, tabular-nums 20px/600 values, 11px/700
+ * uppercase #4B5563 labels, 11px muted sub) — only the six labels/values changed, per this round's
+ * explicit instruction. Inline-styled (not Tailwind) so a static guard can assert computed styles.
  */
 
-const MILES = new Intl.NumberFormat("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-const RATE = new Intl.NumberFormat("en-US", { minimumFractionDigits: 4, maximumFractionDigits: 4 });
-
 export type SettlementKpiGridProps = {
-  loadedPayCents: number;
-  loadedMiles: number;
-  loadedRate: number; // dollars per mile
-  emptyPayCents: number;
-  emptyMiles: number;
-  emptyRate: number;
-  additionalCents: number;
-  additionalLines: number;
+  revenueCents: number;
+  revenueSub: string;
+  driverPayCents: number;
+  driverPaySub: string;
   reimbursementCents: number;
   reimbursementLines: number;
   deductionCents: number; // positive magnitude
   deductionBreakdown: string;
   netPayCents: number;
+  companyMarginCents: number;
+  companyMarginSub: string;
 };
 
 function Tile({ label, value, sub, negative }: { label: string; value: string; sub: string; negative?: boolean }) {
@@ -60,19 +55,17 @@ function Tile({ label, value, sub, negative }: { label: string; value: string; s
 
 export function SettlementKpiGrid(props: SettlementKpiGridProps) {
   const {
-    loadedPayCents,
-    loadedMiles,
-    loadedRate,
-    emptyPayCents,
-    emptyMiles,
-    emptyRate,
-    additionalCents,
-    additionalLines,
+    revenueCents,
+    revenueSub,
+    driverPayCents,
+    driverPaySub,
     reimbursementCents,
     reimbursementLines,
     deductionCents,
     deductionBreakdown,
     netPayCents,
+    companyMarginCents,
+    companyMarginSub,
   } = props;
 
   return (
@@ -80,21 +73,8 @@ export function SettlementKpiGrid(props: SettlementKpiGridProps) {
       data-testid="settlement-kpi-grid"
       style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 8, margin: "10px 0 14px" }}
     >
-      <Tile
-        label="Loaded pay"
-        value={formatUsdCents(loadedPayCents)}
-        sub={`${MILES.format(loadedMiles)} mi @ $${RATE.format(loadedRate)}`}
-      />
-      <Tile
-        label="Empty miles pay"
-        value={formatUsdCents(emptyPayCents)}
-        sub={`${MILES.format(emptyMiles)} mi @ $${RATE.format(emptyRate)}`}
-      />
-      <Tile
-        label="Additional pay"
-        value={formatUsdCents(additionalCents)}
-        sub={`${additionalLines} ${additionalLines === 1 ? "line" : "lines"}`}
-      />
+      <Tile label="Revenue" value={formatUsdCents(revenueCents)} sub={revenueSub} />
+      <Tile label="Driver pay" value={formatUsdCents(driverPayCents)} sub={driverPaySub} />
       <Tile
         label="Reimbursements"
         value={formatUsdCents(reimbursementCents)}
@@ -107,6 +87,7 @@ export function SettlementKpiGrid(props: SettlementKpiGridProps) {
         negative={deductionCents > 0}
       />
       <Tile label="Net pay" value={formatUsdCents(netPayCents)} sub="Driver take-home this period" />
+      <Tile label="Company margin" value={formatUsdCents(companyMarginCents)} sub={companyMarginSub} negative={companyMarginCents < 0} />
     </div>
   );
 }

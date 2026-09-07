@@ -49,6 +49,7 @@ const DISPATCH_CATALOG_HREF = DISPATCH_CATALOG_CHILDREN[0]?.to ?? "/lists/dispat
 export const LISTS_SUB_NAV_ITEMS: NavyPageSubNavItem[] = [
   { label: "Lists & Catalogs", to: "/lists" },
   { label: "Names Master", to: "/lists/names" },
+  { label: "Locations", to: "/lists/locations" },
   { label: "Catalog Index", to: "/lists/catalogs" },
   {
     label: "Catalog domains",
@@ -96,6 +97,7 @@ export function listsSubNavActiveHref(pathname: string): string {
   const norm = pathname.length > 1 && pathname.endsWith("/") ? pathname.slice(0, -1) : pathname;
   if (norm === "/lists") return "/lists";
   if (norm.startsWith("/lists/names")) return "/lists/names";
+  if (norm.startsWith("/lists/locations")) return "/lists/locations";
   if (norm.startsWith("/lists/hub/")) return "/lists";
   if (norm.startsWith("/lists/catalogs")) return "/lists/catalogs";
   if (norm.startsWith("/lists/maintenance/parts-catalog")) return "/lists/maintenance/parts-catalog";

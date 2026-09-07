@@ -38,10 +38,14 @@ function assertAll(src) {
     }
   }
 
-  if (!/app\.post\("\/api\/v1\/settlements\/weekly-close", async \(req, reply\) => \{\s*\n\s*const user = (\w+)\(req, reply\);/.test(src)) {
+  // A { config: { rateLimit: {...} } } object now sits between the path and the handler (this
+  // repo's broader per-route rate-limiting rollout) — match any options object, not just a bare
+  // handler, so this guard doesn't drift every time a rate limit is tuned.
+  const routeRe = /app\.post\("\/api\/v1\/settlements\/weekly-close",[^)]*?async \(req, reply\) => \{\s*\n\s*const user = (\w+)\(req, reply\);/;
+  if (!routeRe.test(src)) {
     problems.push(`POST /weekly-close route not found or shape drifted`);
   } else {
-    const m = src.match(/app\.post\("\/api\/v1\/settlements\/weekly-close", async \(req, reply\) => \{\s*\n\s*const user = (\w+)\(req, reply\);/);
+    const m = src.match(routeRe);
     if (m[1] !== "requireWeeklyCloseWriteRole") {
       problems.push(`POST /weekly-close calls ${m[1]}(), not requireWeeklyCloseWriteRole() -- role gate missing`);
     }
@@ -56,8 +60,8 @@ if (SELFTEST) {
   const src = read();
 
   const planted = src.replace(
-    'app.post("/api/v1/settlements/weekly-close", async (req, reply) => {\n    const user = requireWeeklyCloseWriteRole(req, reply);',
-    'app.post("/api/v1/settlements/weekly-close", async (req, reply) => {\n    const user = authed(req, reply);',
+    'app.post("/api/v1/settlements/weekly-close", { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } }, async (req, reply) => {\n    const user = requireWeeklyCloseWriteRole(req, reply);',
+    'app.post("/api/v1/settlements/weekly-close", { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } }, async (req, reply) => {\n    const user = authed(req, reply);',
   );
   if (planted === src) {
     console.error(`${LABEL} SELFTEST SETUP FAILED: mutation target not found (guard text drifted from real code)`);

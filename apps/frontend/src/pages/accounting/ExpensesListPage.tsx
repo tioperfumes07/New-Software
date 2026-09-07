@@ -20,6 +20,8 @@ import { useCompanyContext } from "../../contexts/CompanyContext";
 import { useToast } from "../../components/Toast";
 import { Button } from "../../components/Button";
 import { AccountingSubNavWrapper } from "./AccountingSubNavWrapper";
+import { ReceiptAttach } from "../../components/documents/ReceiptAttach";
+import { PostingPill } from "../../components/accounting/PostingPill";
 import { entityLabel } from "../../lib/entity-label";
 import { formatDateUS } from "../../lib/formatDate";
 import { humanMemo } from "./ManualJEListPage";
@@ -359,7 +361,19 @@ export function ExpensesListPage() {
       key: "posting_status",
       label: "GL",
       sortable: true,
-      render: (r) => <span className="text-[11px] capitalize text-gray-600">{r.posting_status}</span>,
+      // ACC-51 (owner 01:33Z, "same truth as Load costs") — the Costs cards already show a real
+      // "held — tour open" pill (ACC-50b); this list showed only the bare posting_status string.
+      sortValue: (r) => (r.posting_hold_reason === "tour_open" ? -1 : r.posting_status === "posted" ? 1 : 0),
+      render: (r) => <PostingPill posted={r.posting_status === "posted"} holdReason={r.posting_hold_reason} />,
+    },
+    {
+      key: "receipt",
+      label: "Receipt",
+      sortable: false,
+      render: (r) =>
+        companyId ? (
+          <ReceiptAttach operatingCompanyId={companyId} entityType="expense" entityId={r.id} readOnly testId={`receipt-attach-expense-${r.id}`} />
+        ) : null,
     },
     { key: "is_reconciled", label: "Bank Match", sortable: true, render: (r) => <MatchPill matched={r.is_reconciled} /> },
     {

@@ -9,9 +9,39 @@ import { VendorsPage } from "../../Vendors";
 
 const listVendorsMock = vi.fn();
 
+// VC-LIST-01: the page now fetches the active-company roster and the inactive roster separately
+// (listAllVendors with active_company_only vs status:"inactive"), so the mock must be status-aware
+// or the Inactive/All counts double-count. Mirrors the customer tabs test's mockCustomerRosters.
+function mockVendorRosters(active: VendorOption[], inactive: VendorOption[] = []) {
+  listVendorsMock.mockImplementation(async (params?: { status?: string }) => {
+    const vendors = params?.status === "inactive" ? inactive : active;
+    return { vendors, total: vendors.length };
+  });
+}
+
 vi.mock("../../../api/mdata", () => ({
+  // Page reads the full roster via listAllVendors (VEND-1); keep listVendors too for older callers.
   listVendors: (...args: unknown[]) => listVendorsMock(...args),
+  listAllVendors: (...args: unknown[]) => listVendorsMock(...args),
   listPaymentTermOptions: vi.fn().mockResolvedValue({ payment_terms: [] }),
+  // VC-LIST-01 rollups + payment methods the Vendors page now queries.
+  getVendorRollups: vi.fn().mockResolvedValue([]),
+  listVendorPaymentMethods: vi.fn().mockResolvedValue({ payment_methods: [] }),
+}));
+
+vi.mock("../../../api/accounting", () => ({
+  listVendorBalances: vi.fn().mockResolvedValue({ rows: [] }),
+  listBills: vi.fn().mockResolvedValue({ rows: [] }),
+  listExpenses: vi.fn().mockResolvedValue({ rows: [] }),
+}));
+
+vi.mock("../../../hooks/useCatalogQuery", () => ({
+  useCatalogQuery: () => ({
+    data: { rows: [{ code: "fuel", display_name: "fuel" }, { code: "repair", display_name: "repair" }] },
+    isError: false,
+    isLoading: false,
+    refetch: vi.fn(),
+  }),
 }));
 
 vi.mock("../../../api/catalog-accounts", () => ({
@@ -68,12 +98,10 @@ function renderVendorsAt(path: string) {
 
 describe("VendorsPage list tabs", () => {
   it("filters inactive rows on Inactive tab", async () => {
-    listVendorsMock.mockResolvedValue({
-      vendors: [
-        vendor({ id: "1", name: "Active Shop", vendor_type: "repair", deactivated_at: null }),
-        vendor({ id: "2", name: "Old Shop", vendor_type: "repair", deactivated_at: "2020-01-01" }),
-      ],
-    });
+    mockVendorRosters(
+      [vendor({ id: "1", name: "Active Shop", vendor_type: "repair", deactivated_at: null })],
+      [vendor({ id: "2", name: "Old Shop", vendor_type: "repair", deactivated_at: "2020-01-01" })]
+    );
     const user = userEvent.setup();
     renderVendorsAt("/vendors");
     await waitFor(() => expect(listVendorsMock).toHaveBeenCalled());
@@ -90,12 +118,10 @@ describe("VendorsPage list tabs", () => {
 
   it("by-category tab sets search params when type selected", async () => {
     const user = userEvent.setup();
-    listVendorsMock.mockResolvedValue({
-      vendors: [
-        vendor({ id: "1", name: "Fuel A", vendor_type: "fuel" }),
-        vendor({ id: "2", name: "Repair B", vendor_type: "repair" }),
-      ],
-    });
+    mockVendorRosters([
+      vendor({ id: "1", name: "Fuel A", vendor_type: "fuel" }),
+      vendor({ id: "2", name: "Repair B", vendor_type: "repair" }),
+    ]);
     const router = renderVendorsAt("/vendors");
     await screen.findAllByText("Fuel A");
     await user.click(screen.getByRole("button", { name: /by category/i }));

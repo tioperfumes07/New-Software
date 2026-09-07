@@ -25,8 +25,16 @@ function assertSrc(src) {
   if (!/createFactor/.test(code)) {
     problems.push("missing createFactor nested creator wiring");
   }
+  // FACTORING-GUARDS (owner ROUND 10, deadline 06:30Z): LDT-4 (bd00b7cac1) restyled this section
+  // (added the "Select FARO factor account" heading, the factorsQ.isError QueryErrorNote block, and
+  // ldt-* wrapper markup) — the real feature (testid, Combobox+allowAddNew, createFactor wiring,
+  // Confirm Submit button) is unchanged and still present, but the added markup pushed the
+  // testid-to-"Confirm Submit" distance to 1,006 chars (re-measured after LDT-DESIGN-1, 4dc06b5884,
+  // landed — still 1,006), past the old 900-char window. Widened with margin rather than
+  // compressing the JSX to fit an arbitrary budget — this guard's job is the real binding (a
+  // Combobox, not a bare <select>, wired to a submit action), not source compactness.
   const submitBlock = code.match(
-    /data-testid="factoring-tab-submit-factor-picker"[\s\S]{0,900}?Confirm Submit/,
+    /data-testid="factoring-tab-submit-factor-picker"[\s\S]{0,1400}?Confirm Submit/,
   )?.[0];
   if (!submitBlock) problems.push("could not locate submit-factor picker block");
   else if (/<select[\s>]/.test(submitBlock)) problems.push("submit-factor picker still uses bare <select>");

@@ -262,7 +262,13 @@ export type EntityKind =
   // text — no module could link INTO a factor record. FactorAdmin (route verified present in
   // routes/manifest.tsx: <Route path="/factoring/factors">) is the only factor detail surface; it
   // has no per-id sub-route, so this resolves with a query param the page now honors.
-  | "factor";
+  | "factor"
+  // ROUND 16.2 item 3 (owner 2026-09-06 20:3xZ) — TourSettlementTab's "Company settlement" line
+  // rendered the display_id as dead text, same class as geofence/factor above. CompanySettlementsPage
+  // (route verified present in routes/manifest.tsx: <Route path="/driver-finance/company-settlements">)
+  // is the only company-settlement surface; it has no per-id sub-route, so this resolves with a
+  // query param the page now honors (auto-opens that row's detail panel on load).
+  | "company_settlement";
 
 export interface EntityLinkProps {
   kind: EntityKind;
@@ -703,6 +709,8 @@ export function resolveEntityRoute(kind: EntityKind, id: string): string | null 
       return `/docs?file_id=${id}`;
     case "factor":
       return `/factoring/factors?factor_id=${id}`;
+    case "company_settlement":
+      return `/driver-finance/company-settlements?id=${id}`;
     default:
       return null;
   }

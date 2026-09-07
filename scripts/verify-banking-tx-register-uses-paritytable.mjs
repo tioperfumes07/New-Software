@@ -51,8 +51,14 @@ export function assertMigrated(src) {
   if (!body.includes('from "../../../components/parity/ParityTable"') && !body.includes("ParityTable")) {
     errors.push(`${PAGE}: must import ParityTable from components/parity/ParityTable`);
   }
-  if ((body.match(/<ParityTable\b/g) ?? []).length !== 1) {
-    errors.push(`${PAGE}: expected exactly one <ParityTable>`);
+  // BANK-MATCH-QBO-c (2026-09-06) legitimately added a SECOND, independent <ParityTable> for the
+  // match-candidates register (its own storageKey="banking-match-candidates", none of this guard's
+  // other A1-A5 markers below) — "exactly one" would now reject the file forever. The real
+  // invariant this guard protects (no hand-rolled <table>, the MAIN register specifically carries
+  // every A1-A5 wire) is still fully checked by every other assertion below, keyed to literal
+  // strings unique to the main register's own props.
+  if ((body.match(/<ParityTable\b/g) ?? []).length < 1) {
+    errors.push(`${PAGE}: expected at least one <ParityTable>`);
   }
   for (const forbidden of [/<table[\s>]/, /<thead[\s>]/, /<tbody[\s>]/]) {
     if (forbidden.test(body)) {
@@ -176,6 +182,19 @@ function selftest() {
       return <table><thead /><tbody /></table>;
     }
   `;
+  // BANK-MATCH-QBO-c: a second, independent <ParityTable> (the match-candidates register, none of
+  // the main register's A1-A5 props) must NOT trip this guard.
+  const goodWithSecondParityTable =
+    good +
+    `
+    <ParityTable
+      columns={buildMatchCandidateColumns(tx)}
+      rows={candidates}
+      rowKey={(c) => c.ledger_entry_id}
+      storageKey="banking-match-candidates"
+      gearButtonTestId="banking-match-gear"
+    />
+  `;
   // The real file's Print dialog builds a raw HTML string for a separate print window via
   // printLetterHtml({ bodyHtml: \`<table>...\` }) — that <table>/<thead>/<tbody> is legitimate
   // print-document markup, not a hand-rolled JSX table, and must NOT trip the forbidden-markup
@@ -195,7 +214,12 @@ function selftest() {
   `;
   const goodErrors = assertMigrated(good);
   const goodPrintErrors = assertMigrated(goodWithPrintBodyHtml);
+  const goodSecondParityTableErrors = assertMigrated(goodWithSecondParityTable);
   const badErrors = assertMigrated(bad);
+  if (goodSecondParityTableErrors.length) {
+    console.error(`${LABEL} --selftest FAIL good+second-ParityTable fixture (false positive on a legitimate second register):`, goodSecondParityTableErrors);
+    process.exit(1);
+  }
   if (goodErrors.length) {
     console.error(`${LABEL} --selftest FAIL good fixture:`, goodErrors);
     process.exit(1);

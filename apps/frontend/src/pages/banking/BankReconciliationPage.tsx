@@ -388,11 +388,19 @@ export function BankReconciliationPage() {
                   <span className="text-gray-600">{money(row.amount_cents)}</span>
                 </div>
                 <div className="truncate text-gray-700">
+                  {/* LEAD ROUND 13 (2026-09-06) — EntityLink's own onClick unconditionally calls
+                      event.stopPropagation() (by design: apps/frontend/src/components/shared/EntityLink.tsx),
+                      so the row's outer onClick above never fired when the merchant-name label
+                      itself IS the EntityLink (this row's only visible label, not a separate drill
+                      icon next to plain text the way MatchDrawer.tsx's FAIL-BM1-tested pattern does
+                      it). Forwarding the same selection here means clicking the name both selects
+                      the row (so "Selected transaction actions" opens) and still drills through. */}
                   <EntityLink
                     kind="bank_transaction"
                     id={row.id}
                     label={row.merchant_name?.trim() || row.description?.trim() || "Bank transaction"}
                     className="text-slate-700 hover:underline"
+                    onClick={() => setSelectedTxId(row.id)}
                   />
                 </div>
                 {isAutoMatchCandidate(row) ? <div className="text-slate-700">Auto-match candidate: {row.ledger_entry_kind}</div> : <div className="text-gray-500">Unmatched</div>}

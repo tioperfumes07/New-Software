@@ -3,12 +3,11 @@ import { useSearchParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { PageHeader } from "../../components/layout/PageHeader";
 import { Button } from "../../components/Button";
-import { DatePicker } from "../../components/forms/DatePicker";
 import { BasisSelector, type AccountingBasis } from "../../components/accounting/BasisSelector";
 import { useCompanyContext } from "../../contexts/CompanyContext";
 import { getProfitLossReport, getBalanceSheetReport, getArAgingReport, getApAgingReport, getCustomerProfitability } from "../../api/reports";
 import { ReportsSubNav } from "./ReportsSubNav";
-import { CollapsedListFilters, useStagedListFilters } from "../../components/table";
+import { ReportFilterBar } from "../../components/reports/ReportFilterBar";
 import { entityLabel, isUnresolvedEntityTombstone } from "../../lib/entity-label";
 import { EntityLink } from "../../components/shared/EntityLink";
 import { mmmDd, mmmDdTime } from "../../lib/formatDate";
@@ -111,7 +110,7 @@ function SectionDivider({ title, index }: { title: string; index: number }) {
   );
 }
 
-function PLSection({ companyId, fromDate, toDate, basis }: { companyId: string; fromDate: string; toDate: string; basis: AccountingBasis }) {
+function PLSection({ companyId, fromDate, toDate, basis, searchQuery }: { companyId: string; fromDate: string; toDate: string; basis: AccountingBasis; searchQuery: string }) {
   const query = useQuery({
     queryKey: ["mgmt-pkg-pl", companyId, fromDate, toDate, basis],
     queryFn: () => getProfitLossReport({ operating_company_id: companyId, from_date: fromDate, to_date: toDate, basis }),
@@ -122,16 +121,18 @@ function PLSection({ companyId, fromDate, toDate, basis }: { companyId: string; 
   if (query.isError || !query.data) return <p className="py-4 text-xs text-red-600">Profit & Loss unavailable (no data posted for this period)</p>;
 
   const { revenue, cogs, operating_expenses, gross_profit, net_income } = query.data;
+  const q = searchQuery.toLowerCase();
+  const filterLines = (lines: typeof revenue.lines) => q ? lines.filter((line) => String(line.account_name ?? "").toLowerCase().includes(q)) : lines;
 
   const renderSection = (title: string, lines: typeof revenue.lines, total: number) => (
     <div className="mb-4">
       <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1">{title}</div>
-      {lines.length === 0 ? (
+      {filterLines(lines).length === 0 ? (
         <p className="text-xs text-slate-400 pl-2">— no entries —</p>
       ) : (
         <div className="overflow-x-auto"><table className="min-w-full text-xs">
           <tbody>
-            {lines.map((line) => (
+            {filterLines(lines).map((line) => (
               <tr key={`${line.account_code}-${line.account_name}`} className="border-b border-gray-50">
                 <td className="py-0.5 pl-2 text-slate-600">{line.account_code}</td>
                 <td className="py-0.5 pl-1 text-slate-800">
@@ -173,7 +174,7 @@ function PLSection({ companyId, fromDate, toDate, basis }: { companyId: string; 
   );
 }
 
-function BSSection({ companyId, asOfDate, basis }: { companyId: string; asOfDate: string; basis: AccountingBasis }) {
+function BSSection({ companyId, asOfDate, basis, searchQuery }: { companyId: string; asOfDate: string; basis: AccountingBasis; searchQuery: string }) {
   const query = useQuery({
     queryKey: ["mgmt-pkg-bs", companyId, asOfDate, basis],
     queryFn: () => getBalanceSheetReport({ operating_company_id: companyId, as_of_date: asOfDate, basis }),
@@ -184,10 +185,12 @@ function BSSection({ companyId, asOfDate, basis }: { companyId: string; asOfDate
   if (query.isError || !query.data) return <p className="py-4 text-xs text-red-600">Balance Sheet unavailable</p>;
 
   const { assets, liabilities, equity, total_liabilities_and_equity } = query.data;
+  const q = searchQuery.toLowerCase();
+  const filterLines = (lines: typeof assets.lines) => q ? lines.filter((line) => String(line.account_name ?? "").toLowerCase().includes(q)) : lines;
 
   const renderLines = (lines: typeof assets.lines, total: number, label: string) => (
     <div className="mb-3">
-      {lines.map((line) => (
+      {filterLines(lines).map((line) => (
         <div key={`${line.account_code}-${line.account_name}`} className="flex justify-between text-xs py-0.5 border-b border-gray-50">
           <span className="text-slate-600 pl-2">
             {line.account_code}{" "}
@@ -225,7 +228,7 @@ function BSSection({ companyId, asOfDate, basis }: { companyId: string; asOfDate
   );
 }
 
-function ARAgingSection({ companyId, asOfDate }: { companyId: string; asOfDate: string }) {
+function ARAgingSection({ companyId, asOfDate, searchQuery }: { companyId: string; asOfDate: string; searchQuery: string }) {
   const query = useQuery({
     queryKey: ["mgmt-pkg-ar", companyId, asOfDate],
     queryFn: () => getArAgingReport(companyId, asOfDate),
@@ -236,7 +239,9 @@ function ARAgingSection({ companyId, asOfDate }: { companyId: string; asOfDate: 
   if (query.isError || !query.data) return <p className="py-4 text-xs text-red-600">A/R Aging unavailable</p>;
 
   const rows = query.data.rows;
-  if (rows.length === 0) return <p className="py-4 text-xs text-slate-400">No open A/R as of {asOfDate}</p>;
+  const q = searchQuery.toLowerCase();
+  const filtered = q ? rows.filter((row) => String(row.customer_name ?? "").toLowerCase().includes(q)) : rows;
+  if (filtered.length === 0) return <p className="py-4 text-xs text-slate-400">No open A/R as of {asOfDate}</p>;
 
   return (
     <div className="mt-3 overflow-auto">
@@ -253,7 +258,7 @@ function ARAgingSection({ companyId, asOfDate }: { companyId: string; asOfDate: 
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => (
+          {filtered.map((row) => (
             <tr key={row.customer_id} className="border-b border-gray-50">
               <td className="py-0.5 text-slate-800">
                 <ManagementCustomerCell customerId={row.customer_id} customerName={row.customer_name} />
@@ -272,7 +277,7 @@ function ARAgingSection({ companyId, asOfDate }: { companyId: string; asOfDate: 
   );
 }
 
-function APAgingSection({ companyId, asOfDate }: { companyId: string; asOfDate: string }) {
+function APAgingSection({ companyId, asOfDate, searchQuery }: { companyId: string; asOfDate: string; searchQuery: string }) {
   const query = useQuery({
     queryKey: ["mgmt-pkg-ap", companyId, asOfDate],
     queryFn: () => getApAgingReport(companyId, asOfDate),
@@ -283,7 +288,9 @@ function APAgingSection({ companyId, asOfDate }: { companyId: string; asOfDate: 
   if (query.isError || !query.data) return <p className="py-4 text-xs text-red-600">A/P Aging unavailable</p>;
 
   const rows = query.data.rows;
-  if (rows.length === 0) return <p className="py-4 text-xs text-slate-400">No open A/P as of {asOfDate}</p>;
+  const q = searchQuery.toLowerCase();
+  const filtered = q ? rows.filter((row) => String(row.vendor_name ?? "").toLowerCase().includes(q)) : rows;
+  if (filtered.length === 0) return <p className="py-4 text-xs text-slate-400">No open A/P as of {asOfDate}</p>;
 
   return (
     <div className="mt-3 overflow-auto">
@@ -300,7 +307,7 @@ function APAgingSection({ companyId, asOfDate }: { companyId: string; asOfDate: 
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => (
+          {filtered.map((row) => (
             <tr key={row.vendor_id} className="border-b border-gray-50">
               <td className="py-0.5 text-slate-800">
                 <ManagementVendorCell vendorId={row.vendor_id} vendorName={row.vendor_name} />
@@ -319,7 +326,7 @@ function APAgingSection({ companyId, asOfDate }: { companyId: string; asOfDate: 
   );
 }
 
-function CustomerSummarySection({ companyId, fromDate, toDate }: { companyId: string; fromDate: string; toDate: string }) {
+function CustomerSummarySection({ companyId, fromDate, toDate, searchQuery }: { companyId: string; fromDate: string; toDate: string; searchQuery: string }) {
   const query = useQuery({
     queryKey: ["mgmt-pkg-cust", companyId, fromDate, toDate],
     queryFn: () => getCustomerProfitability({ operating_company_id: companyId, period_start: fromDate, period_end: toDate }),
@@ -332,7 +339,9 @@ function CustomerSummarySection({ companyId, fromDate, toDate }: { companyId: st
   const rows = query.data.by_customer ?? [];
   if (rows.length === 0) return <p className="py-4 text-xs text-slate-400">No customer revenue data for this period</p>;
 
-  const sorted = [...rows].sort((a, b) => b.revenue_cents - a.revenue_cents);
+  const q = searchQuery.toLowerCase();
+  const filteredRows = q ? rows.filter((row) => String(row.customer_name ?? "").toLowerCase().includes(q)) : rows;
+  const sorted = [...filteredRows].sort((a, b) => b.revenue_cents - a.revenue_cents);
   return (
     <div className="mt-3 overflow-auto">
       <div className="overflow-x-auto"><table className="min-w-full text-xs">
@@ -359,7 +368,7 @@ function CustomerSummarySection({ companyId, fromDate, toDate }: { companyId: st
   );
 }
 
-function VendorExpenseSummarySection({ companyId, fromDate, toDate }: { companyId: string; fromDate: string; toDate: string }) {
+function VendorExpenseSummarySection({ companyId, fromDate, toDate, searchQuery }: { companyId: string; fromDate: string; toDate: string; searchQuery: string }) {
   const query = useQuery({
     queryKey: ["mgmt-pkg-ap-summary", companyId, fromDate, toDate],
     queryFn: () => getApAgingReport(companyId, toDate),
@@ -372,7 +381,9 @@ function VendorExpenseSummarySection({ companyId, fromDate, toDate }: { companyI
   const rows = query.data.rows;
   if (rows.length === 0) return <p className="py-4 text-xs text-slate-400">No open vendor balances</p>;
 
-  const sorted = [...rows].sort((a, b) => b.total_open_cents - a.total_open_cents);
+  const q = searchQuery.toLowerCase();
+  const filteredRows = q ? rows.filter((row) => String(row.vendor_name ?? "").toLowerCase().includes(q)) : rows;
+  const sorted = [...filteredRows].sort((a, b) => b.total_open_cents - a.total_open_cents);
   return (
     <div className="mt-3 overflow-auto">
       <div className="overflow-x-auto"><table className="min-w-full text-xs">
@@ -404,18 +415,14 @@ export function ManagementReportPackagePage() {
   const companyId = selectedCompanyId ?? "";
   const entityName = selectedCompany?.legal_name ?? "Entity";
 
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const rawType = searchParams.get("type") ?? "company-overview";
   const pkgType: PackageType = rawType in PACKAGES ? (rawType as PackageType) : "company-overview";
   const pkg = PACKAGES[pkgType];
 
   const emptyFilters = { ...currentMonthRange(), basis: "accrual" as AccountingBasis };
   const [applied, setApplied] = useState(emptyFilters);
-  const staged = useStagedListFilters({
-    applied,
-    empty: emptyFilters,
-    onApply: setApplied,
-  });
+  const [reportSearch, setReportSearch] = useState("");
 
   const preparedDate = mmmDd(new Date());
 
@@ -504,39 +511,25 @@ export function ManagementReportPackagePage() {
 
       {!companyId ? <p className="text-xs text-red-600">Select an operating company.</p> : null}
 
-      <CollapsedListFilters
-        activeFilterCount={JSON.stringify(applied) !== JSON.stringify(emptyFilters) ? 1 : 0}
-        onApply={staged.apply}
-        onReset={staged.reset}
-        onCancel={staged.cancel}
-        applyDisabled={!staged.dirty}
-        defaultOpen={true}
+      <ReportFilterBar
         testIdPrefix="reports-management-package"
-        className="no-print rounded-sm border border-gray-200 bg-white p-3"
+        fromDate={applied.start}
+        toDate={applied.end}
+        onFromDateChange={(d) => setApplied((p) => ({ ...p, start: d ?? "" }))}
+        onToDateChange={(d) => setApplied((p) => ({ ...p, end: d ?? "" }))}
+        onPresetSelect={(preset) => {
+          const next = new URLSearchParams(searchParams);
+          next.set("preset", preset);
+          setSearchParams(next, { replace: true });
+        }}
+        search={reportSearch}
+        onSearchChange={setReportSearch}
       >
-        <div className="flex flex-wrap items-end gap-3">
-          <BasisSelector
-            value={staged.draft.basis}
-            onChange={(next) => staged.setDraft((previous) => ({ ...previous, basis: next }))}
-          />
-          <label className="text-xs text-gray-600">
-            From
-            <DatePicker
-              className="mt-1 block h-9"
-              value={staged.draft.start}
-              onChange={(next) => staged.setDraft((p) => ({ ...p, start: next }))}
-            />
-          </label>
-          <label className="text-xs text-gray-600">
-            To
-            <DatePicker
-              className="mt-1 block h-9"
-              value={staged.draft.end}
-              onChange={(next) => staged.setDraft((p) => ({ ...p, end: next }))}
-            />
-          </label>
-        </div>
-      </CollapsedListFilters>
+        <BasisSelector
+          value={applied.basis}
+          onChange={(next) => setApplied((p) => ({ ...p, basis: next }))}
+        />
+      </ReportFilterBar>
 
       {companyId ? (
         <div className="rounded-sm border border-gray-200 bg-white p-6 print:border-0 print:p-0">
@@ -573,36 +566,36 @@ export function ManagementReportPackagePage() {
           {pkgType === "company-overview" && (
             <>
               <SectionDivider title="Profit & Loss" index={0} />
-              <PLSection companyId={companyId} fromDate={applied.start} toDate={applied.end} basis={applied.basis} />
+              <PLSection companyId={companyId} fromDate={applied.start} toDate={applied.end} basis={applied.basis} searchQuery={reportSearch} />
               <div className="print-page-break" />
               <SectionDivider title="Balance Sheet" index={1} />
-              <BSSection companyId={companyId} asOfDate={applied.end} basis={applied.basis} />
+              <BSSection companyId={companyId} asOfDate={applied.end} basis={applied.basis} searchQuery={reportSearch} />
             </>
           )}
 
           {pkgType === "sales-performance" && (
             <>
               <SectionDivider title="Profit & Loss" index={0} />
-              <PLSection companyId={companyId} fromDate={applied.start} toDate={applied.end} basis={applied.basis} />
+              <PLSection companyId={companyId} fromDate={applied.start} toDate={applied.end} basis={applied.basis} searchQuery={reportSearch} />
               <div className="print-page-break" />
               <SectionDivider title="A/R Aging Detail" index={1} />
-              <ARAgingSection companyId={companyId} asOfDate={applied.end} />
+              <ARAgingSection companyId={companyId} asOfDate={applied.end} searchQuery={reportSearch} />
               <div className="print-page-break" />
               <SectionDivider title="Sales by Customer Summary" index={2} />
-              <CustomerSummarySection companyId={companyId} fromDate={applied.start} toDate={applied.end} />
+              <CustomerSummarySection companyId={companyId} fromDate={applied.start} toDate={applied.end} searchQuery={reportSearch} />
             </>
           )}
 
           {pkgType === "expenses-performance" && (
             <>
               <SectionDivider title="Profit & Loss" index={0} />
-              <PLSection companyId={companyId} fromDate={applied.start} toDate={applied.end} basis={applied.basis} />
+              <PLSection companyId={companyId} fromDate={applied.start} toDate={applied.end} basis={applied.basis} searchQuery={reportSearch} />
               <div className="print-page-break" />
               <SectionDivider title="A/P Aging Detail" index={1} />
-              <APAgingSection companyId={companyId} asOfDate={applied.end} />
+              <APAgingSection companyId={companyId} asOfDate={applied.end} searchQuery={reportSearch} />
               <div className="print-page-break" />
               <SectionDivider title="Expenses by Vendor Summary" index={2} />
-              <VendorExpenseSummarySection companyId={companyId} fromDate={applied.start} toDate={applied.end} />
+              <VendorExpenseSummarySection companyId={companyId} fromDate={applied.start} toDate={applied.end} searchQuery={reportSearch} />
             </>
           )}
         </div>

@@ -49,6 +49,7 @@ const DispatchFlagColorsCatalog = React.lazy(() => import("../pages/lists/dispat
 const DetailTypesListPage = React.lazy(() => import("../pages/lists/accounting/DetailTypesListPage").then((m) => ({ default: m.DetailTypesListPage })));
 const NamesMasterHub = React.lazy(() => import("../pages/lists/names/NamesMasterHub").then((m) => ({ default: m.NamesMasterHub })));
 const BrokersListPage = React.lazy(() => import("../pages/lists/names/BrokersListPage").then((m) => ({ default: m.BrokersListPage })));
+const LocationsListPage = React.lazy(() => import("../pages/lists/LocationsListPage").then((m) => ({ default: m.LocationsListPage })));
 const DriverDetailPage = React.lazy(() => import("../pages/DriverDetail").then((m) => ({ default: m.DriverDetailPage })));
 const DriverProfilePage = React.lazy(() => import("../pages/drivers/DriverProfilePage").then((m) => ({ default: m.DriverProfilePage })));
 const DriverLayoverHistoryPage = React.lazy(() => import("../pages/drivers/DriverLayoverHistoryPage").then((m) => ({ default: m.DriverLayoverHistoryPage })));
@@ -89,6 +90,7 @@ const BorderCrossingHistoryPage = React.lazy(() => import("../pages/dispatch/Bor
 import { BorderCrossingHistory as GpsBorderCrossingHistory } from "../pages/dispatch/borders/BorderCrossingHistory";
 const SettlementsPage = React.lazy(() => import("../pages/driver-finance/SettlementsPage").then((m) => ({ default: m.SettlementsPage })));
 const CashAdvanceRequestsPage = React.lazy(() => import("../pages/driver-finance/CashAdvanceRequestsPage").then((m) => ({ default: m.CashAdvanceRequestsPage })));
+const CompanySettlementsPage = React.lazy(() => import("../pages/driver-finance/CompanySettlementsPage").then((m) => ({ default: m.CompanySettlementsPage })));
 const SettlementCloseArrivalPage = React.lazy(() => import("../pages/driver-finance/SettlementCloseArrivalPage").then((m) => ({ default: m.SettlementCloseArrivalPage })));
 const OwnerApprovalPortalPage = React.lazy(() => import("../pages/driver-finance/OwnerApprovalPortalPage").then((m) => ({ default: m.OwnerApprovalPortalPage })));
 import { PortalLayout } from "../portal/PortalLayout";
@@ -268,6 +270,7 @@ import BookingGapReport from "../pages/reports/BookingGapReport";
 const FaultDraftsPage = React.lazy(() => import("../pages/maintenance/FaultDraftsPage").then((m) => ({ default: m.FaultDraftsPage })));
 const FaultRulesPage = React.lazy(() => import("../pages/maintenance/FaultRulesPage").then((m) => ({ default: m.FaultRulesPage })));
 const DeadheadReportPage = React.lazy(() => import("../pages/reports/DeadheadReportPage").then((m) => ({ default: m.DeadheadReportPage })));
+const PostedWhileTourOpenReportPage = React.lazy(() => import("../pages/reports/PostedWhileTourOpenReportPage").then((m) => ({ default: m.PostedWhileTourOpenReportPage })));
 const AuditActivityByUserPage = React.lazy(() => import("../pages/reports/audit/AuditActivityByUserPage").then((m) => ({ default: m.AuditActivityByUserPage })));
 const AuditActivityByModulePage = React.lazy(() => import("../pages/reports/audit/AuditActivityByModulePage").then((m) => ({ default: m.AuditActivityByModulePage })));
 const AuditFinancialChangeLogPage = React.lazy(() => import("../pages/reports/audit/AuditFinancialChangeLogPage").then((m) => ({ default: m.AuditFinancialChangeLogPage })));
@@ -294,6 +297,7 @@ const MultiEntityAccountingPage = React.lazy(() => import("../pages/accounting/M
 const AccountingHubPage = React.lazy(() => import("../pages/accounting/AccountingHubPage").then((m) => ({ default: m.AccountingHubPage })));
 const MoneyProofTrailPage = React.lazy(() => import("../pages/accounting/MoneyProofTrailPage").then((m) => ({ default: m.MoneyProofTrailPage })));
 const LoadCostsBoardPage = React.lazy(() => import("../pages/accounting/LoadCostsBoardPage").then((m) => ({ default: m.LoadCostsBoardPage })));
+const LoadCostsLoadPage = React.lazy(() => import("../pages/accounting/LoadCostsLoadPage").then((m) => ({ default: m.LoadCostsLoadPage })));
 const DisputeQueuePage = React.lazy(() => import("../pages/accounting/DisputeQueuePage").then((m) => ({ default: m.DisputeQueuePage })));
 const AbandonmentQueuePage = React.lazy(() => import("../pages/accounting/AbandonmentQueuePage").then((m) => ({ default: m.AbandonmentQueuePage })));
 const LoansAdvancesPage = React.lazy(() => import("../pages/accounting/loans/LoansAdvancesPage").then((m) => ({ default: m.LoansAdvancesPage })));
@@ -2377,6 +2381,14 @@ export const ROUTES = React.Children.toArray(
           }
         />
         <Route
+          path="/driver-finance/company-settlements"
+          element={
+            <ProtectedRoute>
+              <CompanySettlementsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/driver-finance/settlement-close"
           element={
             <ProtectedRoute>
@@ -2446,6 +2458,14 @@ export const ROUTES = React.Children.toArray(
           element={
             <ProtectedRoute>
               <BrokersListPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/lists/locations"
+          element={
+            <ProtectedRoute>
+              <LocationsListPage />
             </ProtectedRoute>
           }
         />
@@ -3509,6 +3529,14 @@ export const ROUTES = React.Children.toArray(
           }
         />
         <Route
+          path="/reports/posted-while-tour-open"
+          element={
+            <ProtectedRoute>
+              <PostedWhileTourOpenReportPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/reports/scheduled"
           element={
             <ProtectedRoute>
@@ -3848,6 +3876,14 @@ export const ROUTES = React.Children.toArray(
           element={
             <ProtectedRoute>
               <LoadCostsBoardPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/accounting/load-costs/:loadId"
+          element={
+            <ProtectedRoute>
+              <LoadCostsLoadPage />
             </ProtectedRoute>
           }
         />

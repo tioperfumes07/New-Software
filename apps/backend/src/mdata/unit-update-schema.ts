@@ -41,6 +41,12 @@ export const UNIT_PATCHABLE_FIELD_KEYS = [
   "deactivated_at",
   "owner_company_id",
   "currently_leased_to_company_id",
+  // ROUND 16.19 (owner directive) — FLEET-VISIBILITY-F4583-SAMPLE-DATA-GAP's sibling: mdata.units
+  // never exposed is_sample_data as PATCHable at all (mdata.vendors already does, FAC-10's real
+  // quarantine path). A fixture unit's ONLY way to be marked is_sample_data=true was a raw ops
+  // script — this closes the gap so quarantine goes through the same audited PATCH every other
+  // unit field uses (appendCrudAudit / buildPatchChanges), never a bare UPDATE.
+  "is_sample_data",
   "is_dispatch_blocked",
   "dispatch_block_reason",
   "dispatch_block_source_uuid",
@@ -126,6 +132,7 @@ const fieldSchemas: Record<UnitPatchableFieldKey, z.ZodTypeAny> = {
   deactivated_at: isoDateSchema.nullable(),
   owner_company_id: z.string().uuid(),
   currently_leased_to_company_id: z.string().uuid().nullable(),
+  is_sample_data: z.boolean(),
   is_dispatch_blocked: z.boolean(),
   dispatch_block_reason: z.string().trim().max(2000).nullable(),
   dispatch_block_source_uuid: z.string().uuid().nullable(),

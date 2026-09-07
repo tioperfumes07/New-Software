@@ -34,7 +34,12 @@ function audit(doc, auditRoute) {
     if (!leaf) failures.push(`missing KEEP ${id}`);
     else if (!(leaf.required || []).includes("gl_je")) failures.push(`${id} must keep gl_je`);
   }
-  const maintenanceBlock = auditRoute.match(/maintenance-decision-log[\s\S]*?(?=app\.get|$)/)?.[0] ?? "";
+  // Stop at either the next route's app.get OR the next route's LEADING JSDoc comment (e.g.
+  // DEDUCTION-TRAIL-MISSING-AUDIT-EVENTS-SINK, #16654, later added a "void-reversal"/"VOID-REVERSAL"
+  // mention to the deduction-trail route's own doc comment, which sits before ITS app.get call --
+  // the old window bled that comment into this maintenance-decision-log block and false-failed on a
+  // route this guard never actually scopes to).
+  const maintenanceBlock = auditRoute.match(/maintenance-decision-log[\s\S]*?(?=\/\*\*|app\.get|$)/)?.[0] ?? "";
   if (/journal|post|revers/i.test(maintenanceBlock)) failures.push("maintenance decision log gained GL semantics; re-scope and wire it");
   return failures;
 }

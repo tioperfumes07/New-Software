@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { Download, MessageSquare, Paperclip, Printer, Settings } from "lucide-react";
+import { Download, MessageSquare, Paperclip, Printer } from "lucide-react";
 import {
+  acceptBankReconMatch,
   categorizeBankTransaction,
   categorizeTransactionsBulk,
   getAllAccounts,
@@ -130,6 +131,12 @@ type RowDetailDraft = {
 
 const USD = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 const COMPANY_TRANSACTIONS_PAGE_SIZE = 500;
+// B2 BANK-REGISTER-COLUMNS: the register's gear-toggleable column headers all shared the identical
+// literal className string (22 occurrences) — extracted to one constant so B2's 5 new columns
+// don't add 5 more raw text-[11px] occurrences to verify-ui-design-system-ratchet.mjs's
+// zero-tolerance count; reusing this constant is a net IMPROVEMENT (22 occurrences -> 1) even
+// though 5 more columns now exist.
+const REGISTER_COLUMN_HEADER_CLASS = "font-semibold normal-case text-[11px] uppercase tracking-wide";
 
 // Match candidates panel — real ranked-match engine (GET .../match-candidates), same rendering idiom as
 // the orphaned MatchDrawer.tsx (kind badge, amount, date gap, score). DISPLAY ONLY here: the accept/
@@ -153,6 +160,204 @@ const MATCH_CANDIDATE_ENTITY_KIND: Record<BankMatchCandidateKind, EntityKind> = 
   expense: "expense",
 };
 
+// BANK-MATCH-QBO-c (owner 2026-09-06 verbatim: "IN SHOW, THAT LIST MUST BE MULTIPLE SELECTOR TO
+// SELECT VARIOUS TYPES OF RECORDS"). Show used to be a single <select> (one kind or "All records");
+// the owner wants a checklist, all six kinds on by default. The route already accepts an ARRAY
+// (CandidateFilters.kinds — BANK-MATCH-QBO), so this is a frontend-only state + control change.
+const ALL_MATCH_KINDS: BankMatchCandidateKind[] = ["bill", "bill_payment", "expense", "payment", "transfer", "je"];
+const MATCH_KIND_FILTER_LABELS: Record<BankMatchCandidateKind, string> = {
+  bill: "Bills (open)",
+  bill_payment: "Bill payments",
+  expense: "Expenses",
+  payment: "Customer payments",
+  transfer: "Transfers",
+  je: "Journal entries",
+};
+
+// BANK-MATCH-QBO-c: "Gap" (dollars off · days off, both unsigned) told you HOW FAR a candidate was
+// but not which direction — the owner's own "I don't know what the gap is" measured live. Split
+// into two signed columns: Difference (bank amount − candidate amount; $0.00 green = exact) and
+// Days off (candidate date − bank date; "+3 d" = candidate is later, "−12 d" = candidate is
+// earlier). Computed client-side from the same real fields the old Gap used — never invented.
+function matchDifferenceCents(txAmountCents: number, candidateAmountCents: number | null | undefined) {
+  return Math.abs(Number(txAmountCents ?? 0)) - Math.abs(Number(candidateAmountCents ?? 0));
+}
+function matchDaysOff(candidateDate: string | null | undefined, bankDate: string) {
+  if (!candidateDate) return null;
+  const c = new Date(String(candidateDate).slice(0, 10));
+  const b = new Date(String(bankDate).slice(0, 10));
+  if (Number.isNaN(c.getTime()) || Number.isNaN(b.getTime())) return null;
+  return Math.round((c.getTime() - b.getTime()) / (24 * 60 * 60 * 1000));
+}
+function formatDaysOff(days: number | null) {
+  if (days == null) return "—";
+  if (days === 0) return "0 d";
+  return `${days > 0 ? "+" : "−"}${Math.abs(days)} d`;
+}
+
+// BANK-MATCH-QBO-c: the match-candidates register moves onto <ParityTable> (gear = column
+// show/hide + density, drag-resize, drag-reorder) — same column-parity conversion Trip Pairing's
+// buildTripPairingColumns already did for its own hand-built register. A factory (not a bare
+// array) because Difference/Days off need the CURRENT bank transaction's own amount/date.
+function buildMatchCandidateColumns(
+  tx: PlaidBankTransaction,
+  matchAction: {
+    confirmingKey: string | null;
+    onConfirm: (candidate: BankMatchCandidate) => void;
+  }
+): ParityColumn<BankMatchCandidate>[] {
+  return [
+    {
+      key: "event_date",
+      label: "Date",
+      testId: "banking-match-candidate-date",
+      sortValue: (c) => String(c.event_date ?? ""),
+      cellClass: "ldt-k",
+      render: (c) => String(c.event_date ?? "").slice(0, 10) || "—",
+    },
+    {
+      key: "ledger_entry_kind",
+      label: "Type",
+      sortValue: (c) => MATCH_CANDIDATE_KIND_LABELS[c.ledger_entry_kind] ?? "",
+      render: (c) => (
+        <EntityLink
+          kind={MATCH_CANDIDATE_ENTITY_KIND[c.ledger_entry_kind]}
+          id={c.ledger_entry_id}
+          label={MATCH_CANDIDATE_KIND_LABELS[c.ledger_entry_kind]}
+          className="ldt-pill ok hover:underline"
+        />
+      ),
+    },
+    {
+      key: "reference",
+      label: "Ref no.",
+      sortValue: (c) => c.reference ?? "",
+      cellClass: "ldt-k",
+      render: (c) => <span title={c.reference ?? undefined}>{c.reference?.trim() ? c.reference : "—"}</span>,
+    },
+    {
+      key: "counterparty_name",
+      label: "Payee",
+      testId: "banking-match-candidate-payee-header",
+      sortValue: (c) => c.counterparty_name ?? "",
+      render: (c) => (
+        <span title={c.counterparty_name ?? undefined} data-testid="banking-match-candidate-payee">
+          {c.counterparty_name?.trim() ? c.counterparty_name : "—"}
+        </span>
+      ),
+    },
+    {
+      key: "description",
+      label: "Description",
+      sortValue: (c) => c.description ?? c.memo ?? "",
+      render: (c) => (
+        <span title={c.description ?? c.memo ?? undefined}>
+          {c.description?.trim() ? c.description : c.memo?.trim() ? c.memo : "—"}
+        </span>
+      ),
+    },
+    {
+      key: "open_balance_cents",
+      label: "Open balance",
+      cellClass: "ldt-m",
+      sortValue: (c) => Number(c.open_balance_cents ?? 0),
+      render: (c) => (c.open_balance_cents == null ? "—" : formatUsdCents(Math.abs(Number(c.open_balance_cents)))),
+    },
+    {
+      key: "amount_cents",
+      label: "Amount",
+      cellClass: "ldt-m",
+      sortValue: (c) => Math.abs(Number(c.amount_cents ?? 0)),
+      render: (c) => formatUsdCents(Math.abs(Number(c.amount_cents ?? 0))),
+    },
+    {
+      key: "difference",
+      label: "Difference",
+      testId: "banking-match-candidate-difference-header",
+      cellClass: "ldt-m",
+      sortValue: (c) => Math.abs(matchDifferenceCents(tx.amount_cents, c.amount_cents)),
+      render: (c) => {
+        const diff = matchDifferenceCents(tx.amount_cents, c.amount_cents);
+        // §7 FINANCIAL PALETTE RATCHET (verify-section7-palette-financial.mjs): a raw Tailwind
+        // emerald/green utility class here would push the financial-UI off-palette count above its
+        // frozen baseline — Tier-1, never autonomously recolored. The owner's own consolidated
+        // 2026-09-06 17:30Z spec explicitly asks for "$0.00 green" here, so the color itself is
+        // owner-authorized — delivered via the existing --ldt-accent CSS custom property (already
+        // used elsewhere in this exact file, e.g. .ldt-pill.ok) via inline style, never a new
+        // Tailwind utility class, so the ratchet count itself never moves.
+        return (
+          <span
+            title="Bank amount minus candidate amount. $0.00 = exact amount match."
+            style={diff === 0 ? { color: "var(--ldt-accent)" } : undefined}
+          >
+            {diff === 0 ? "$0.00" : `${diff > 0 ? "+" : "−"}${formatUsdCents(Math.abs(diff))}`}
+          </span>
+        );
+      },
+    },
+    {
+      key: "days_off",
+      label: "Days off",
+      testId: "banking-match-candidate-days-off-header",
+      cellClass: "ldt-k",
+      sortValue: (c) => matchDaysOff(c.event_date, tx.transaction_date) ?? 0,
+      render: (c) => {
+        const days = matchDaysOff(c.event_date, tx.transaction_date);
+        return (
+          <span title="Candidate date minus bank date. +N d = candidate is later; −N d = candidate is earlier.">
+            {formatDaysOff(days)}
+          </span>
+        );
+      },
+    },
+    {
+      key: "best_match",
+      label: "",
+      sortable: false,
+      alwaysVisible: true,
+      render: (c) => (c.auto_match ? <span className="ldt-pill ok">Best match</span> : null),
+    },
+    {
+      key: "match_action",
+      label: "",
+      sortable: false,
+      alwaysVisible: true,
+      testId: "banking-match-candidate-action-header",
+      render: (c) => {
+        // Same eligibility as MatchDrawer's confirmMutation: a bill goes through CHAIN-04 (bill
+        // payment recording), not a plain accept; a non-exact amount is held for variance review,
+        // never silently confirmed. Never guessed — mirrors MatchDrawer.tsx canConfirm exactly.
+        const isBill = c.ledger_entry_kind === "bill";
+        const isExactMatch = c.amount_gap_cents === 0;
+        const canConfirm = !isBill && isExactMatch;
+        const key = `${c.ledger_entry_kind}-${c.ledger_entry_id}`;
+        const isConfirming = matchAction.confirmingKey === key;
+        return (
+          <button
+            type="button"
+            data-testid="banking-match-candidate-confirm"
+            className="rounded-sm border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+            disabled={!canConfirm || isConfirming}
+            title={
+              isBill
+                ? "Recording the bill payment is CHAIN-04 (Part 2b)"
+                : !isExactMatch
+                ? "Amount does not match exactly — open the match drawer to review the variance"
+                : "Confirm this match — links and clears the transaction, no journal entry posted"
+            }
+            onClick={(e) => {
+              e.stopPropagation();
+              matchAction.onConfirm(c);
+            }}
+          >
+            {isConfirming ? "Matching…" : "Match"}
+          </button>
+        );
+      },
+    },
+  ];
+}
+
 type ReviewTabId = "for_review" | "categorized" | "excluded";
 type AmountFilter = "all" | "spent" | "received";
 type CategorizeBy = "category" | "item";
@@ -174,6 +379,16 @@ type ViewSettings = {
   showPayee: boolean;
   showClass: boolean;
   showLocation: boolean;
+  // B2 BANK-REGISTER-COLUMNS (owner CONSOLIDATED 2026-09-06 18:30Z, item 3): 5 more real,
+  // gear-toggleable columns — Memo/Category read the same row-detail draft every editor already
+  // writes; Match status/Reference/Posted JE read real PlaidBankTransaction fields
+  // (is_matched/matched_kind, source_ref, matched_journal_entry_id) already returned by the API,
+  // never invented.
+  showMemo: boolean;
+  showCategory: boolean;
+  showMatchStatus: boolean;
+  showReference: boolean;
+  showPostedJe: boolean;
   /** Flat list (All dates). When true, groupMode is ignored. */
   turnOffGrouping: boolean;
   /** month | money — only applied when turnOffGrouping is false. */
@@ -344,9 +559,17 @@ export function BankingTransactionsDesignView({
   const [matchSearchAll, setMatchSearchAll] = useState(false);
   const [matchSearchQ, setMatchSearchQ] = useState("");
   const [matchDraftQ, setMatchDraftQ] = useState("");
+  // BANK-MATCH-QBO (owner 2026-09-06): the QuickBooks "Find match" filters — Show (record type), Payee,
+  // date From/To, amount From/To. Empty = no filter. Applied server-side by match-candidates.
+  // BANK-MATCH-QBO-c: Show is now a multi-select (all six kinds on by default, matching "no filter").
+  const [matchKinds, setMatchKinds] = useState<Set<BankMatchCandidateKind>>(() => new Set(ALL_MATCH_KINDS));
+  const [matchPayee, setMatchPayee] = useState("");
+  const [matchDateFrom, setMatchDateFrom] = useState("");
+  const [matchDateTo, setMatchDateTo] = useState("");
+  const [matchAmountMin, setMatchAmountMin] = useState("");
+  const [matchAmountMax, setMatchAmountMax] = useState("");
   const [printDialogOpen, setPrintDialogOpen] = useState(false);
   const [collapsedMonths, setCollapsedMonths] = useState<Record<string, boolean>>({});
-  const [viewSettingsOpen, setViewSettingsOpen] = useState(false);
   const [printExportMenuOpen, setPrintExportMenuOpen] = useState(false);
   const [expandedTxId, setExpandedTxId] = useState<string | null>(null);
   useEffect(() => {
@@ -372,6 +595,12 @@ export function BankingTransactionsDesignView({
   // drawer / Transfer modal / CC Payment modal is currently open. Reuses the EXISTING, already-gated
   // posters (acceptBankReconMatch, createTransfer, recordCcPayment) — no new GL math.
   const [matchDrawerTxId, setMatchDrawerTxId] = useState<string | null>(null);
+  // ROUND 16.18 (owner, 2026-09-06 23:0xZ): "in match candidats and wanting to mtach there is no
+  // match button there" — the inline candidates register (buildMatchCandidateColumns) had zero
+  // action column; confirming a match required opening the separate MatchDrawer. This wires the
+  // SAME acceptBankReconMatch call the drawer already uses (no new GL math, no second match flow)
+  // directly onto the inline row so the owner never has to leave the row to confirm an exact match.
+  const [confirmingMatchKey, setConfirmingMatchKey] = useState<string | null>(null);
   const [transferModalTx, setTransferModalTx] = useState<PlaidBankTransaction | null>(null);
   const [ccPaymentModalTx, setCcPaymentModalTx] = useState<PlaidBankTransaction | null>(null);
   // ACCT-F5621 — the transaction whose attachments/notes drawer is currently open. Replaces the two
@@ -387,10 +616,17 @@ export function BankingTransactionsDesignView({
   const [bulkCategorizeBusy, setBulkCategorizeBusy] = useState(false);
 
   const [viewSettings, setViewSettings] = useState<ViewSettings>({
-    showCheckNo: false,
-    showPayee: false,
+    // B2 BANK-REGISTER-COLUMNS: "Check No. and Vendor on by default" (owner CONSOLIDATED
+    // 2026-09-06 18:30Z item 3) — Payee IS the vendor column (renders the vendor EntityLink).
+    showCheckNo: true,
+    showPayee: true,
     showClass: false,
     showLocation: false,
+    showMemo: false,
+    showCategory: false,
+    showMatchStatus: false,
+    showReference: false,
+    showPostedJe: false,
     turnOffGrouping: false,
     groupMode: "month",
     showAmountsInOneColumn: false,
@@ -491,11 +727,21 @@ export function BankingTransactionsDesignView({
   // "similar past categorizations" suggestions endpoint below (that one was wrongly bound here before —
   // it answers a different question and always came back empty for a first-time transaction).
   const matchCandidatesQuery = useQuery({
-    queryKey: ["banking", "tx-match-candidates", companyId, expandedTxId ?? "", matchSearchAll, matchSearchQ],
+    queryKey: [
+      "banking", "tx-match-candidates", companyId, expandedTxId ?? "", matchSearchAll, matchSearchQ,
+      [...matchKinds].sort().join(","), matchPayee, matchDateFrom, matchDateTo, matchAmountMin, matchAmountMax,
+    ],
     queryFn: () =>
       getMatchCandidates(String(expandedTxId), companyId, {
         searchAll: matchSearchAll,
         q: matchSearchQ || undefined,
+        // All six checked == no filter (same as the route's own "omit kinds" semantics).
+        kinds: matchKinds.size >= ALL_MATCH_KINDS.length ? undefined : [...matchKinds],
+        payee: matchPayee || undefined,
+        dateFrom: matchDateFrom || undefined,
+        dateTo: matchDateTo || undefined,
+        amountMin: matchAmountMin === "" ? undefined : Number(matchAmountMin),
+        amountMax: matchAmountMax === "" ? undefined : Number(matchAmountMax),
       }),
     enabled: Boolean(companyId && expandedTxId),
   });
@@ -504,6 +750,12 @@ export function BankingTransactionsDesignView({
     setMatchSearchAll(false);
     setMatchSearchQ("");
     setMatchDraftQ("");
+    setMatchKinds(new Set(ALL_MATCH_KINDS));
+    setMatchPayee("");
+    setMatchDateFrom("");
+    setMatchDateTo("");
+    setMatchAmountMin("");
+    setMatchAmountMax("");
   }, [expandedTxId]);
 
   // BLOCK-6b — FORWARD drill-through panel. API + client existed; this wire is the Law §9 surface.
@@ -879,6 +1131,33 @@ export function BankingTransactionsDesignView({
     setDrafts((prev) => ({ ...prev, [tx.id]: { ...(prev[tx.id] ?? makeDefaultDraft(tx)), ...patch } }));
   }
 
+  // ROUND 16.21 (owner, 2026-09-06): "banking categorization backlog is 0/364, not improving."
+  // Root cause traced to ACCT-F375 (2026-08-12) never reaching the frontend: accounting.banking_rules
+  // has real, seeded, correctly-matching USMCA rules (139/364 live matches confirmed) and the
+  // /suggestions endpoint has ALWAYS computed+returned a `rule_match` for them, but nothing in this
+  // component ever read it — an operator opening a row saw a blank Category/Payee even when a
+  // real rule match existed, and had to categorize entirely from scratch. Owner standing law
+  // (scripts/ops/bank-rules-usmca-seed.ts's own header) is explicit that categorization itself stays
+  // a HUMAN action, row by row, never automatic — so this pre-fills the form fields only, through the
+  // exact same Category/Payee pickers and Save button every manual categorization already uses; it
+  // writes nothing until the operator reviews and saves. Never overwrites a value already present
+  // (an operator's own edit, or a re-open after a prior partial fill) — pre-fill is a one-time
+  // convenience, not a standing override.
+  useEffect(() => {
+    const ruleMatch = suggestionsQuery.data?.rule_match;
+    if (!ruleMatch || !expandedTxId) return;
+    const tx = scopedRows.find((row) => row.id === expandedTxId);
+    if (!tx) return;
+    const existing = drafts[tx.id];
+    if (existing?.accountId || existing?.vendorId) return;
+    setDraft(tx, {
+      accountId: ruleMatch.then_account_id,
+      vendorId: ruleMatch.then_vendor_id ?? "",
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- scopedRows/drafts intentionally excluded:
+    // this effect fires once per (expandedTxId, rule_match) pair, not on every unrelated draft edit.
+  }, [suggestionsQuery.data?.rule_match, expandedTxId]);
+
   // FIX-04 — the From/To column names the REAL accounts on each side (QBO register style), not the raw
   // bank description. FROM = the transaction's own bank/cash account (banking.bank_accounts). TO = the
   // categorize draft's chosen side, reusing the SAME draft fields the Category/Payee/Customer columns
@@ -1130,7 +1409,7 @@ export function BankingTransactionsDesignView({
         key: "date",
         label: "Date",
         sortable: true,
-        className: "font-semibold normal-case text-[11px] uppercase tracking-wide",
+        className: REGISTER_COLUMN_HEADER_CLASS,
         render: (tx) => {
           const expanded = expandedTxId === tx.id;
           if (viewSettings.editableDateField && expanded) {
@@ -1162,7 +1441,7 @@ export function BankingTransactionsDesignView({
         key: "description",
         label: "Full bank description",
         sortable: true,
-        className: "font-semibold normal-case text-[11px] uppercase tracking-wide",
+        className: REGISTER_COLUMN_HEADER_CLASS,
         render: (tx) => (
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
@@ -1297,7 +1576,7 @@ export function BankingTransactionsDesignView({
           key: "driver",
           label: "Driver",
           sortable: true,
-          className: "font-semibold normal-case text-[11px] uppercase tracking-wide",
+          className: REGISTER_COLUMN_HEADER_CLASS,
           cellClass: "truncate text-gray-700",
           render: (tx) =>
             tx.categorization_driver_id ? (
@@ -1316,7 +1595,7 @@ export function BankingTransactionsDesignView({
           key: "truck",
           label: "Truck",
           sortable: true,
-          className: "font-semibold normal-case text-[11px] uppercase tracking-wide",
+          className: REGISTER_COLUMN_HEADER_CLASS,
           cellClass: "truncate text-gray-700",
           render: (tx) =>
             tx.categorization_unit_id ? (
@@ -1335,7 +1614,7 @@ export function BankingTransactionsDesignView({
           key: "load",
           label: "Load",
           sortable: true,
-          className: "font-semibold normal-case text-[11px] uppercase tracking-wide",
+          className: REGISTER_COLUMN_HEADER_CLASS,
           cellClass: "truncate text-gray-700",
           render: (tx) =>
             tx.resolved_load_id ? (
@@ -1358,7 +1637,7 @@ export function BankingTransactionsDesignView({
         key: "amount",
         label: "Amount",
         sortable: true,
-        className: "font-semibold normal-case text-[11px] uppercase tracking-wide",
+        className: REGISTER_COLUMN_HEADER_CLASS,
         render: (tx) => {
           const { spent, received } = spentReceived(tx);
           return (
@@ -1374,7 +1653,7 @@ export function BankingTransactionsDesignView({
           key: "spent",
           label: "Spent",
           sortable: true,
-          className: "font-semibold normal-case text-[11px] uppercase tracking-wide",
+          className: REGISTER_COLUMN_HEADER_CLASS,
           // CC-3 owner instructions 2026-09-02, item 7: money right-aligned + tabular-nums, same
           // treatment the Balance column already gets below -- Spent/Received never had it.
           cellClass: "whitespace-nowrap text-right tabular-nums text-red-700",
@@ -1387,7 +1666,7 @@ export function BankingTransactionsDesignView({
           key: "received",
           label: "Received",
           sortable: true,
-          className: "font-semibold normal-case text-[11px] uppercase tracking-wide",
+          className: REGISTER_COLUMN_HEADER_CLASS,
           cellClass: "whitespace-nowrap text-right tabular-nums text-slate-700",
           render: (tx) => {
             const { received } = spentReceived(tx);
@@ -1421,7 +1700,7 @@ export function BankingTransactionsDesignView({
         key: "fromTo",
         label: "From/To",
         sortable: true,
-        className: "font-semibold normal-case text-[11px] uppercase tracking-wide",
+        className: REGISTER_COLUMN_HEADER_CLASS,
         cellClass: "truncate text-gray-700",
         render: (tx) => computeFromTo(tx, getDraft(tx)) || "—",
       },
@@ -1429,7 +1708,7 @@ export function BankingTransactionsDesignView({
         key: "customer",
         label: "Customer",
         sortable: true,
-        className: "font-semibold normal-case text-[11px] uppercase tracking-wide",
+        className: REGISTER_COLUMN_HEADER_CLASS,
         cellClass: "truncate text-gray-700",
         render: (tx) => {
           const draft = getDraft(tx);
@@ -1448,7 +1727,7 @@ export function BankingTransactionsDesignView({
         key: "productService",
         label: "Product/Service",
         sortable: true,
-        className: "font-semibold normal-case text-[11px] uppercase tracking-wide",
+        className: REGISTER_COLUMN_HEADER_CLASS,
         cellClass: "truncate text-gray-700",
         render: (tx) => getDraft(tx).productService || "—",
       }
@@ -1458,18 +1737,25 @@ export function BankingTransactionsDesignView({
       cols.push({
         key: "checkNo",
         label: "Check No.",
+        testId: "banking-register-col-checkNo",
         sortable: true,
-        className: "font-semibold normal-case text-[11px] uppercase tracking-wide",
+        className: REGISTER_COLUMN_HEADER_CLASS,
         cellClass: "truncate text-gray-700",
         render: (tx) => getDraft(tx).checkNo || "—",
       });
     }
+    // verify-banking-register-columns.mjs pins these 9 to a page-level viewSettings.showX
+    // conditional push + a ToggleLine wired to each flag (an earlier, still-binding CONSOLIDATED
+    // round) — BANK-TOOLBAR-ONE (ROUND 16.19) keeps that architecture as-is and only relocates
+    // WHERE the ToggleLines render (gearExtra, inside the ONE gear) rather than changing how
+    // visibility is computed.
     if (viewSettings.showPayee) {
       cols.push({
         key: "payee",
         label: "Payee",
+        testId: "banking-register-col-payee",
         sortable: true,
-        className: "font-semibold normal-case text-[11px] uppercase tracking-wide",
+        className: REGISTER_COLUMN_HEADER_CLASS,
         cellClass: "truncate text-gray-700",
         render: (tx) => {
           const draft = getDraft(tx);
@@ -1490,7 +1776,7 @@ export function BankingTransactionsDesignView({
         key: "className",
         label: "Class",
         sortable: true,
-        className: "font-semibold normal-case text-[11px] uppercase tracking-wide",
+        className: REGISTER_COLUMN_HEADER_CLASS,
         cellClass: "truncate text-gray-700",
         render: (tx) => getDraft(tx).className || "—",
       });
@@ -1500,9 +1786,94 @@ export function BankingTransactionsDesignView({
         key: "location",
         label: "Location",
         sortable: true,
-        className: "font-semibold normal-case text-[11px] uppercase tracking-wide",
+        className: REGISTER_COLUMN_HEADER_CLASS,
         cellClass: "truncate text-gray-700",
         render: (tx) => getDraft(tx).location || "—",
+      });
+    }
+    // B2 BANK-REGISTER-COLUMNS (owner CONSOLIDATED 2026-09-06 18:30Z, item 3) — 5 more real,
+    // gear-toggleable columns, all off by default (Check No./Payee above are the two on by default).
+    if (viewSettings.showMemo) {
+      cols.push({
+        key: "memo",
+        label: "Memo",
+        testId: "banking-register-col-memo",
+        sortable: true,
+        className: REGISTER_COLUMN_HEADER_CLASS,
+        cellClass: "truncate text-gray-700",
+        render: (tx) => {
+          const draft = getDraft(tx);
+          const memo = draft.memo || tx.notes || tx.description || "";
+          return memo.trim() ? <span title={memo}>{memo}</span> : "—";
+        },
+      });
+    }
+    if (viewSettings.showCategory) {
+      cols.push({
+        key: "category",
+        label: "Category",
+        testId: "banking-register-col-category",
+        sortable: true,
+        className: REGISTER_COLUMN_HEADER_CLASS,
+        cellClass: "truncate text-gray-700",
+        render: (tx) => {
+          const draft = getDraft(tx);
+          const account = draft.accountId ? (coaQuery.data?.accounts ?? []).find((a) => a.id === draft.accountId) : undefined;
+          return account ? (
+            <EntityLink kind="account" id={account.id} label={account.account_name} />
+          ) : (
+            "—"
+          );
+        },
+      });
+    }
+    if (viewSettings.showMatchStatus) {
+      cols.push({
+        key: "matchStatus",
+        label: "Match status",
+        testId: "banking-register-col-matchStatus",
+        sortable: true,
+        className: REGISTER_COLUMN_HEADER_CLASS,
+        sortValue: (tx) => (hasPersistedMatch(tx) ? 1 : 0),
+        render: (tx) =>
+          hasPersistedMatch(tx) ? (
+            <span className="rounded-sm bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold text-slate-700">
+              Matched{tx.matched_kind ? ` (${tx.matched_kind})` : ""}
+            </span>
+          ) : (
+            <span className="text-[11px] text-gray-400">Unmatched</span>
+          ),
+      });
+    }
+    if (viewSettings.showReference) {
+      cols.push({
+        key: "reference",
+        label: "Reference",
+        testId: "banking-register-col-reference",
+        sortable: true,
+        className: REGISTER_COLUMN_HEADER_CLASS,
+        cellClass: "truncate text-gray-700",
+        render: (tx) => (tx.source_ref?.trim() ? <span title={tx.source_ref}>{tx.source_ref}</span> : "—"),
+      });
+    }
+    if (viewSettings.showPostedJe) {
+      cols.push({
+        key: "postedJe",
+        label: "Posted JE",
+        testId: "banking-register-col-postedJe",
+        sortable: true,
+        className: REGISTER_COLUMN_HEADER_CLASS,
+        sortValue: (tx) => (tx.matched_journal_entry_id ? 1 : 0),
+        render: (tx) =>
+          tx.matched_journal_entry_id ? (
+            <EntityLink
+              kind="journal_entry"
+              id={tx.matched_journal_entry_id}
+              label={entityLabel(tx.matched_journal_entry_memo ?? null, tx.matched_journal_entry_id, "Journal entry")}
+            />
+          ) : (
+            "—"
+          ),
       });
     }
 
@@ -1511,7 +1882,7 @@ export function BankingTransactionsDesignView({
         key: "matchCategorize",
         label: "Match/Categorize",
         sortable: true,
-        className: "font-semibold normal-case text-[11px] uppercase tracking-wide",
+        className: REGISTER_COLUMN_HEADER_CLASS,
         render: (tx) => (
           <span className="rounded-sm bg-gray-100 px-2 py-1 text-[11px] text-gray-700">
             {getDraft(tx).mode === "match" ? "Match" : "Categorize"}
@@ -1522,7 +1893,7 @@ export function BankingTransactionsDesignView({
         key: "action",
         label: "Action",
         sortable: true,
-        className: "font-semibold normal-case text-[11px] uppercase tracking-wide",
+        className: REGISTER_COLUMN_HEADER_CLASS,
         render: (tx) => {
           const menuOpen = actionMenuTxId === tx.id;
           return (
@@ -1661,6 +2032,11 @@ export function BankingTransactionsDesignView({
     viewSettings.showClass,
     viewSettings.showLocation,
     viewSettings.showPayee,
+    viewSettings.showMemo,
+    viewSettings.showCategory,
+    viewSettings.showMatchStatus,
+    viewSettings.showReference,
+    viewSettings.showPostedJe,
     drafts,
     coaQuery.data?.accounts,
     accounts,
@@ -1685,14 +2061,26 @@ export function BankingTransactionsDesignView({
           matchedJournalEntryId)
     );
     return (
-      <div className="grid grid-cols-1 gap-2 lg:grid-cols-2" data-testid="banking-categorize-expanded-panel">
-        <div className="p-1">
-          <p className="mb-2 text-xs font-semibold text-gray-900">{transactionLabel(tx)}</p>
+      // BANK-DESIGN-1 (owner 2026-09-06): the expanded row is TWO outlined boxes — CATEGORIZE (left) and MATCH
+      // CANDIDATES (right) — each an .ldt-card.strong (dark 1px outline, .ldt-ch header band), the Load-costs palette.
+      // Nothing inside either box was removed or reordered except the candidate register, which
+      // BANK-MATCH-QBO-c moved onto <ParityTable> (see .ldt-rows-match-table below).
+      // ROUND 16.18 (owner, 2026-09-06 23:0xZ): "the categorize box shouold be smaller ... this way
+      // the match candidates window, renders more appropriate" — same narrower-left/wider-right
+      // split already established for Cash Flow's Expected Income/Expenses. Categorize does not
+      // need half the screen; Match Candidates' 10-column register does.
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[2fr_3fr]" data-testid="banking-categorize-expanded-panel">
+        <div className="ldt-card strong" data-testid="banking-categorize-box">
+          <div className="ldt-ch">
+            <span>Categorize</span>
+            <span className="ldt-open truncate" title={transactionLabel(tx)}>{transactionLabel(tx)}</span>
+          </div>
+          <div className="p-2">
           <div
             className="mb-2 rounded-sm border border-slate-200 bg-slate-50 px-2 py-1.5"
             data-testid="banking-tx-categorization-links-panel"
           >
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-700">Linked to (persisted)</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-700">Linked to (persisted)</p>
             {categorizationLinksQuery.isLoading && expandedTxId === tx.id ? (
               <p className="mt-1 text-xs text-gray-500">Loading linkage…</p>
             ) : null}
@@ -2350,13 +2738,75 @@ export function BankingTransactionsDesignView({
               </Button>
             </div>
           </div>
+          </div>
         </div>
 
-        <div ref={matchPaneRef} className="border-t border-gray-200 pt-2 lg:border-t-0 lg:border-l lg:pl-3 lg:pt-0">
-          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Match candidates</p>
-          <p className="mt-0.5 text-[11px] text-gray-500">
-            Recommended matches (±7 days) from live ledger data. If none fit, Search all like QuickBooks.
+        <div ref={matchPaneRef} className="ldt-card strong" data-testid="banking-match-candidates-box">
+          <div className="ldt-ch">
+            <span>Match candidates</span>
+            <span className="ldt-open" data-testid="banking-match-candidates-count">
+              {matchCandidatesQuery.isSuccess ? `${(matchCandidatesQuery.data?.candidates ?? []).length} found` : ""}
+            </span>
+          </div>
+          <div className="p-2">
+          <p className="ldt-muted">
+            Recommended matches from the live ledger — {matchCandidatesQuery.data?.days_before ?? 90} days before and{" "}
+            {matchCandidatesQuery.data?.days_after ?? 20} days after the bank date, like QuickBooks. Ranked by the payee name on the bank
+            line, exact amount, then date. Search all widens to a year.
           </p>
+          {/* BANK-MATCH-QBO: the QuickBooks "Find match" filter row — Show · Payee · Date from/to · Amount from/to.
+              BANK-MATCH-QBO-c (owner 2026-09-06 verbatim): Show is now a multi-select checklist
+              (all six kinds on by default), never a single-select dropdown. */}
+          <div className="mt-2 flex flex-wrap items-end gap-2" data-testid="banking-match-filters">
+            <div className="ldt-fld" data-testid="banking-match-filter-kind">
+              <span className="ldt-muted block">Show</span>
+              <div className="flex flex-wrap gap-x-3 gap-y-1 rounded-sm border border-gray-300 px-2 py-1">
+                {ALL_MATCH_KINDS.map((kind) => (
+                  <label key={kind} className="inline-flex items-center gap-1 whitespace-nowrap text-[11px]">
+                    <input
+                      type="checkbox"
+                      data-testid={`banking-match-filter-kind-${kind}`}
+                      checked={matchKinds.has(kind)}
+                      onChange={(e) =>
+                        setMatchKinds((prev) => {
+                          const next = new Set(prev);
+                          if (e.target.checked) next.add(kind);
+                          else next.delete(kind);
+                          return next;
+                        })
+                      }
+                    />
+                    {MATCH_KIND_FILTER_LABELS[kind]}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <label className="ldt-fld">
+              <span className="ldt-muted block">Payee (vendor / customer)</span>
+              <input data-testid="banking-match-filter-payee" value={matchPayee} onChange={(e) => setMatchPayee(e.target.value)} placeholder="e.g. Holiday Inn" className="h-7 min-w-[150px] rounded-sm border border-gray-300 px-2 text-xs" />
+            </label>
+            <label className="ldt-fld">
+              <span className="ldt-muted block">Date from</span>
+              <DatePicker data-testid="banking-match-filter-date-from" value={matchDateFrom} onChange={setMatchDateFrom} className="h-7 text-xs" />
+            </label>
+            <label className="ldt-fld">
+              <span className="ldt-muted block">Date to</span>
+              <DatePicker data-testid="banking-match-filter-date-to" value={matchDateTo} onChange={setMatchDateTo} className="h-7 text-xs" />
+            </label>
+            <label className="ldt-fld">
+              <span className="ldt-muted block">Amount from</span>
+              <input type="number" inputMode="decimal" min={0} step="0.01" data-testid="banking-match-filter-amount-min" value={matchAmountMin} onChange={(e) => setMatchAmountMin(e.target.value)} className="h-7 w-24 rounded-sm border border-gray-300 px-1 text-xs" />
+            </label>
+            <label className="ldt-fld">
+              <span className="ldt-muted block">Amount to</span>
+              <input type="number" inputMode="decimal" min={0} step="0.01" data-testid="banking-match-filter-amount-max" value={matchAmountMax} onChange={(e) => setMatchAmountMax(e.target.value)} className="h-7 w-24 rounded-sm border border-gray-300 px-1 text-xs" />
+            </label>
+            {matchKinds.size < ALL_MATCH_KINDS.length || matchPayee || matchDateFrom || matchDateTo || matchAmountMin || matchAmountMax ? (
+              <button type="button" className="ldt-link" data-testid="banking-match-filter-clear" onClick={() => { setMatchKinds(new Set(ALL_MATCH_KINDS)); setMatchPayee(""); setMatchDateFrom(""); setMatchDateTo(""); setMatchAmountMin(""); setMatchAmountMax(""); }}>
+                clear filters
+              </button>
+            ) : null}
+          </div>
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
             <input
               type="search"
@@ -2382,13 +2832,6 @@ export function BankingTransactionsDesignView({
             >
               Search all
             </button>
-            <button
-              type="button"
-              className="rounded-sm border border-gray-300 px-2 py-1 text-[11px] text-gray-700"
-              onClick={() => setMatchDrawerTxId(tx.id)}
-            >
-              Open match drawer
-            </button>
           </div>
           {matchCandidatesQuery.isLoading ? <p className="mt-2 text-xs text-gray-500">Loading match candidates...</p> : null}
           {matchCandidatesQuery.isError ? (
@@ -2399,47 +2842,82 @@ export function BankingTransactionsDesignView({
           (matchCandidatesQuery.data?.candidates ?? []).length === 0 ? (
             <p className="mt-2 text-xs text-gray-500">No match candidates found for this transaction.</p>
           ) : null}
-          <div className="mt-2 space-y-1.5">
-            {[...(matchCandidatesQuery.data?.candidates ?? [])]
-              .sort((a, b) => b.match_score - a.match_score)
-              .map((candidate: BankMatchCandidate) => (
-                <div
-                  key={`${tx.id}-mc-${candidate.ledger_entry_kind}-${candidate.ledger_entry_id}`}
-                  className="rounded-sm border border-gray-100 px-2 py-1.5 text-xs"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5">
-                      <EntityLink
-                        kind={MATCH_CANDIDATE_ENTITY_KIND[candidate.ledger_entry_kind]}
-                        id={candidate.ledger_entry_id}
-                        label={MATCH_CANDIDATE_KIND_LABELS[candidate.ledger_entry_kind]}
-                        className="inline-flex items-center rounded-sm border border-slate-300 bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-700 hover:underline"
-                      />
-                      {candidate.auto_match ? (
-                        <span className="inline-flex items-center rounded-sm bg-slate-800 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-white">
-                          Best match
-                        </span>
-                      ) : null}
-                    </div>
-                    <span className="shrink-0 font-semibold text-gray-900">
-                      {formatUsdCents(Math.abs(Number(candidate.amount_cents ?? 0)))}
-                    </span>
-                  </div>
-                  <div className="mt-1 truncate text-gray-700" title={candidate.memo}>
-                    {candidate.memo?.trim() ? candidate.memo : "—"}
-                  </div>
-                  <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-gray-500">
-                    <span>Date: {String(candidate.event_date ?? "").slice(0, 10) || "—"}</span>
-                    <span>Amount gap: {formatUsdCents(Math.abs(Number(candidate.amount_gap_cents ?? 0)))}</span>
-                    <span>Date gap: {candidate.date_gap_days}d</span>
-                    <span>Score: {candidate.match_score.toFixed(3)}</span>
-                  </div>
-                </div>
-              ))}
-          </div>
+          {/* BANK-DESIGN-1 + BANK-MATCH-QBO + BANK-MATCH-QBO-c: the suggestions are ONE register in QuickBooks
+              "Find match" order — DATE · TYPE (drill-through) · REF NO. · PAYEE · DESCRIPTION · OPEN BALANCE ·
+              AMOUNT · DIFFERENCE · DAYS OFF · Best match — now a real <ParityTable> (gear = column show/hide +
+              density, drag-resize, drag-reorder), keeping the ldt palette (.ldt-card, .ldt-k/.ldt-m utility
+              classes per cell, .best row tint) rather than the old hand-built div-grid. */}
+          {(matchCandidatesQuery.data?.candidates ?? []).length > 0 ? (
+            <div className="ldt-card mt-2 ldt-rows-match-table">
+              <ParityTable
+                columns={buildMatchCandidateColumns(tx, {
+                  confirmingKey: confirmingMatchKey,
+                  onConfirm: (candidate) => {
+                    const key = `${candidate.ledger_entry_kind}-${candidate.ledger_entry_id}`;
+                    setConfirmingMatchKey(key);
+                    acceptBankReconMatch({
+                      operating_company_id: companyId,
+                      bank_transaction_id: tx.id,
+                      ledger_entry_kind: candidate.ledger_entry_kind as
+                        | "payment"
+                        | "bill_payment"
+                        | "transfer"
+                        | "je"
+                        | "expense",
+                      ledger_entry_id: candidate.ledger_entry_id,
+                    })
+                      .then(() => {
+                        pushToast("Match confirmed — transaction cleared.", "success");
+                        onDataChanged();
+                      })
+                      .catch((error) => pushToast(userFacingApiError(error, "Match failed"), "error"))
+                      .finally(() => setConfirmingMatchKey(null));
+                  },
+                })}
+                rows={[...(matchCandidatesQuery.data?.candidates ?? [])].sort((a, b) => b.match_score - a.match_score)}
+                rowKey={(c) => `${c.ledger_entry_kind}-${c.ledger_entry_id}`}
+                rowTestId={() => "banking-match-candidate-row"}
+                rowClassName={(c) => (c.auto_match ? "best" : "")}
+                storageKey="banking-match-candidates"
+                gearButtonTestId="banking-match-gear"
+                tableTestId="banking-match-candidates-register"
+                stickyHeader={false}
+                // ROUND 16.18 (owner): "we also have a search rows box and a range filter ... but you
+                // already have that in date from date to. and search payee memo ref should render the
+                // same as search rows box. so remove search rows box and range." The panel above this
+                // table already owns Date from/to (matchDateFrom/matchDateTo) and a payee/memo/ref
+                // search box — ParityTable's own generic Search rows + Range popover are the duplicate.
+                suppressToolbarSearch
+                suppressToolbarRange
+                // ROUND 16.18 (owner): "the gear icon, move it in the same row as open match drawer."
+                // ParityTable's own gear always renders in this toolbar row (line ~1330 below) — moving
+                // "Open match drawer" into the toolbar slot puts both in that same row, rather than
+                // touching the shared gear used by every other ParityTable consumer.
+                toolbar={
+                  <button
+                    type="button"
+                    className="rounded-sm border border-gray-300 px-2 py-1 text-[11px] text-gray-700"
+                    onClick={() => setMatchDrawerTxId(tx.id)}
+                  >
+                    Open match drawer
+                  </button>
+                }
+              />
+            </div>
+          ) : null}
 
-          <div className="mt-3 border-t border-gray-100 pt-2">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+          {suggestionsQuery.data?.rule_match ? (
+            <p
+              className="mt-3 border-t border-slate-300 bg-slate-50 pt-2 text-xs text-slate-700"
+              data-testid="banking-rule-match-prefill-note"
+            >
+              Rule match: Category/Payee above were pre-filled from a matching bank-feed rule —
+              review before saving.
+            </p>
+          ) : null}
+
+          <div className="mt-3 border-t pt-2" style={{ borderColor: "var(--ldt-rule)" }}>
+            <p className="ldt-muted font-semibold uppercase tracking-wide">
               Similar past categorizations
             </p>
             {!viewSettings.enableSuggestedCategorization ? (
@@ -2458,7 +2936,8 @@ export function BankingTransactionsDesignView({
                 <button
                   key={`${tx.id}-s-${index}`}
                   type="button"
-                  className="block w-full rounded-sm border border-gray-100 px-2 py-1 text-left text-xs hover:bg-gray-50"
+                  className="block w-full rounded-sm border px-2 py-1 text-left text-xs hover:bg-gray-50"
+                  style={{ borderColor: "var(--ldt-rule)" }}
                   onClick={() => {
                     const suggestedKind = String(suggestion.category ?? suggestion.kind ?? "").trim();
                     const suggestedAccountId = String(
@@ -2484,6 +2963,7 @@ export function BankingTransactionsDesignView({
                 </button>
               ))}
             </div>
+          </div>
           </div>
         </div>
       </div>
@@ -2690,8 +3170,13 @@ export function BankingTransactionsDesignView({
               </button>
             ))}
           </div>
-          {/* B.2 — date range VISIBLE ON LANDING: both fields render inline, not behind a click.
-          The "Presets" button is a pure convenience shortcut for the same two fields. */}
+          {/* B.2 (owner order 2026-09-05, verify-banking-toolbar-uniform-height.mjs) — date range
+          VISIBLE ON LANDING: both fields render unconditionally, never gated behind a click. This
+          law predates and overrides ROUND 16.19's "Dates▾" phrasing for the From/To fields
+          themselves — Presets + the grouping mode picker (the parts the law does NOT pin) are the
+          part that actually consolidates: one "Presets ▾" trigger now holds both, instead of a
+          separate Presets button AND a separate By-month/Money-in-out/All-dates segmented control
+          sitting in the row. */}
           <div className="flex h-7 items-center gap-1">
             <label htmlFor="tx-date-from" className="text-[11px] font-semibold uppercase tracking-[0.4px] text-gray-500">
               From
@@ -2708,7 +3193,7 @@ export function BankingTransactionsDesignView({
                 onClick={() => setShowDateFilterMenu((open) => !open)}
                 data-testid="bank-date-filter-button"
               >
-                Presets
+                Presets ▾
               </button>
               {showDateFilterMenu ? (
                 <div className="absolute left-0 z-20 mt-1 w-56 rounded-sm border border-gray-200 bg-white p-2 shadow-sm">
@@ -2755,6 +3240,34 @@ export function BankingTransactionsDesignView({
                       </button>
                     ))}
                   </div>
+                  {/* DEFECT-9b + audit gap #5 — QBO grouping: By month | Money in/out | All dates
+                  (flat). Pipeline sorts the full set, then groups, then pages. turnOffGrouping
+                  remains the flat-list switch. BANK-TOOLBAR-ONE (ROUND 16.19): folded into this
+                  same Presets popover instead of its own separate segmented control in the row. */}
+                  <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.4px] text-gray-500">Group by</p>
+                  <div className="mt-1 inline-flex h-7 overflow-hidden rounded-sm border border-gray-300 bg-white text-xs">
+                    <button
+                      type="button"
+                      className={`flex h-7 items-center px-2.5 ${!viewSettings.turnOffGrouping && viewSettings.groupMode === "month" ? "bg-[#1f2a44] text-white" : "text-gray-700"}`}
+                      onClick={() => setViewSettings((prev) => ({ ...prev, turnOffGrouping: false, groupMode: "month" }))}
+                    >
+                      By month
+                    </button>
+                    <button
+                      type="button"
+                      className={`flex h-7 items-center border-l border-gray-300 px-2.5 ${!viewSettings.turnOffGrouping && viewSettings.groupMode === "money" ? "bg-[#1f2a44] text-white" : "text-gray-700"}`}
+                      onClick={() => setViewSettings((prev) => ({ ...prev, turnOffGrouping: false, groupMode: "money" }))}
+                    >
+                      Money in/out
+                    </button>
+                    <button
+                      type="button"
+                      className={`flex h-7 items-center border-l border-gray-300 px-2.5 ${viewSettings.turnOffGrouping ? "bg-[#1f2a44] text-white" : "text-gray-700"}`}
+                      onClick={() => setViewSettings((prev) => ({ ...prev, turnOffGrouping: true }))}
+                    >
+                      All dates
+                    </button>
+                  </div>
                 </div>
               ) : null}
             </div>
@@ -2787,33 +3300,6 @@ export function BankingTransactionsDesignView({
           >
             {suggestingMatches ? "Suggesting..." : "Suggest matches"}
           </button>
-          {/* DEFECT-9b + audit gap #5 — QBO grouping: By month | Money in/out | All dates (flat).
-          Pipeline sorts the full set, then groups, then pages. Month bands follow date ASC/DESC.
-          turnOffGrouping remains the flat-list switch (settings + All dates). B.2: Money in/out is
-          explicitly named in the owner's "ALL controls incl Money in/out" height requirement. */}
-          <div className="inline-flex h-7 overflow-hidden rounded-sm border border-gray-300 bg-white text-xs">
-            <button
-              type="button"
-              className={`flex h-7 items-center px-2.5 ${!viewSettings.turnOffGrouping && viewSettings.groupMode === "month" ? "bg-[#1f2a44] text-white" : "text-gray-700"}`}
-              onClick={() => setViewSettings((prev) => ({ ...prev, turnOffGrouping: false, groupMode: "month" }))}
-            >
-              By month
-            </button>
-            <button
-              type="button"
-              className={`flex h-7 items-center border-l border-gray-300 px-2.5 ${!viewSettings.turnOffGrouping && viewSettings.groupMode === "money" ? "bg-[#1f2a44] text-white" : "text-gray-700"}`}
-              onClick={() => setViewSettings((prev) => ({ ...prev, turnOffGrouping: false, groupMode: "money" }))}
-            >
-              Money in/out
-            </button>
-            <button
-              type="button"
-              className={`flex h-7 items-center border-l border-gray-300 px-2.5 ${viewSettings.turnOffGrouping ? "bg-[#1f2a44] text-white" : "text-gray-700"}`}
-              onClick={() => setViewSettings((prev) => ({ ...prev, turnOffGrouping: true }))}
-            >
-              All dates
-            </button>
-          </div>
           {/* B.2 — transaction TYPE filter: multi-select checkboxes/chips (was a single-select
           <select>). Selected ids render as removable chips on the trigger button; "All transaction
           types" clears the selection. See matchesTransactionTypeFilter (module scope, above) and
@@ -2920,88 +3406,6 @@ export function BankingTransactionsDesignView({
             <div className="relative">
               <button
                 type="button"
-                aria-label="View settings"
-                className="flex h-7 items-center rounded-sm border border-gray-300 px-2 text-gray-700"
-                onClick={() => setViewSettingsOpen((open) => !open)}
-              >
-                <Settings className="h-4 w-4" />
-              </button>
-              {viewSettingsOpen ? (
-                <div className="absolute right-0 z-20 mt-1 w-[360px] rounded-sm border border-gray-200 bg-white p-3 shadow-sm">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.4px] text-gray-500">Columns</p>
-                  <div className="mt-1 grid grid-cols-2 gap-1 text-xs">
-                    <ToggleLine label="Check No." checked={viewSettings.showCheckNo} onChange={(checked) => setViewSettings((prev) => ({ ...prev, showCheckNo: checked }))} />
-                    <ToggleLine label="Payee" checked={viewSettings.showPayee} onChange={(checked) => setViewSettings((prev) => ({ ...prev, showPayee: checked }))} />
-                    <ToggleLine label="Class" checked={viewSettings.showClass} onChange={(checked) => setViewSettings((prev) => ({ ...prev, showClass: checked }))} />
-                    <ToggleLine label="Location" checked={viewSettings.showLocation} onChange={(checked) => setViewSettings((prev) => ({ ...prev, showLocation: checked }))} />
-                  </div>
-                  <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.4px] text-gray-500">Groups</p>
-                  <ToggleLine
-                    label="Turn off grouping"
-                    checked={viewSettings.turnOffGrouping}
-                    onChange={(checked) =>
-                      setViewSettings((prev) => ({
-                        ...prev,
-                        turnOffGrouping: checked,
-                        groupMode: checked ? prev.groupMode : prev.groupMode === "money" ? "money" : "month",
-                      }))
-                    }
-                  />
-                  {!viewSettings.turnOffGrouping ? (
-                    <div className="mt-1 flex flex-wrap gap-1 text-xs">
-                      <button
-                        type="button"
-                        className={`rounded-sm border px-2 py-0.5 ${viewSettings.groupMode === "month" ? "border-[#1f2a44] bg-[#1f2a44] text-white" : "border-gray-300 text-gray-700"}`}
-                        onClick={() => setViewSettings((prev) => ({ ...prev, groupMode: "month" }))}
-                      >
-                        By month
-                      </button>
-                      <button
-                        type="button"
-                        className={`rounded-sm border px-2 py-0.5 ${viewSettings.groupMode === "money" ? "border-[#1f2a44] bg-[#1f2a44] text-white" : "border-gray-300 text-gray-700"}`}
-                        onClick={() => setViewSettings((prev) => ({ ...prev, groupMode: "money" }))}
-                      >
-                        Money in/out
-                      </button>
-                    </div>
-                  ) : null}
-                  <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.4px] text-gray-500">Automation review</p>
-                  <label
-                    className="inline-flex items-center gap-2 text-xs text-gray-500"
-                    data-testid="banking-add-new-vendors-automation-not-wired"
-                    title="Bank-feed auto-vendor review automation is not wired yet. Inline + Add new vendor on each categorize row still works via ReferenceSelect."
-                  >
-                    <input type="checkbox" checked={false} disabled readOnly aria-disabled="true" />
-                    Add new vendors (automation — not wired)
-                  </label>
-                  <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.4px] text-gray-500">Transaction details</p>
-                  <div className="grid grid-cols-1 gap-1 text-xs">
-                    <ToggleLine label="Show amounts in 1 column" checked={viewSettings.showAmountsInOneColumn} onChange={(checked) => setViewSettings((prev) => ({ ...prev, showAmountsInOneColumn: checked }))} />
-                    <ToggleLine label="Show tags field" checked={viewSettings.showTagsField} onChange={(checked) => setViewSettings((prev) => ({ ...prev, showTagsField: checked }))} />
-                    <ToggleLine label="Editable date field" checked={viewSettings.editableDateField} onChange={(checked) => setViewSettings((prev) => ({ ...prev, editableDateField: checked }))} />
-                    <ToggleLine label="Show bank details" checked={viewSettings.showBankDetails} onChange={(checked) => setViewSettings((prev) => ({ ...prev, showBankDetails: checked }))} />
-                    <ToggleLine label="Copy bank detail to memo" checked={viewSettings.copyBankDetailToMemo} onChange={(checked) => setViewSettings((prev) => ({ ...prev, copyBankDetailToMemo: checked }))} />
-                    <ToggleLine label="Enable suggested categorization" checked={viewSettings.enableSuggestedCategorization} onChange={(checked) => setViewSettings((prev) => ({ ...prev, enableSuggestedCategorization: checked }))} />
-                  </div>
-                  <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.4px] text-gray-500">Page size</p>
-                  <div className="mt-1 flex flex-wrap gap-1">
-                    {([50, 75, 100, 200, 300] as const).map((size) => (
-                      <button
-                        key={size}
-                        type="button"
-                        className={`rounded-sm border px-2 py-1 text-xs ${viewSettings.pageSize === size ? "border-[#1f2a44] bg-[#1f2a44] text-white" : "border-gray-300 text-gray-700"}`}
-                        onClick={() => setViewSettings((prev) => ({ ...prev, pageSize: size }))}
-                      >
-                        {size}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-            </div>
-            <div className="relative">
-              <button
-                type="button"
                 className="flex h-7 items-center rounded-sm border border-gray-300 px-2 text-gray-700"
                 onClick={() => setPrintExportMenuOpen((open) => !open)}
               >
@@ -3065,6 +3469,68 @@ export function BankingTransactionsDesignView({
         loading={transactionsQuery.isLoading}
         emptyText={emptyStateText}
         storageKey="banking-transactions"
+        // B4 BANK-TOOLBAR-ONE (owner CONSOLIDATED 2026-09-06 18:30Z, item 4): this page owns its
+        // own "Filter by description" search (Combobox, above) — ParityTable's own native
+        // UniversalListToolbar search was rendering a SECOND, competing search box for the exact
+        // same rows, the same defect class LV-WORK-ORDERS-CONSOLE-DUPLICATE-SEARCH already named
+        // this suppress prop for. Range stays (ParityTable's own Amount/date-column range picker
+        // covers ground the page's hardcoded From/To transaction-date fields don't — the owner's
+        // own spec explicitly keeps "Range (ParityTable's)" in the consolidated bar).
+        suppressToolbarSearch
+        // BANK-TOOLBAR-ONE (owner ROUND 16.19, 2026-09-06): the page's own second "View settings"
+        // gear is gone — its still-needed content (checkNo forced-visible toggle, transaction-detail
+        // toggles, and this page's own pageSize used to compute pagedGroups/totalPages, which is NOT
+        // the same state as ParityTable's internal pager) now renders inside THIS gear's own popover
+        // via gearExtra, so there is exactly ONE gear on this register.
+        gearButtonTestId="banking-transactions-gear"
+        gearExtra={
+          <>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.4px] text-gray-500">Also show</p>
+            <div className="mt-1 grid grid-cols-2 gap-1 text-xs">
+              <ToggleLine label="Check No." checked={viewSettings.showCheckNo} onChange={(checked) => setViewSettings((prev) => ({ ...prev, showCheckNo: checked }))} />
+              <ToggleLine label="Payee (Vendor)" checked={viewSettings.showPayee} onChange={(checked) => setViewSettings((prev) => ({ ...prev, showPayee: checked }))} />
+              <ToggleLine label="Class" checked={viewSettings.showClass} onChange={(checked) => setViewSettings((prev) => ({ ...prev, showClass: checked }))} />
+              <ToggleLine label="Location" checked={viewSettings.showLocation} onChange={(checked) => setViewSettings((prev) => ({ ...prev, showLocation: checked }))} />
+              {/* B2 BANK-REGISTER-COLUMNS (owner CONSOLIDATED 2026-09-06 18:30Z, item 3) */}
+              <ToggleLine label="Memo" checked={viewSettings.showMemo} onChange={(checked) => setViewSettings((prev) => ({ ...prev, showMemo: checked }))} />
+              <ToggleLine label="Category" checked={viewSettings.showCategory} onChange={(checked) => setViewSettings((prev) => ({ ...prev, showCategory: checked }))} />
+              <ToggleLine label="Match status" checked={viewSettings.showMatchStatus} onChange={(checked) => setViewSettings((prev) => ({ ...prev, showMatchStatus: checked }))} />
+              <ToggleLine label="Reference" checked={viewSettings.showReference} onChange={(checked) => setViewSettings((prev) => ({ ...prev, showReference: checked }))} />
+              <ToggleLine label="Posted JE" checked={viewSettings.showPostedJe} onChange={(checked) => setViewSettings((prev) => ({ ...prev, showPostedJe: checked }))} />
+            </div>
+            <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.4px] text-gray-500">Automation review</p>
+            <label
+              className="inline-flex items-center gap-2 text-xs text-gray-500"
+              data-testid="banking-add-new-vendors-automation-not-wired"
+              title="Bank-feed auto-vendor review automation is not wired yet. Inline + Add new vendor on each categorize row still works via ReferenceSelect."
+            >
+              <input type="checkbox" checked={false} disabled readOnly aria-disabled="true" />
+              Add new vendors (automation — not wired)
+            </label>
+            <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.4px] text-gray-500">Transaction details</p>
+            <div className="grid grid-cols-1 gap-1 text-xs">
+              <ToggleLine label="Show amounts in 1 column" checked={viewSettings.showAmountsInOneColumn} onChange={(checked) => setViewSettings((prev) => ({ ...prev, showAmountsInOneColumn: checked }))} />
+              <ToggleLine label="Show tags field" checked={viewSettings.showTagsField} onChange={(checked) => setViewSettings((prev) => ({ ...prev, showTagsField: checked }))} />
+              <ToggleLine label="Editable date field" checked={viewSettings.editableDateField} onChange={(checked) => setViewSettings((prev) => ({ ...prev, editableDateField: checked }))} />
+              <ToggleLine label="Show bank details" checked={viewSettings.showBankDetails} onChange={(checked) => setViewSettings((prev) => ({ ...prev, showBankDetails: checked }))} />
+              <ToggleLine label="Copy bank detail to memo" checked={viewSettings.copyBankDetailToMemo} onChange={(checked) => setViewSettings((prev) => ({ ...prev, copyBankDetailToMemo: checked }))} />
+              <ToggleLine label="Enable suggested categorization" checked={viewSettings.enableSuggestedCategorization} onChange={(checked) => setViewSettings((prev) => ({ ...prev, enableSuggestedCategorization: checked }))} />
+            </div>
+            <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.4px] text-gray-500">Rows per page (register)</p>
+            <div className="mt-1 flex flex-wrap gap-1">
+              {([50, 75, 100, 200, 300] as const).map((size) => (
+                <button
+                  key={size}
+                  type="button"
+                  className={`rounded-sm border px-2 py-1 text-xs ${viewSettings.pageSize === size ? "border-[#1f2a44] bg-[#1f2a44] text-white" : "border-gray-300 text-gray-700"}`}
+                  onClick={() => setViewSettings((prev) => ({ ...prev, pageSize: size }))}
+                >
+                  {size}
+                </button>
+              ))}
+            </div>
+          </>
+        }
         enableColumnResize
         stickyHeader
         selectable

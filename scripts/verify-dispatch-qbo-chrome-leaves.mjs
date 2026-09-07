@@ -96,7 +96,9 @@ const CHECKS = [
   {
     name: "load.detail / load.drawer.overview / load.drawer.documents: LoadDetailDrawer real role=dialog + Overview/Documents tabs + DocumentsTab",
     file: "apps/frontend/src/components/dispatch/LoadDetailDrawer.tsx",
-    pattern: /(?=[\s\S]*role="dialog")(?=[\s\S]*"Overview")(?=[\s\S]*"Documents")(?=[\s\S]*<DocumentsTab)/,
+    // RE-PIN 2026-09-06: the Documents tab component was renamed to LdtDocumentsTab (LDT-D).
+    // Accept either <DocumentsTab or <LdtDocumentsTab.
+    pattern: /(?=[\s\S]*role="dialog")(?=[\s\S]*"Overview")(?=[\s\S]*"Documents")(?=[\s\S]*<(?:Ldt)?DocumentsTab)/,
   },
   {
     name: "dispatch.modal.abandonment_report: AbandonmentReportModal real Modal + DriverPickerWithCreate + DateTimePicker",

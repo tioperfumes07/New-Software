@@ -3,6 +3,7 @@ import {
   deriveEngineState,
   ingestVehicleLocationEvent,
 } from "../../telematics/vehicle-locations.service.js";
+import { processGeofenceDetectionsForGpsPoint } from "../../telematics/geofence-detector.service.js";
 import { SamsaraApiError, SamsaraClient } from "./samsara-client.js";
 import type { SamsaraVehicleStat } from "./samsara-client.js";
 import type { PgClient } from "./samsara.service.js";
@@ -168,7 +169,17 @@ export async function syncSamsaraVehicleLocations(
       raw_samsara_event_id: `cron:locations:${location.id}:${location.captured_at}`,
       payload: location.raw,
     });
-    if (didInsert) inserted += 1;
+    if (didInsert) {
+      inserted += 1;
+      await processGeofenceDetectionsForGpsPoint(client as never, {
+        operating_company_id: operatingCompanyId,
+        unit_id: unitId,
+        latitude: location.latitude,
+        longitude: location.longitude,
+        occurred_at: location.captured_at,
+        source: "samsara_gps",
+      });
+    }
   }
 
   await writeSyncLog(client, {
@@ -369,7 +380,17 @@ export async function syncSamsaraVehicleStats(
         formatted_location: stat.formatted_location,
         odometer_mi: stat.odometer_mi,
       });
-      if (didInsert) positionsInserted += 1;
+      if (didInsert) {
+        positionsInserted += 1;
+        await processGeofenceDetectionsForGpsPoint(client as never, {
+          operating_company_id: operatingCompanyId,
+          unit_id: unitId,
+          latitude: stat.latitude,
+          longitude: stat.longitude,
+          occurred_at: stat.captured_at,
+          source: "samsara_gps",
+        });
+      }
     }
 
     if (stat.current_driver) {

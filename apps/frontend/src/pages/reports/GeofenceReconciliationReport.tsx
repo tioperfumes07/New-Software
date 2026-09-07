@@ -1,11 +1,11 @@
 import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
 import { PageHeader } from "../../components/layout/PageHeader";
 import { ListErrorState } from "../../components/ListErrorState";
 import { ReportsSubNav } from "./ReportsSubNav";
-import { CollapsedListFilters, useStagedListFilters } from "../../components/table";
+import { ReportFilterBar } from "../../components/reports/ReportFilterBar";
 import { mmmDdTime, mmmDd } from "../../lib/formatDate";
-import { DatePicker } from "../../components/forms/DatePicker";
 import { EntityLink } from "../../components/shared/EntityLink";
 import { entityLabel } from "../../lib/entity-label";
 import { ParityTable, type ParityColumn } from "../../components/parity/ParityTable";
@@ -46,12 +46,10 @@ export function GeofenceReconciliationReport() {
   const operatingCompanyId = selectedCompanyId ?? "";
   const today = companyToday();
   const yesterday = addDaysIso(today, -1);
+  const [searchParams, setSearchParams] = useSearchParams();
   const [appliedDate, setAppliedDate] = useState(yesterday);
-  const staged = useStagedListFilters({
-    applied: { reportDate: appliedDate, geofenceFilter: "", kindFilter: "" },
-    empty: { reportDate: yesterday, geofenceFilter: "", kindFilter: "" },
-    onApply: (next) => setAppliedDate(next.reportDate),
-  });
+  const [kindFilter, setKindFilter] = useState("");
+  const [reportSearch, setReportSearch] = useState("");
   const qc = useQueryClient();
 
   const { data, isLoading, isError, error, refetch } = useQuery<{ data: Finding[] }>({
@@ -77,7 +75,15 @@ export function GeofenceReconciliationReport() {
   });
 
   // RPT-F3524: always feed one ParityTable (never green-only bypass) so Search+Range+gear mount on 0-row too.
-  const findings = data?.data ?? [];
+  const findings = useMemo(() => {
+    const all = data?.data ?? [];
+    const q = reportSearch.toLowerCase();
+    if (!q) return all;
+    return all.filter((f) => {
+      const haystack = `${f.anomaly_class ?? ""} ${f.geofence_label ?? ""} ${f.unit_number ?? ""} ${f.unit_id ?? ""} ${f.geofence_id ?? ""}`.toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [data?.data, reportSearch]);
 
   const findingColumns = useMemo<ParityColumn<Finding>[]>(
     () => [
@@ -123,50 +129,36 @@ export function GeofenceReconciliationReport() {
         </button>
       </div>
 
-      <CollapsedListFilters
-        activeFilterCount={appliedDate !== yesterday ? 1 : 0}
-        defaultOpen={true}
-        onApply={staged.apply}
-        onReset={staged.reset}
-        onCancel={staged.cancel}
-        applyDisabled={!staged.dirty}
+      <ReportFilterBar
         testIdPrefix="reports-geofence-recon"
-        className="mb-6"
+        fromDate={appliedDate}
+        toDate={null}
+        onFromDateChange={(date) => { if (date) setAppliedDate(date); }}
+        onToDateChange={() => {}}
+        onPresetSelect={(preset) => {
+          const next = new URLSearchParams(searchParams);
+          next.set("preset", preset);
+          setSearchParams(next, { replace: true });
+        }}
+        search={reportSearch}
+        onSearchChange={setReportSearch}
       >
-        <div className="flex flex-wrap items-end gap-3">
-          <div>
-            <label className="mb-1 block text-xs font-medium text-gray-700">Report Date</label>
-            <DatePicker value={staged.draft.reportDate} onChange={(next) => staged.setDraft({ ...staged.draft, reportDate: next })} max={today} className="" />
-          </div>
-          <label className="block text-xs font-medium text-gray-700">
-            Geofence
-            <input
-              type="text"
-              className="mt-1 block h-9 w-40 rounded-sm border border-gray-300 px-2 text-xs"
-              value={staged.draft.geofenceFilter}
-              onChange={(e) => staged.setDraft({ ...staged.draft, geofenceFilter: e.target.value })}
-              placeholder="All geofences"
-              data-testid="reports-geofence-recon-geofence"
-              // TODO: wire to backend filter
-            />
-          </label>
-          <label className="block text-xs font-medium text-gray-700">
-            Kind
-            <select
-              className="mt-1 block h-9 rounded-sm border border-gray-300 px-2 text-xs"
-              value={staged.draft.kindFilter}
-              onChange={(e) => staged.setDraft({ ...staged.draft, kindFilter: e.target.value })}
-              data-testid="reports-geofence-recon-kind"
-            >
-              <option value="">All kinds</option>
-              <option value="orphan_entry">Entry without Exit</option>
-              <option value="orphan_exit">Exit without Entry</option>
-              <option value="duplicate_fire">Duplicate Fire</option>
-              <option value="expected_missing">Missing Expected Event</option>
-            </select>
-          </label>
-        </div>
-      </CollapsedListFilters>
+        <label className="flex items-center gap-1 text-xs text-slate-600">
+          <span className="font-semibold text-slate-600">Kind</span>
+          <select
+            className="h-7 rounded-sm border border-slate-300 px-2 text-xs"
+            value={kindFilter}
+            onChange={(e) => setKindFilter(e.target.value)}
+            data-testid="reports-geofence-recon-kind"
+          >
+            <option value="">All kinds</option>
+            <option value="orphan_entry">Entry without Exit</option>
+            <option value="orphan_exit">Exit without Entry</option>
+            <option value="duplicate_fire">Duplicate Fire</option>
+            <option value="expected_missing">Missing Expected Event</option>
+          </select>
+        </label>
+      </ReportFilterBar>
       {isError && (
         <ListErrorState
           title="Couldn't load reconciliation"

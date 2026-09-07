@@ -33,6 +33,18 @@ services:
         value: "false"
       - key: ENABLE_QBO_INBOUND_SYNC
         value: "false"
+      # QBO write-back is PARKED by law (00-IH35-LAW: "No write-back to QuickBooks, ever. Reconcile
+      # only."). These three push schedulers last ran 2026-08-21 and only make background_jobs.stale
+      # report them LATE (a non-revoked TRANSP realm keeps qboRealmConnected=true, so the health rule
+      # treats an enabled-by-default push job as "should be running"). Pinning them OFF matches the
+      # already-parked CDC/inbound flags above and makes health reflect the parked policy (dormant,
+      # not stale) — never a write-back to QBO.
+      - key: QBO_VENDORS_PUSH_SCHEDULER_ENABLED
+        value: "false"
+      - key: QBO_CUSTOMERS_PUSH_SCHEDULER_ENABLED
+        value: "false"
+      - key: QBO_ACCOUNTS_PUSH_SCHEDULER_ENABLED
+        value: "false"
       - key: NODE_VERSION
         value: 22
       # G4-DEPLOY (0243-g4 / ACCT-R-04): preDeploy ci:boot-aggregate-smoke must assert against a

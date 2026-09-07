@@ -7,7 +7,6 @@ import {
   getJournalEntry,
   getJournalEntrySourceLinks,
   voidJournalEntry,
-  type JournalEntryPosting,
   type JournalEntrySourceLink,
 } from "../../../api/accounting";
 import { Button } from "../../../components/Button";
@@ -15,7 +14,7 @@ import { ListErrorState } from "../../../components/ListErrorState";
 import { DataPanel } from "../../../components/layout/DataPanel";
 import { DataPanelRow } from "../../../components/layout/DataPanelRow";
 import { PageHeader } from "../../../components/forms/shared/PageHeader";
-import { ParityTable, type ParityColumn } from "../../../components/parity/ParityTable";
+import { PostingGrid } from "../../../components/accounting/PostingGrid";
 import { EntityLink, type EntityKind } from "../../../components/shared/EntityLink";
 import { entityLabel } from "../../../lib/entity-label";
 import { formatUsdCents } from "../../../lib/money";
@@ -173,73 +172,6 @@ function uniqueSourceRows(rows: JournalEntrySourceLink[]): Array<{
   }
   return out;
 }
-
-// Display-only ParityTable migration: columns/order/formatting mirror the former hand-rolled
-// table 1:1 (Line / Account / Class / Entity / Side / Amount / Description). Read-only GL
-// surface — this page posts nothing and must stay that way (no mutations).
-const postingColumns: Array<ParityColumn<JournalEntryPosting>> = [
-  {
-    key: "line_sequence",
-    label: "Line",
-    sortable: true,
-    render: (posting) => posting.line_sequence,
-  },
-  {
-    key: "account_name",
-    label: "Account",
-    sortable: true,
-    // CLS-UUID-LABEL — same rule as Class below: never fall back to the raw account_id. This one is
-    // the more misleading of the two, because the uuid was rendered as the TEXT OF A LINK to the
-    // account register, so an unresolvable account looked like a working reference to a real account.
-    // The link still uses account_id (that is a route param, not a label); only the visible text changes.
-    sortValue: (posting) => posting.account_name || "",
-    render: (posting) => (
-      <Link
-        to={`/accounting/chart-of-accounts/register/${posting.account_id}`}
-        className="text-slate-700 hover:underline"
-        onClick={(event) => event.stopPropagation()}
-      >
-        {entityLabel(posting.account_name, posting.account_id, "Account")}
-      </Link>
-    ),
-  },
-  {
-    key: "class_name",
-    label: "Class",
-    sortable: true,
-    // CLS-UUID-LABEL — never fall back to the raw class_id. A uuid is not a label: it tells the reader
-    // nothing, and on a GL screen it reads as if it were the class's real identity. When the name cannot
-    // be resolved (the class was archived, or the posting carries a class from outside this entity), the
-    // honest render is "—", which says "unclassified" instead of showing a string nobody can act on.
-    // Sorting follows the same rule so the column does not order by a hidden uuid the user cannot see.
-    sortValue: (posting) => posting.class_name || "",
-    render: (posting) => posting.class_name || "—",
-  },
-  {
-    key: "entity_uuid",
-    label: "Entity",
-    sortable: true,
-    render: (posting) => posting.entity_uuid || "—",
-  },
-  {
-    key: "debit_or_credit",
-    label: "Side",
-    sortable: true,
-    render: (posting) => posting.debit_or_credit,
-  },
-  {
-    key: "amount_cents",
-    label: "Amount",
-    sortable: true,
-    render: (posting) => formatUsdCents(posting.amount_cents),
-  },
-  {
-    key: "description",
-    label: "Description",
-    sortable: true,
-    render: (posting) => posting.description || "—",
-  },
-];
 
 export function JournalEntryDetailPage() {
   const { id = "" } = useParams();
@@ -419,14 +351,7 @@ export function JournalEntryDetailPage() {
       </DataPanel>
 
       <DataPanel title="Postings">
-        <ParityTable<JournalEntryPosting>
-          storageKey="journal-entry-detail-postings"
-          tableTestId="journal-entry-detail-postings-table"
-          columns={postingColumns}
-          rows={postings}
-          rowKey={(posting) => posting.id}
-          emptyText="No posting lines."
-        />
+        <PostingGrid postings={postings} storageKey="journal-entry-detail-postings" />
       </DataPanel>
     </AccountingSubNavWrapper>
   );

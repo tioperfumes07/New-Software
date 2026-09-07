@@ -9,7 +9,17 @@ function failures() {
   const out = [];
   if (!/unavailable=\{loadPositionsQuery\.isError\}/.test(board)) out.push("Live GPS rows must receive exact failure state");
   if (!/if \(unavailable\)[\s\S]{0,160}>Unavailable</.test(cell)) out.push("Live GPS cell must distinguish unavailable from No GPS");
-  if (!/if \(fleetLocationQuery\.isError\)[\s\S]{0,180}>Unavailable</.test(board)) out.push("Location column must distinguish unavailable from dash");
+  // RG-14 — the Location column's honesty check moved from an inline `if (fleetLocationQuery.isError)`
+  // into a standalone renderUnitLocationCell(load, locationByUnit, fleetLocationQuery.isError) helper
+  // (real refactor, same invariant): the call site passes fleetLocationQuery.isError as the
+  // "unavailable" arg, and the function itself renders "Unavailable" when that arg is true. Check
+  // both halves instead of one literal inline shape.
+  if (!/renderUnitLocationCell\([^)]*fleetLocationQuery\.isError\)/.test(board)) {
+    out.push("Location column must pass fleetLocationQuery.isError into its render");
+  }
+  if (!/function renderUnitLocationCell\([\s\S]{0,300}?\)[\s\S]{0,40}\{\s*\n\s*if \(\w+\)[\s\S]{0,80}>Unavailable</.test(board)) {
+    out.push("Location column must distinguish unavailable from dash");
+  }
   if (!/title="Couldn't load live GPS"[\s\S]{0,360}loadPositionsQuery\.refetch\(\)/.test(board)) out.push("Live GPS failure needs exact Retry");
   if (!/title="Couldn't load fleet locations"[\s\S]{0,380}fleetLocationQuery\.refetch\(\)/.test(board)) out.push("fleet-location failure needs exact Retry");
   return out;
@@ -21,7 +31,8 @@ if (process.argv.includes("--selftest")) {
   const mutations = [
     () => { board = originalBoard.replace("unavailable={loadPositionsQuery.isError}", "unavailable={false}"); cell = originalCell; },
     () => { board = originalBoard; cell = originalCell.replace("if (unavailable)", "if (false)"); },
-    () => { board = originalBoard.replace("if (fleetLocationQuery.isError)", "if (false)"); cell = originalCell; },
+    () => { board = originalBoard.replaceAll("renderUnitLocationCell(load, locationByUnit, fleetLocationQuery.isError)", "renderUnitLocationCell(load, locationByUnit, false)"); cell = originalCell; },
+    () => { board = originalBoard.replace("if (fleetLocationUnavailable) {", "if (false && fleetLocationUnavailable) {"); cell = originalCell; },
     () => { board = originalBoard.replace("loadPositionsQuery.refetch()", "Promise.resolve()"); cell = originalCell; },
     () => { board = originalBoard.replace("fleetLocationQuery.refetch()", "Promise.resolve()"); cell = originalCell; },
   ];

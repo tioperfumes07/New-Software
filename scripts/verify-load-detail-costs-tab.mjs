@@ -43,7 +43,14 @@ function violations(drawer, costs, board, routes, backend, finance, sidebar, dis
   const errors = [];
   if (!drawer.includes('"Costs",') || !drawer.includes('activeTab === "Costs"') || !drawer.includes("<LoadDetailCostsTab")) errors.push("13th Costs tab is not mounted");
   if (!costs.includes("listExpenses(opco, { load_id: load.id") || !costs.includes("listBills(opco, { load_id: load.id")) errors.push("existing load-scoped expense/bill reads are missing");
-  if (!costs.includes('data-cost-driver-column="driver_uuid"') || !costs.includes('data-cost-driver-column="driver_id"')) errors.push("expense.driver_uuid and bill.driver_id identities are not explicit");
+  // 2026-09-06 (lead): #20808 (LDT-1) moved the saved-entry chrome into <SavedEntry kind driverColumn>, which stamps
+  // data-cost-driver-column={driverColumn}; the expense card passes driverColumn="driver_uuid" and the bill card
+  // driverColumn="driver_id". The literal-attribute pin went stale and reddened locked-guards-heavy on main for every
+  // PR. Accept either form — the identity must still be explicit for BOTH kinds.
+  const driverColumnExplicit = (col) =>
+    costs.includes(`data-cost-driver-column="${col}"`) ||
+    (costs.includes(`driverColumn="${col}"`) && costs.includes("data-cost-driver-column={driverColumn}"));
+  if (!driverColumnExplicit("driver_uuid") || !driverColumnExplicit("driver_id")) errors.push("expense.driver_uuid and bill.driver_id identities are not explicit");
   // SET-15/LOAD-COSTS-COMPLETE (owner order 2026-09-04): the choice grew from Expense/Bill to also
   // include Advance received and Fuel advance -- this check was rewritten in the same commit that
   // shipped "+ Fuel advance" (LoadDetailCostsTab.tsx), matching the real, current CostChoice union
@@ -121,8 +128,10 @@ const trailerProfile = fs.readFileSync(TRAILER_PROFILE, "utf8");
 if (process.argv.includes("--selftest")) {
   const base = [drawer, costs, board, routes, backend, finance, sidebar, dispatch, panel, subnav, dnav, dpage];
   const mutations = [
-    [drawer.replace('"Costs",', '"Former costs",'), costs, board, routes, backend, finance, sidebar, dispatch, panel, subnav, dnav, dpage],
-    [drawer, costs.replace('data-cost-driver-column="driver_id"', 'data-cost-driver-column="driver_uuid"'), board, routes, backend, finance, sidebar, dispatch, panel, subnav, dnav, dpage],
+    // replaceAll: the drawer names "Costs", in both the PRIMARY tab order and the accounting-context order (LDT-0);
+    // replacing one occurrence left the pin satisfied and the mutant escaped once the stale driver-column pin was fixed.
+    [drawer.replaceAll('"Costs",', '"Former costs",'), costs, board, routes, backend, finance, sidebar, dispatch, panel, subnav, dnav, dpage],
+    [drawer, costs.replace('driverColumn="driver_id"', 'driverColumn="driver_uuid"').replace('data-cost-driver-column="driver_id"', 'data-cost-driver-column="driver_uuid"'), board, routes, backend, finance, sidebar, dispatch, panel, subnav, dnav, dpage],
     [drawer, costs.replace('data-testid="load-costs-new-menu"', 'data-testid="load-costs-no-menu"'), board, routes, backend, finance, sidebar, dispatch, panel, subnav, dnav, dpage],
     [drawer, costs.replaceAll("No costs on this load yet.", "No rows."), board, routes, backend, finance, sidebar, dispatch, panel, subnav, dnav, dpage],
     [drawer, costs, board.replaceAll("/api/v1/accounting/load-costs-board", "/api/v1/accounting/parallel-costs"), routes, backend, finance, sidebar, dispatch, panel, subnav, dnav, dpage],

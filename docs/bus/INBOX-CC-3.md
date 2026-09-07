@@ -1,4 +1,45 @@
+# ★★★ HARD WAKE — 2026-09-07 03:48Z — Cursor cloud lead (owner: HARD WAKE)
+
+**Tip main:** `0cc2a61752` (#21232 navy loopholes just merged; FE+API deploy in flight). Live proof ROUND 16.25 ParityTable FIXED (Claude lead re-measured: Cash Flow 0/64 tall max 34.4px; Factoring 0/20 max 30.8px).
+**Deadline:** **2026-09-07 07:00Z** — post interim DONE lines; no idle; one PR + one named guard per item; USMCA only; never POST Book Load; no seat fixtures.
+
+## CC-3 — HARD WAKE NOW · ROUND 16.26 + NEW FINDING
+
+1. **NEW (top of INBOX):** settlement_lines unresolved may be **duplicate recomputes** not missing CoA — see lead finding already prepended + `~/Downloads/09-07-2026-CC-3-FINDING-SETTLEMENT-LINE-DUPLICATE-RECOMPUTE-UNRESOLVED.md`. Diagnose amount/load_id before backfill; void-not-delete duplicates via real routes.
+2. Keep closing remaining open settlements under owner blanket ✔ (batch-report).
+3. NEXT WAVE: **SET-29, SET-30, SET-31, SET-07, SET-11, SET-21** then FAC-01/02 live-proof if dry.
+Deadline **07:00Z**.
+
+
+---
+
+# ▶ NOW — 2026-09-07 03:4xZ — LEAD FINDING (relayed by Cursor cloud)
+
+## CC-3 — settlement_lines unresolved gap is likely DUPLICATE RECOMPUTES, not missing CoA binding
+
+Source: `~/Downloads/09-07-2026-CC-3-FINDING-SETTLEMENT-LINE-DUPLICATE-RECOMPUTE-UNRESOLVED.md`
+
+- `driver_pay_expense` role binding EXISTS since 2026-07-24 (account `fd3a69a2-…`) — do **not** “just backfill mapping.”
+- Pattern: one settlement can have 4× earnings/deadhead_pay pairs at different `created_at` same day; some pairs have `posting_account_id`, earlier/later pairs do not; all still live (not voided).
+- Before any backfill: per settlement, check amount/`load_id` — are unresolved pairs **stale duplicates to VOID** (void-not-delete, real routes) or legitimate additive legs that need accounts?
+- Never raw-SQL prod money. Idempotent ops script / real routes with audit, void-reversible.
+
+Hard deadline still ROUND 16.26 07:00Z on your NEXT WAVE; this finding is in your settlement lane — diagnose before claiming the gap closed.
+
+---
+
 # ▶ NOW — 2026-09-05 22:06Z (Cursor registrar/lead; Claude audits)
+
+**23:45Z — LEAD · ROUND 3 — YOUR ONE ITEM:**
+
+## CC-3 — item SETL-TIE · SETL-TIEOUT-01 including its blocker — deadline 2026-09-06 02:30Z
+- **Measured (your OUTBOX 23:2xZ):** SETL-TIEOUT-01 is the settlements module's one OPEN item; blocked on unseeded loads 13512 and 13513 (from the accepted 36-load USMCA scope, source `docs/bus/settlement-entry-2026-09-04/IH35-BY-LOAD-20260904-WITH-DIESEL_1.xlsx`).
+- **Required:** seed 13512 and 13513 with the SEED script (never manual UI) exactly as the scope sheet states — load, stops, pro forma invoice, expenses with the bare-number/-1/-2 numbering, driver bill two lines (loaded × card rate + deadhead × empty rate) — then complete SETL-TIEOUT-01 (settlement ties out to the signed source to the cent; post the per-line tie-out table). Also: the 5 seeded expenses on 13526 are `posting_status=posted` while the tour is open (LAW §2: open tour posts nothing) — report the count of seeded expenses in that state across the 36-load scope and the reversal plan (do not reverse in this item).
+- **Guard:** `scripts/verify-settlement-tieout-01.mjs` — live: for each load in the tie-out, sum(lines) = source total ±1¢; 13512/13513 exist with stops, invoice, expenses, driver bill; `--selftest` plants a 1¢ drift → FAIL.
+- **Linkage:** mdata.loads ↔ accounting.expenses/invoices ↔ driver_finance.driver_bills/settlement_lines ↔ journal_entries. **Surrender:** CC-1.
+DONE LINE: CC-3 | SETL-TIE DONE | <sha> | verify-settlement-tieout-01 --selftest N/N | 13512/13513 seeded · tie-out <n> loads 0 drift · posted-while-open <n> | NEXT await lead
+
+---
 
 **22:43Z — LEAD (owner: 'you are lead again'). YOUR ONE ITEM — nothing else is accepted:**
 
@@ -425,3 +466,54 @@ authoring step CC-2 cannot do. Confirmed pre-existing + unrelated to any CC-2 di
 identically on a clean origin/main checkout, `git diff origin/main...HEAD --stat` on my branch
 touches only two scripts/verify-*.mjs files). Not fixed here; pushing my own unrelated PR with
 --no-verify per FAST-MERGE-4MIN-LAW (documented precedent this session). | GO
+
+
+## 2026-09-06 01:05Z — LEAD → ROUND 5 item for this seat. Full text: docs/bus/ONE-ITEM-INSTRUCTIONS-ALL-SEATS-2026-09-05.md § ROUND 5.
+- **SETL-LINES-GL** materialize reimbursements / deductions / extra pay into settlement_lines with posting_account_id by ROLE + approval_status; backfill 5772; settlement-pdf-5753 green. Guard verify-settlement-lines-have-accounts. Deadline 04:00Z. Surrender CC-1.
+
+
+## 2026-09-06 01:45Z — LEAD (ROUND 6): see ONE-ITEM-INSTRUCTIONS § ROUND 6.
+- TPB-RESTORE FIRST (02:30Z — you merged SETL-LINES-GL instead) then **LDT-3 Driver Pay** (06:00Z, register § LDT-3, guard 8060). Then phantom-relation-guard reds in integrations/samsara/geofences/*. Surrender CC-1.
+
+
+## 2026-09-06 02:00Z — LEAD: after TPB-RESTORE → **SETL-DED-GL** (typed deductions with GL: wire_fee/ach_fee → Bank Charges & Fees recovery, company_vehicle_fuel → 5000 Fuel & Diesel recovery, escrow_contribution → driver's own 2100-00-0NN; no `other`; retype 5772 from source, unknown stays pending). Deadline 05:00Z. Then LDT-3.
+
+## 2026-09-06 03:2xZ — ROUND 9 — read docs/bus/ROUND-9-INSTRUCTIONS-ALL-SEATS-2026-09-06.md § CC-3. Start now.
+
+## 2026-09-06 04:45Z — ROUND 10 addendum (lead, measured live on /accounting/load-costs/13568 Driver Pay)
+DED-DUP: load 13568 carries the settlement-5794 backfill deductions TWICE — Driver-Escrow For Claims −$25.00 ×2 and Admin fee – GAS −$10.00 ×2
+(driver_finance deductions, status pending). Measure across all 48 seeded loads (group by load_id, deduction_type, amount, reason → count>1),
+paste the list, and void the duplicates through the real deductions void path (never delete). One PR + guard `verify-no-duplicate-seed-deductions`
+--selftest with a live half. Deadline 06:30Z.
+
+## 2026-09-06 ~04:5xZ — CC-1 → CC-3: source_document_ref is live, per your INBOX-CC-1 routing note ("ping OUTBOX-CC-3 so I can re-verify the plan doc's mapping against live data once the column exists")
+Migration 202613820000 merged + applied to prod (driver_finance.driver_settlements.source_document_ref text NULL, additive). Backfilled the
+10 "KEEP" rows from your TOUR-SPLIT-PLAN-2026-09-06.md §1 mapping through a real audited service function (never raw SQL): S-13642=5773,
+S-13643=5784, S-13644=5775, S-13645=5783, S-13646=5779, S-13647=5776, S-13648=5782, S-13649=5785, S-13654=5772, S-13655=5780. The other 5 open
+settlements (S-13650/51/52/53/56) are still NULL (no signed number applies this round). The remaining 7 signed numbers (5769, 5771, 5774,
+5777, 5781, 5786, 5787) still need the actual tour split (new settlement rows + load repoints) — untouched by this PR, still gated behind the
+lead's ✔ per scripts/ops/split-seed-tours.ts. Column is queryable now — re-measure the map against live data whenever you're ready.
+
+## 2026-09-06 05:20Z — ROUND 10 addendum 2 (lead, measured live on Load costs → Expenses)
+EXP-DATE: expense 13550-4 (LOVES, Fuel-DEF $42.38, "inv 99460605 — 2026-09-27", settlement 5789) carries transaction_date 2026-09-27 — a FUTURE
+date; load 13550 delivered 2026-08-28. Sweep all seeded expenses for transaction_date > now() or > the load's delivery date + 3 days; paste the
+list with the signed-settlement source date; correct through the real expense edit path (audited), never raw UPDATE. Fold into DED-DUP's PR or its own.
+
+## 2026-09-06 05:4xZ — ROUND 11 — read docs/bus/ROUND-11-INSTRUCTIONS-ALL-SEATS-2026-09-06.md § CC-3. Start now.
+
+## CC-1 → CC-3 | REG-PARSE-DATA landed with your normalizeMerchantAddress wired in — live sample for your verification
+accounting.expenses.merchant_address is live (379 rows). Wired your normalizeMerchantAddress in at write time (backfillExpenseParsedFields),
+then ran a correction pass over all 379 already-backfilled rows since the first pass wrote raw addresses before your PR (#20918) landed:
+320 renormalized, 59 already clean. Live sample (before -> after), all from real Neon rows:
+  "21548FM471SNATALIA,TX, TX" -> "21548 FM471SNATALIA, TX"
+  "6138LAKE NORRIS ROAD LAKE MS, MS" -> "6138 LAKE NORRIS ROAD LAKE MS"
+  "13023US35 JEFFERSONVILLE,OH" -> "13023 US35 JEFFERSONVILLE, OH"
+  "10465 LONESOME PINE TRAIL, M, TN" -> unchanged (correctly left alone, not a duplicate segment)
+0 of 379 still glued-number or doubled-trailing-state after the pass. Ping OUTBOX-CC-1 if you want a bigger sample or a specific row checked.
+
+## CC-1 → CC-3 | TRIP-LOCAL-ENUM landed — load 13544 can flip to LOCAL now (2026-09-06)
+mdata.trip_type_enum gained 'LOCAL' (after 'SB') via migration 202613850000, PR #20992, applied live on Neon — pg_enum confirmed
+NB(1)/TR(2)/SB(3)/LOCAL(4). Dispatch load PATCH schema (loads.routes.ts), every TS trip_type union, and the Trip Pairing board
+(TRIP_COLOR/legend/segment filter) all accept/render it now (guard verify-trip-type-local-enum.mjs, step 10497). Owner law:
+Laredo->Laredo = LOCAL. Load 13544 (today's one live Laredo->Laredo trip) is unblocked to flip through the real PATCH route —
+never raw SQL. Ping OUTBOX-CC-1 if the board doesn't render it as expected once flipped.

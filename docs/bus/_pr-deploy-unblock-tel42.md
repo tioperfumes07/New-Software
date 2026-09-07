@@ -1,0 +1,17 @@
+FINDING: GATE-LIVELOCK — every backend deploy fails in pre-deploy `db:migrate` with "modified after apply" on `202613790001_tel42_ih35_yard_location.sql`. Measured: prod branch br-fancy-credit-akjnd07a ledger checksum for that file = `3a8f9d6d05cb74e25b4e90144839f307e497ef6a3090a9cb7bdca1714735d61a` (applied 2026-09-06T01:26:47Z); current disk `shasum -a 256` = `41983dd0b96b14e017f6948eca539a1c389c49914c6d5e273c7477696467f109`. First observed failure: Render deploy dep-daeg5t0u01pc73eblh30 (commit 38bcdb00), status pre_deploy_failed at 2026-09-06T06:08:53Z ("==> Pre-deploy has failed / Exited with status 1"). db:verify:critical-runtime skips on Render, so the failing step is db:migrate's checksum-drift refusal (scripts/db-migrate.mjs:543-547).
+
+ROOT CAUSE: TEL-42 (#20804, commit c2114c9aab) created the migration and it applied to prod at 01:26Z under checksum 3a8f9d6d. TEL-45 (#20866, commit b613b0caf9) then EDITED the already-applied file (a fresh-DB portability fix: seed the yard INSERT via `SELECT FROM org.companies` gated on the company existing, and make the fence-binding DO block fail soft — dropped `INTO STRICT` and the `RAISE EXCEPTION` on a missing fence). Editing an applied migration changed its disk hash to 41983dd0, which db:migrate refuses on every subsequent deploy. This blocks ALL backend deploys, not one seat's.
+
+FIX: register the file in scripts/lib/migration-checksum-overrides.json (the designed, precedented mechanism — same class as 202612690000 and the ACCT-F5684 entries) with the real prod ledger_checksum (3a8f9d6d) and current disk_checksum (41983dd0). db:migrate then SKIPS the file ("checksum override accepted") — the original content prod applied at 01:26Z is NEVER re-executed; the TEL-45 edit is a fresh-DB/CI replay fix only and does not touch prod. No SQL edited (never edit applied DDL again — the override is the resolution). One entry added; total 50.
+
+GUARD: existing wired guards validate the entry — verify-migration-checksum-overrides-match-disk (step 1336) OK (disk_checksum matches the file on disk, 50/50); verify-applied-migrations-immutable (step 22) OK (source=snapshot, checked=990, overridden=44). No new guard/step needed; this is the guard's own escape valve.
+
+LIVE PROOF: verify-migration-checksum-overrides-match-disk exit 0 (50/50) + verify-applied-migrations-immutable exit 0 (checked=990, overridden=44); prod ledger checksum 3a8f9d6d (applied 2026-09-06T01:26:47Z) == override.ledger_checksum, disk shasum 41983dd0 == override.disk_checksum. Neon br-fancy-credit-akjnd07a, USMCA:
+- ledger checksum measured: `SELECT checksum FROM _system._schema_migrations WHERE filename='202613790001_tel42_ih35_yard_location.sql'` = 3a8f9d6d… (applied_at 2026-09-06T01:26:47Z).
+- disk checksum measured: `shasum -a 256 db/migrations/202613790001_tel42_ih35_yard_location.sql` = 41983dd0….
+- override match confirmed locally: verify-migration-checksum-overrides-match-disk OK (50/50); verify-applied-migrations-immutable OK.
+- Post-merge redeploy of the backend service and healthz git_sha == squash commit will be re-measured.
+
+REMAINING: TELEMATICS SEAT (Codex) — prod reports 0 active is_ih35_yard rows for USMCA and no canonical fence 188cf90c-d970-4ab0-9795-d23394b38af1 (`active_yard=0, fence=0`). That is a TEL-42 data-state question separate from this deploy unblock; author a FOLLOW-UP migration, do not edit the applied file. Notified on the bus.
+
+MODULE_PROGRESS: N/A (infra deploy-unblock).

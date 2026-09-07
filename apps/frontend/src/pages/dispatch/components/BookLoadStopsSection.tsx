@@ -52,6 +52,21 @@ export function BookLoadStopsSection({
       Record<string, unknown>
     >;
 
+  // DSP-49 (owner order 2026-09-06, "every load carries its pickup and delivery appointments" —
+  // measured live: 13526's stops had NO appointment window, so the Round Trips timeline fell back
+  // to created_at). Required on exactly the first pickup and the last delivery -- an intermediate
+  // stop's appointment stays optional, matching the requirement's own wording ("the first pickup"
+  // / "the last delivery"), not every stop. Recomputed from the live stop-type order every render
+  // so it tracks correctly as stops are added/removed/reordered.
+  const firstPickupIndex = currentStops.findIndex((s) => s.stop_type === "pickup");
+  let lastDeliveryIndex = -1;
+  for (let i = currentStops.length - 1; i >= 0; i -= 1) {
+    if (currentStops[i]?.stop_type === "delivery") {
+      lastDeliveryIndex = i;
+      break;
+    }
+  }
+
   // GO-24 dead-geocode gate: AddressGeocodeInput gates ITSELF on the local PCMILER_ENABLED feature
   // flag, but the flag being ON does not mean the provider actually IS — the backend also requires
   // TRIMBLE_MAPS_API_KEY configured (isTrimbleConfigured()) and returns {enabled:false} either way.
@@ -231,15 +246,43 @@ export function BookLoadStopsSection({
                   <Controller
                     control={control}
                     name={`stops.${index}.scheduled_arrival_at`}
-                    render={({ field: f }) => {
+                    rules={
+                      index === firstPickupIndex
+                        ? { required: "Pickup appointment required — this load cannot book without one." }
+                        : index === lastDeliveryIndex
+                          ? { required: "Delivery appointment required — this load cannot book without one." }
+                          : undefined
+                    }
+                    render={({ field: f, fieldState }) => {
                       const v = typeof f.value === "string" ? f.value : "";
                       const d = v.slice(0, 10);
                       const t = v.slice(11, 16);
-                      const combine = (nd: string, nt: string) => f.onChange(nd ? `${nd}T${nt || "00:00"}` : "");
+                      const combine = (nd: string, nt: string) => {
+                        const next = nd ? `${nd}T${nt || "00:00"}` : "";
+                        f.onChange(next);
+                        // DSP-49 (root cause, live-measured 2026-09-06: 49 of 49 open USMCA loads
+                        // are missing appointment_start_at on both first pickup and last delivery,
+                        // even though every one of them has this scheduled_arrival_at field set --
+                        // the wizard has only ever written the OLDER field. appointment_start_at is
+                        // the one the rest of the system actually reads (Round Trips timeline,
+                        // LoadStopsRecordTab's own appointmentText()); this single fixed-time entry
+                        // IS a real committed appointment, so it writes both. Clearing the date
+                        // clears both -- never leaves a stale appointment_start_at behind.
+                        setValue?.(`stops.${index}.appointment_start_at`, next || undefined, { shouldDirty: true });
+                      };
+                      const required = index === firstPickupIndex || index === lastDeliveryIndex;
                       return (
                         <>
-                          <Field label="Appointment date" input={<DatePicker data-testid={`stop-date-${index}`} value={d} onChange={(next) => combine(next, t)} className={CELL} />} />
+                          <Field
+                            label={`Appointment date${required ? " *" : ""}`}
+                            input={<DatePicker data-testid={`stop-date-${index}`} value={d} onChange={(next) => combine(next, t)} className={CELL} />}
+                          />
                           <Field label="Time" input={<TimePicker id={`stop-time-${index}`} value={t} onChange={(tv) => combine(d, tv)} className={CELL} ariaLabel="Stop time" />} />
+                          {fieldState.error ? (
+                            <p className="col-span-full text-xs font-semibold text-[#dc2626]" data-testid={`stop-appointment-error-${index}`}>
+                              {fieldState.error.message}
+                            </p>
+                          ) : null}
                         </>
                       );
                     }}

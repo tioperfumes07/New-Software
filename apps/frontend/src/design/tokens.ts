@@ -39,6 +39,10 @@ export const colors = {
   // COLUMNS-MUST-DISTINGUISH LAW (owner ruling 2026-09-04, verbatim: "i want the columns to
   // distinguish as i've stated many times before") — reference render:
   // ~/Downloads/09-04-2026-Load-Costs-Board-GROUPED-render.html.
+  // TABLE-HEADER-RETIRE-NAVY LAW (owner ruling 2026-09-04, verbatim: "the blue is too aggressive")
+  // — navy #14314F/white left table headers for good; it stays on the rail, top banner, and
+  // printed document headers only. Guard: scripts/verify-ui-design-system-ratchet.mjs fails hard
+  // the moment navy comes back on this specific pair.
   tableHeaderIce: "#EEF2F6", // th-bg, same value as tableHeaderBg — named for the reference doc's own token
   tableHeaderInk: "#1F2937", // th-ink, same value as tableHeaderText
   tableColumnRule: "#C7D2DC", // --line2 (th-border) — 1px rule on header/group-band rows

@@ -1,4 +1,28 @@
+# ★★★ HARD WAKE — 2026-09-07 03:48Z — Cursor cloud lead (owner: HARD WAKE)
+
+**Tip main:** `0cc2a61752` (#21232 navy loopholes just merged; FE+API deploy in flight). Live proof ROUND 16.25 ParityTable FIXED (Claude lead re-measured: Cash Flow 0/64 tall max 34.4px; Factoring 0/20 max 30.8px).
+**Deadline:** **2026-09-07 07:00Z** — post interim DONE lines; no idle; one PR + one named guard per item; USMCA only; never POST Book Load; no seat fixtures.
+
+## CC-1 — HARD WAKE NOW · ROUND 16.26 NEXT WAVE
+
+START NOW (PENDING MASTER §6B): **INV-10, INV-12, INV-05, INV-20, CI-13, SET-12, SET-14** then SET-25/SET-28 if time.
+settlement_lines gap still not 100% (deadhead_pay/earnings 54/85) — if your invoice/JE work touches bindings, close the real gap; else do not claim resolved. Real routes + audit; no raw-SQL. Deadline **07:00Z**.
+
+
+---
+
 # ▶ NOW — 2026-09-05 22:06Z (Cursor registrar/lead; Claude audits)
+
+**23:45Z — LEAD · ROUND 3 — YOUR ONE ITEM:**
+
+## CC-1 — item ACC-MIG · two migrations in your lane, then row 45 statements — deadline 2026-09-06 01:30Z
+- **Measured:** CC-2 routed `mdata.load_stop_legs` (google_reference_miles numeric(9,1), google_reference_fetched_at timestamptz, keyed load_id+leg_no, FORCED RLS, 0065 grants) to INBOX-CC-1 — DSP-48 persists degrade-safe until it exists. CC-3 routed: `vendors.routes.ts` PATCH schema lacks `driver_id`, blocking the Hugo Gaytan duplicate fix.
+- **Required:** one PR, two idempotent migrations numbered above main's max (checksum not equal to any existing file), applied on prod via the merge→deploy ledger path; `PATCH /api/v1/vendors/:id` accepts `driver_id` (uuid, must exist, same company). Then **immediately** start row 45 (customer/vendor statements endpoint) as your next item without waiting.
+- **Guard:** `scripts/verify-load-stop-legs-and-vendor-driver-id.mjs` — table + columns exist on prod, RLS forced, grants present, PATCH schema has driver_id; `--selftest` drops a column → FAIL.
+- **Linkage:** load_stop_legs ↔ mdata.loads/load_stops; vendors.driver_id ↔ mdata.drivers. **Surrender:** Cursor.
+DONE LINE: CC-1 | ACC-MIG DONE | <sha> | verify-load-stop-legs-and-vendor-driver-id --selftest N/N | prod: load_stop_legs cols <n>, PATCH driver_id ok | NEXT ACC-45
+
+---
 
 **22:43Z — LEAD (owner: 'you are lead again'). YOUR ONE ITEM — nothing else is accepted:**
 
@@ -625,3 +649,35 @@ My backend code (route handler + expiry cron) will reference exactly `mdata.load
 names so I can match. Whichever of us actually has this in CI first should hold it there;
 happy to fold it into my own PR instead if that's faster for you -- your call, just need to know
 which so I'm not blocked past 01:00Z.
+
+## ⛔ CC-3 FINDING 2026-09-06 — accounting.expenses posts with no gate on the load's tour/settlement being open
+While shipping SETL-TIEOUT-01, measured live (docs/bus/settlement-entry-2026-09-04/IH35-BY-LOAD-20260904-WITH-DIESEL_1.xlsx's reconciled 36-load USMCA scope): **137 of 137 posted expenses (100%)** are `posting_status='posted'` (a real `journal_entry_id` already written) while the load's driver settlement/tour is still `status NOT IN ('approved','paid','cancelled')` — i.e. every posted expense in this scope posted before its tour closed. Load 13526 alone = 5 (matches the owner's own cited figure exactly). Reproducible via `scripts/report-posted-expenses-while-tour-open.mjs` (read-only, no `--apply`, just paste `DATABASE_URL=<prod>` and run). Not reversed — this is a report, not a fix, per the task's own instruction.
+
+Given it's 100% of the sample (not a handful of outliers), this reads as a **systemic timing gap**: whatever posts an expense to GL today has no gate checking "has this load's tour/settlement closed yet" (LAW §2: "open tour posts nothing") — it posts as soon as the expense is entered. The likely real fix is a posting-time gate in the expense-posting path (refuse/queue the post while the tour is open, post it once the tour closes), not 137 individual reversing JEs. That posting engine lives in `backend/accounting/**` — your module. Filing per FIND IT, FILE IT, DO NOT FIX IT; no deadline set by me, routing to your queue for triage.
+
+
+## 2026-09-06 01:05Z — LEAD → ROUND 5 item for this seat. Full text: docs/bus/ONE-ITEM-INSTRUCTIONS-ALL-SEATS-2026-09-05.md § ROUND 5.
+- **ACC-50** Open tour posts nothing: posting_hold_reason='tour_open', no JE while the tour is open, batch post at tour close, reversal PLAN (no auto-reversal) for the 137 posted-while-open rows, detail-page pill. Guard verify-open-tour-posts-nothing. Deadline 04:00Z. Surrender CC-3.
+
+
+## 2026-09-06 01:45Z — LEAD (ROUND 6): see ONE-ITEM-INSTRUCTIONS § ROUND 6.
+- ACC-50 unchanged (04:00Z); then the posting_hold_reason pill on the Costs cards (coordinate with lead).
+
+## 2026-09-06 03:2xZ — ROUND 9 — read docs/bus/ROUND-9-INSTRUCTIONS-ALL-SEATS-2026-09-06.md § CC-1. Start now.
+
+## ⛔ CC-3 → CC-1 — ROUTED (owner ruling 2026-09-06, TOUR-SPLIT-PLAN Q3) — source_document_ref migration, your HH 00-11 band
+Owner ruling on `docs/audit/TOUR-SPLIT-PLAN-2026-09-06.md`'s Q3: "DO IT, and it's the gating item... Author it idempotent / CREATE-only (ADD COLUMN IF NOT EXISTS, nullable text) + backfill the 17 numbers through the service layer, never DELETE. Migration-lane assignment: it's CC-1's band — CC-1 should author it as the first step of the split, one author per migration."
+
+Draft ready at `docs/audit/migration-drafts/SOURCE-DOCUMENT-REF-migration-draft.sql` (same ready-to-apply shape as this round's `BANK-FEE-RECOVERY-*` drafts) — a single additive `ALTER TABLE driver_finance.driver_settlements ADD COLUMN IF NOT EXISTS source_document_ref text NULL`, idempotent, fresh-DB safe, no RLS/grant change, deliberately no uniqueness constraint yet (owner said "nullable text"; a partial unique index is called out as a separate later migration once the backfill is confirmed collision-free).
+
+Steps: (1) claim a number in `db/migrations/CLAIMED-MIGRATION-NUMBERS.json` (own PR), (2) author from the draft renumbered, apply on Neon, (3) backfill the 17 signed numbers per `docs/audit/TOUR-SPLIT-PLAN-2026-09-06.md` §1's mapping — through the real service layer (whatever settlement-update function exists once the column is queryable), never raw SQL, never DELETE. Ratified `--apply` sequencing for `scripts/ops/split-seed-tours.ts` is in the plan doc's new §7: (1) your migration lands, (2) lead re-measures the 17→map against live data, (3) `--apply` runs through `confirmPresettlementLink`'s existing `create_new`/`link_existing` actions only (no new write path). DONE line to OUTBOX-CC-1 when landed; ping OUTBOX-CC-3 so I can re-verify the plan doc's mapping against live data once the column exists.
+
+## 2026-09-06 05:4xZ — ROUND 11 — read docs/bus/ROUND-11-INSTRUCTIONS-ALL-SEATS-2026-09-06.md § CC-1. Start now.
+
+## CC-3 → CC-1 | EXP-ADDR-SPLIT ready for your REG-PARSE-DATA backfill (2026-09-06)
+Built + live-tested (20 real samples, 24/24 pass): `apps/backend/src/lib/merchant-address-normalize.ts`, `normalizeMerchantAddress(raw)`. Fixes the "66320GALMONT MORRISTOWN RD,OH, OH" class of defect — space after a glued street number, collapse an exact duplicated trailing state segment, tidy comma punctuation. Deliberately never touches spelling (a live sample has a genuine source-PDF typo, "LONESMOE" for "LONESOME" — left alone) or a non-duplicate fragment next to a real state (e.g. a stray "M" beside "TN" — left alone, not guessed at). Passes `no-location-on-file` through unchanged.
+
+When your `merchant_address` backfill runs: pipe the address segment `parseExpenseMemo()` already extracts through `normalizeMerchantAddress()` before writing the column — one function call, no new parsing needed on your side. Not wired into anything yet since the column doesn't exist on main as of this note; ping OUTBOX-CC-3 once it lands if you'd like me to verify the normalized output against a live sample of the backfilled rows.
+
+## LEAD → CC-1 (relayed by CC-3, surrender per ROUND 13 deadline 16:00Z) | INV-MISSING-2 blocked on a real data gap
+Loads 13525, 13554 (USMCA, both `delivered_pending_docs`, `rate_total_cents=0` since INSERT — confirmed via `audit.row_changes`, never anything else). Task asked to create their two proformas "amount from the signed settlement PDF for each — quote the source line." Measured live: **neither signed settlement PDF has a linehaul/customer-charge line for either load** — settlement 5778's own extracted note (`docs/bus/settlement-entry-2026-09-04/cc-3-extracted/settlement-5778.json`, load 13525): *"Company Settlement's CUSTOMER CHARGES table has no line-haul row for Load 13525 ... genuinely absent from the source, not omitted by us."* Settlement 5790's extracted note (`.../codex-extracted/settlement-5790.json`, load 13554): *"The Company Settlement's CUSTOMER CHARGES / Line Haul table has NO entry for Load 13554 ... genuinely absent from the source document and are recorded as null rather than guessed."* Both notes are from two independent extraction passes (CC-3's own, and Codex's), so this isn't a re-measurement error. Per standing law (never fabricate a financial figure, zero is a claim): not inventing a proforma amount. This needs either the owner/rate-confirmation supplying the real customer rate for these two loads (a rate con, a BOL, or a corrected settlement PDF), or an explicit owner ruling on how to proceed without one — not a coder guess. Surrendered to CC-1 per the task's own rule, with full evidence above; flagging rather than silently completing with an invented number.

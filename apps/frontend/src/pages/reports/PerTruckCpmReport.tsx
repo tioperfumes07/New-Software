@@ -1,11 +1,11 @@
 import { useMemo, useState } from "react";
-import { DatePicker } from "../../components/forms/DatePicker";
+import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "../../api/client";
 import { PageHeader } from "../../components/layout/PageHeader";
 import { useCompanyContext } from "../../contexts/CompanyContext";
 import { ReportsSubNav } from "./ReportsSubNav";
-import { CollapsedListFilters, useStagedListFilters } from "../../components/table";
+import { ReportFilterBar } from "../../components/reports/ReportFilterBar";
 import { EntityLink } from "../../components/shared/EntityLink";
 import { entityLabel } from "../../lib/entity-label";
 import { ListErrorState } from "../../components/ListErrorState";
@@ -49,13 +49,10 @@ function currentQuarterRange() {
 export function PerTruckCpmReport() {
   const { selectedCompanyId } = useCompanyContext();
   const companyId = selectedCompanyId ?? "";
+  const [searchParams, setSearchParams] = useSearchParams();
   const defaultRange = currentQuarterRange();
   const [applied, setApplied] = useState({ ...defaultRange, minMiles: "" });
-  const staged = useStagedListFilters({
-    applied,
-    empty: { ...defaultRange, minMiles: "" },
-    onApply: setApplied,
-  });
+  const [reportSearch, setReportSearch] = useState("");
 
   const query = useQuery({
     queryKey: ["reports", "per-truck-cpm", companyId, applied.from, applied.to],
@@ -67,6 +64,12 @@ export function PerTruckCpmReport() {
   });
 
   const rows = useMemo(() => query.data?.rows ?? [], [query.data]);
+
+  const filtered = useMemo(() => {
+    const q = reportSearch.toLowerCase();
+    if (!q) return rows;
+    return rows.filter((r) => String(r.display_id ?? "").toLowerCase().includes(q));
+  }, [rows, reportSearch]);
 
   const columns = useMemo<ParityColumn<PerTruckCpmRow>[]>(
     () => [
@@ -98,39 +101,32 @@ export function PerTruckCpmReport() {
           Print
         </button>
       </div>
-      <CollapsedListFilters
-        activeFilterCount={JSON.stringify(applied) !== JSON.stringify({ ...defaultRange, minMiles: "" }) ? 1 : 0}
-        defaultOpen={true}
-        onApply={staged.apply}
-        onReset={staged.reset}
-        onCancel={staged.cancel}
-        applyDisabled={!staged.dirty}
+      <ReportFilterBar
         testIdPrefix="reports-per-truck-cpm"
-        className="rounded-sm border bg-white p-4"
+        fromDate={applied.from}
+        toDate={applied.to}
+        onFromDateChange={(d) => setApplied((p) => ({ ...p, from: d ?? "" }))}
+        onToDateChange={(d) => setApplied((p) => ({ ...p, to: d ?? "" }))}
+        onPresetSelect={(preset) => {
+          const next = new URLSearchParams(searchParams);
+          next.set("preset", preset);
+          setSearchParams(next, { replace: true });
+        }}
+        search={reportSearch}
+        onSearchChange={setReportSearch}
       >
-        <div className="flex flex-wrap items-end gap-3">
-          <label className="text-xs">
-            From
-            <DatePicker className="ml-2" value={staged.draft.from} onChange={(next) => staged.setDraft((p) => ({ ...p, from: next }))} />
-          </label>
-          <label className="text-xs">
-            To
-            <DatePicker className="ml-2" value={staged.draft.to} onChange={(next) => staged.setDraft((p) => ({ ...p, to: next }))} />
-          </label>
-          <label className="text-xs">
-            Min miles
-            <input
-              type="number"
-              min={0}
-              className="ml-2 h-9 w-28 rounded-sm border border-gray-300 px-2 text-xs"
-              value={staged.draft.minMiles}
-              onChange={(e) => staged.setDraft((p) => ({ ...p, minMiles: e.target.value }))}
-              data-testid="reports-per-truck-cpm-min-miles"
-              // TODO: wire to backend filter
-            />
-          </label>
-        </div>
-      </CollapsedListFilters>
+        <label className="flex items-center gap-1 text-xs text-slate-600">
+          <span className="font-semibold text-slate-600">Min miles</span>
+          <input
+            type="number"
+            min={0}
+            className="h-7 w-24 rounded-sm border border-slate-300 px-2 text-xs"
+            value={applied.minMiles}
+            onChange={(e) => setApplied((p) => ({ ...p, minMiles: e.target.value }))}
+            data-testid="reports-per-truck-cpm-min-miles"
+          />
+        </label>
+      </ReportFilterBar>
       {query.isError ? (
         <ListErrorState
           title="Couldn't load per-truck CPM"
@@ -140,10 +136,10 @@ export function PerTruckCpmReport() {
         />
       ) : (
         <ParityTable
-          rows={rows}
+          rows={filtered}
           columns={columns}
           rowKey={(row) => row.unit_uuid}
-          loading={query.isPending || (query.isFetching && rows.length === 0)}
+          loading={query.isPending || (query.isFetching && filtered.length === 0)}
           storageKey="per-truck-cpm"
           emptyText="No units with CPM data for this period."
           exportFilename="per-truck-cpm-report.csv"

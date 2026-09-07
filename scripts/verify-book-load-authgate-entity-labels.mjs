@@ -8,6 +8,12 @@
  * label the moment a unit/trailer/driver is picked. Fixed by lifting the resolved
  * EntityPickerOption up via a new onOptionsResolved callback and threading the labels into
  * AuthGatePanel.
+ *
+ * RE-PIN 2026-09-06: the trailer variable name was relaxed from the literal `trailerOption` to
+ * any identifier (\w+) because the code evolved to use `trailerForGate` (which resolves to the
+ * interchange trailer when in interchange mode) instead of the raw `trailerOption`. The contract
+ * is that onOptionsResolved receives a trailer option — the variable name is an implementation
+ * detail, not the contract.
  */
 import fs from "node:fs";
 const LABEL = "verify-book-load-authgate-entity-labels";
@@ -31,7 +37,7 @@ function audit(modalSrc, sectionSrc) {
   if (!/onOptionsResolved=\{setEquipmentOptions\}/.test(modalSrc)) {
     failures.push("BookLoadModalV4 must wire onOptionsResolved={setEquipmentOptions} on <BookLoadEquipmentSection>");
   }
-  if (!/onOptionsResolved\?\.\(\{\s*unit:\s*unitOption,\s*trailer:\s*trailerOption,\s*primaryDriver:\s*primaryDriverOption\s*\}\)/.test(sectionSrc)) {
+  if (!/onOptionsResolved\?\.\(\{\s*unit:\s*unitOption,\s*trailer:\s*\w+,\s*primaryDriver:\s*primaryDriverOption,?\s*\}\);?/.test(sectionSrc)) {
     failures.push("BookLoadEquipmentSection must call onOptionsResolved with the resolved unit/trailer/primaryDriver options");
   }
   return failures;
@@ -41,7 +47,7 @@ if (process.argv.includes("--selftest")) {
   const modalSrc = fs.readFileSync(MODAL_FILE, "utf8");
   const sectionSrc = fs.readFileSync(SECTION_FILE, "utf8");
   const mutations = [
-    ["strip-unitLabel-prop", (m) => m.replace(/\s*unitLabel=\{equipmentOptions\.unit\?\.label \?\? null\}\n/, "\n")],
+    ["strip-unitLabel-prop", (m) => m.replace(/\s*unitLabel=\{equipmentOptions\.unit\?\.label \?\? null\}\n/g, "\n")],
     ["strip-lift-up-callback", (_m, s) => s.replace(/onOptionsResolved\?\.\(\{[\s\S]*?\}\);/, "")],
   ];
   for (const [name, mutate] of mutations) {

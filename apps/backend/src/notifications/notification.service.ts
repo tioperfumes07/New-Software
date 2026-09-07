@@ -75,7 +75,7 @@ export async function listCompanyNotifyUserIds(
       FROM identity.users u
       LEFT JOIN org.user_company_access uca ON uca.user_id = u.id
       WHERE u.deactivated_at IS NULL
-        AND u.role = ANY($2::text[])
+        AND u.role::text = ANY($2::text[])
         AND (
           u.default_company_id = $1::uuid
           OR uca.company_id = $1::uuid

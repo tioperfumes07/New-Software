@@ -13,8 +13,10 @@ const DRAWER = "apps/frontend/src/components/dispatch/LoadDetailDrawer.tsx";
 function audit(src) {
   const f = [];
   // The width must be chosen by the active tab, not a single static class.
-  if (!/activeTab === "Costs"\s*\n?\s*\?/.test(src))
-    f.push(`${DRAWER}: drawer width must branch on activeTab === "Costs" (register needs ~1365px, not 600px)`);
+  // LDT-1..7 (lead 2026-09-06): every designed tab is a wide readout, so the branch is now `activeTab !== "Overview"`
+  // (wide for all designed tabs, Overview keeps 600px). The Costs register is still covered — it is one of them.
+  if (!/activeTab (=== "Costs"|!== "Overview")\s*\n?\s*\?/.test(src))
+    f.push(`${DRAWER}: drawer width must branch on the tab (activeTab !== "Overview" → wide; the Costs register needs ~1365px, not 600px)`);
   // Costs tab must get a wide width (viewport on md, 1400px on xl).
   if (!/md:w-\[92vw\] xl:w-\[1400px\]/.test(src))
     f.push(`${DRAWER}: the Costs tab drawer must widen to md:w-[92vw] xl:w-[1400px] so the register is not cramped`);
@@ -38,7 +40,7 @@ function main() {
     if (audit(m1).length === 0) { console.error("SELFTEST FAIL: collapsing the Costs width to 600px did not trip"); process.exit(1); }
     const m2 = src.replace(/activeTab === "Costs"/, 'false && activeTab === "Costs"');
     // still has the literal string, so target the branch marker instead
-    const m3 = src.replace(/activeTab === "Costs"\s*\n?\s*\?/, "false ?");
+    const m3 = src.replace(/activeTab (=== "Costs"|!== "Overview")\s*\n?\s*\?/, "false ?");
     if (audit(m3).length === 0) { console.error("SELFTEST FAIL: removing the tab branch did not trip"); process.exit(1); }
     void m2;
     console.log("SELFTEST OK: guard trips on all mutations");

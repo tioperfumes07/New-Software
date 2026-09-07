@@ -3,21 +3,22 @@ import fs from "node:fs";
 
 const target = "apps/frontend/src/components/dispatch/LoadDetailCostsTab.tsx";
 const source = fs.readFileSync(target, "utf8");
-// Transcribed to the shipped QuickBooks register (STEP 1.3) + the ONE "+ New" dropdown
-// (owner 2026-09-05: "1 button with drop down, just like quickbooks so we do not have many buttons").
-// The register carries the 12-column entry grid; the single dropdown is the sole create surface and
-// each menu item opens a real flow (Expense/Bill/Cash advance/Fuel advance seed a register row that
-// Save writes; Bill payment routes to the real pay-a-bill surface; receipt import links out).
+// Retranscribed to the LDT-1 CARD design (register CURSOR-LOAD-DETAIL-TABS-BUILD-2026-09-05.md +
+// LIVE render LOAD-DETAIL-TABS-RENDERS-LIVE-13526-2026-09-05.html, owner order 2026-09-05 23:45Z). The
+// Costs tab is a stacked register of entry CARDS: number is an auto label (never typed), an
+// Expense·paid now / Bill·owed toggle, Date · Vendor · Category · Paid-with OR Vendor doc no. · Amount ·
+// Receipt on every card, a posting-hint caption, a margin footer and a "What the bank will do" section.
+// The ONE "+ New" dropdown is the sole create surface; each menu item opens a real flow.
 const REQUIRED_IDS = [
-  "load-costs-tab-shell", "load-costs-kpis", "load-costs-actions",
+  "load-costs-tab-shell", "load-costs-actions",
   "load-costs-save-all", "load-costs-add-top", "load-costs-new-menu",
   "load-costs-menu-expense", "load-costs-menu-bill", "load-costs-menu-bill-payment",
   "load-costs-add-advance-top", "load-costs-add-fuel-advance-top", "load-costs-receipt-photo",
-  "load-costs-register", "load-costs-entry", "load-costs-saved",
-  "load-cost-field-number", "load-cost-field-date", "load-cost-field-type",
+  "load-costs-register", "load-costs-entry", "load-costs-saved", "load-cost-saved-entry",
+  "load-cost-number", "load-cost-field-date", "load-cost-toggle-expense", "load-cost-toggle-bill",
   "load-cost-field-vendor", "load-cost-field-category", "load-cost-field-paid-with",
   "load-cost-field-vendor-invoice", "load-cost-field-amount", "load-cost-status",
-  "load-cost-hint",
+  "load-cost-receipt", "load-cost-caption", "load-costs-margin", "load-costs-bank-section",
 ];
 
 // A test id may be a literal DOM attribute (data-testid="x") or handed to a wrapper component as a

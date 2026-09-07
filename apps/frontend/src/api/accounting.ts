@@ -79,6 +79,13 @@ export type Invoice = {
   created_at: string;
   updated_at: string;
   lines?: InvoiceLine[];
+  /** CV-TRANSACTION-COLUMNS (inv #46) — settlement/unit/pickup/delivery/miles linkage for customer invoice transactions tab. */
+  linked_settlement_id?: string | null;
+  linked_settlement_display_id?: string | null;
+  linked_unit_number?: string | null;
+  linked_pickup_date?: string | null;
+  linked_delivery_date?: string | null;
+  linked_loaded_miles?: number | null;
   payment_applications?: Array<{
     id: string;
     payment_id: string;
@@ -288,6 +295,11 @@ export type VendorBill = {
   journal_entry_date?: string | null;
   journal_entry_memo?: string | null;
   unit_id?: string | null;
+  /** LDT-1 (additive, 2026-09-06) — category account + receipt count for the Load Costs cards. */
+  coa_account_id?: string | null;
+  coa_account_number?: string | null;
+  coa_account_name?: string | null;
+  attachment_count?: number | null;
   /** GO-18 — accounting.bills.driver_id. Not driver_uuid. */
   driver_id?: string | null;
   unit_display_id?: string | null;
@@ -299,6 +311,17 @@ export type VendorBill = {
   /** Present when bills.service resolves a cash-advance reverse link for BillDetail. */
   linked_cash_advance_id?: string | null;
   linked_cash_advance_display_id?: string | null;
+  /** ACC-50 (LAW §2) — why this bill hasn't posted yet, e.g. "tour_open". Null when never held. */
+  posting_hold_reason?: string | null;
+  /** CV-TRANSACTION-COLUMNS (inv #46) — load/settlement/unit linkage for vendor bill transactions tab. */
+  linked_load_id?: string | null;
+  linked_load_number?: string | null;
+  linked_settlement_id?: string | null;
+  linked_settlement_display_id?: string | null;
+  linked_unit_number?: string | null;
+  linked_pickup_date?: string | null;
+  linked_delivery_date?: string | null;
+  linked_loaded_miles?: number | null;
 };
 
 /** ACCT-F603 — never pass legacy QBO vendor_id text to EntityLink (404s /vendors/472). */
@@ -703,7 +726,14 @@ export type ExpenseListRow = {
   total_amount_cents: number | string;
   status: ExpenseListStatus;
   posting_status: ExpensePostingStatus;
+  /** ACC-50 (LAW §2) — why posting is held while posting_status='unposted', e.g. "tour_open". */
+  posting_hold_reason?: string | null;
   memo: string | null;
+  /** REG-PARSE-DATA (ROUND 11, additive, 2026-09-06) — structured fields backfilled from the
+   *  seed's composite memo string; read these first, fall back to parseExpenseMemo(memo) only
+   *  when null. */
+  merchant_address?: string | null;
+  source_settlement_ref?: string | null;
   load_id: string | null;
   load_number: string | null;
   vendor_uuid: string | null;
@@ -722,6 +752,13 @@ export type ExpenseListRow = {
   matched_bank_transaction_description?: string | null;
   trailer_id: string | null;
   trailer_display_id: string | null;
+  /** LDT-1 (additive, 2026-09-06) — the Load Costs cards read these straight off the list row. */
+  vendor_document_number?: string | null;
+  payment_account_number?: string | null;
+  payment_account_name?: string | null;
+  category_account_number?: string | null;
+  category_account_name?: string | null;
+  attachment_count?: number | null;
 };
 
 export function listExpenses(
@@ -822,6 +859,8 @@ export type ExpenseDetail = {
   total_amount_cents: number | string;
   status: ExpenseListStatus;
   posting_status: ExpensePostingStatus;
+  /** ACC-50 (LAW §2) — why posting is held while posting_status='unposted', e.g. "tour_open". */
+  posting_hold_reason?: string | null;
   memo: string | null;
   /** VIS-01 — expense void date/reason, shown by VoidedBanner. */
   voided_at?: string | null;
@@ -943,6 +982,28 @@ export function listDriverBills(operatingCompanyId: string, params: { include_vo
   const qs = query.toString();
   return apiRequest<{ total_count: number; driver_bills: DriverBillListRow[] }>(
     withCompany(`/api/v1/driver-finance/driver-bills/list${qs ? `?${qs}` : ""}`, operatingCompanyId)
+  );
+}
+
+export type BillRegisterRow =
+  | { bill_type: "vendor_bill"; bill: VendorBill }
+  | { bill_type: "driver_bill"; bill: DriverBillListRow };
+
+export type BillRegisterResponse = {
+  rows: BillRegisterRow[];
+  totals: Record<"vendor_bill" | "driver_bill", { count: number; amount_cents: number }>;
+};
+
+export function listBillRegister(
+  operatingCompanyId: string,
+  params: Parameters<typeof listBills>[1] & { bill_type?: "all" | "vendor_bill" | "driver_bill" } = {}
+) {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== "") query.set(key, String(value));
+  }
+  return apiRequest<BillRegisterResponse>(
+    withCompany(`/api/v1/accounting/bills/register?${query.toString()}`, operatingCompanyId)
   );
 }
 
@@ -1178,6 +1239,13 @@ export function createExpense(
      * landed indistinguishable from real money — including ones with SAMPLE in their own memo.
      */
     is_sample_data?: boolean;
+    /**
+     * SET-14 (ROUND 16.26) — two INDEPENDENT flags per cost row (accounting.expenses, migration
+     * 202613930000): is_reimbursable (owed back to the driver who fronted it) and
+     * is_company_expense (a direct company cost). A row can be neither, either, or both.
+     */
+    is_reimbursable?: boolean;
+    is_company_expense?: boolean;
     driver_id?: string;
     attachment_draft_id?: string;
     expense_number?: string;
@@ -1623,6 +1691,35 @@ export function getJournalEntrySourceLinks(id: string, operatingCompanyId: strin
   );
 }
 
+/** ACC-49 — one group per journal entry that touched this source document (usually one). */
+export type PostingsBySourceGroup = {
+  journal_entry_id: string;
+  entry_date: string;
+  status: JournalEntryStatus;
+  postings: JournalEntryPosting[];
+  debit_total_cents: number;
+  credit_total_cents: number;
+};
+
+/**
+ * ACC-49 — postings resolved by (source_transaction_type, source_transaction_id), the other
+ * direction from getJournalEntry: powers the Journal tab on Expense/Bill/Invoice detail, which
+ * knows its OWN id + type but not which journal_entry_uuid(s) reference it.
+ */
+export function getJournalEntryPostingsBySource(
+  sourceTransactionType: string,
+  sourceTransactionId: string,
+  operatingCompanyId: string
+) {
+  const query = new URLSearchParams({
+    source_transaction_type: sourceTransactionType,
+    source_transaction_id: sourceTransactionId,
+  });
+  return apiRequest<{ journal_entries: PostingsBySourceGroup[] }>(
+    withCompany(`/api/v1/accounting/journal-entry-postings/by-source?${query.toString()}`, operatingCompanyId)
+  );
+}
+
 export function listJournalEntryTypesForJe(operatingCompanyId: string) {
   return apiRequest<{
     rows: Array<{ id: string; code: string; display_name: string; description: string | null; is_active: boolean }>;
@@ -1888,6 +1985,9 @@ export const COA_ROLE_VALUES = [
   // this since ACCT-F345; the frontend enum never picked it up). Bound live for USMCA -> 1000 Bank
   // of America - Operating. Used by LoadDetailCostsTab.tsx's fuel-advance "Paid from" leg.
   "operating_bank",
+  // SETL-DED-UI — bank/wire/ACH fee recovery role; see resolver.service.ts's own comment for why
+  // it is added here even though the live DB CHECK constraint does not admit it yet.
+  "bank_fee_recovery",
 ] as const;
 
 export type CoaRole = (typeof COA_ROLE_VALUES)[number];
@@ -2708,5 +2808,99 @@ export function listTransactionRegister(
   const qs = query.toString();
   return apiRequest<TransactionRegisterResponse>(
     withCompany(`/api/v1/accounting/transaction-register${qs ? `?${qs}` : ""}`, operatingCompanyId)
+  );
+}
+
+// L.6 — COMPANY SETTLEMENTS (read-only). "One number over many loads": each row rolls a whole
+// settlement period up to a single net-revenue figure; selecting one opens the 8-section waterfall
+// (buildCompanySettlementReport). Shapes mirror the backend EXACTLY:
+//   - company-settlement-list.routes.ts        (CompanySettlementListRow)
+//   - company-settlement-report.service.ts     (CompanySettlementReport)
+// net_revenue_cents is honest-null for a voided settlement (never a fake $0.00) — the FE renders
+// "—" for it (dash-never-zero, law §8).
+export type CompanySettlementListRow = {
+  id: string;
+  display_id: string;
+  period_start: string;
+  period_end: string;
+  status: string;
+  closed_at: string | null;
+  voided_at: string | null;
+  driver_settlement_count: number;
+  net_revenue_cents: number | null;
+};
+
+export type CompanySettlementCustomerChargeRow = {
+  load_id: string;
+  load_number: string | null;
+  charge_code: string;
+  description: string | null;
+  amount_cents: number;
+};
+
+export type CompanySettlementDriverPaymentRow = {
+  load_id: string | null;
+  load_number: string | null;
+  driver_id: string;
+  driver_name: string | null;
+  line_type: string;
+  description: string | null;
+  amount_cents: number;
+};
+
+export type CompanySettlementFuelRow = {
+  load_id: string | null;
+  load_number: string | null;
+  transaction_date: string | null;
+  vendor: string | null;
+  location: string | null;
+  invoice_number: string | null;
+  gallons: number | null;
+  amount_cents: number;
+};
+
+export type CompanySettlementExpenseRow = {
+  load_id: string | null;
+  load_number: string | null;
+  vendor: string | null;
+  description: string | null;
+  amount_cents: number;
+};
+
+export type CompanySettlementPLLine = {
+  line_type: string;
+  label: string;
+  amount_cents: number;
+};
+
+export type CompanySettlementReport = {
+  company_settlement_id: string;
+  display_id: string;
+  period_start: string;
+  period_end: string;
+  status: string;
+  driver_settlement_ids: string[];
+  sections: {
+    customer_charges: { rows: CompanySettlementCustomerChargeRow[]; total_cents: number };
+    driver_payment: { rows: CompanySettlementDriverPaymentRow[]; total_cents: number };
+    fuel_purchases: { rows: CompanySettlementFuelRow[]; total_cents: number; total_gallons: number };
+    expenses: { rows: CompanySettlementExpenseRow[]; total_cents: number };
+    revenue: { invoiced_cents: number };
+    pl_rollup: { lines: CompanySettlementPLLine[]; net_revenue_cents: number };
+    miles_and_mpg: { total_miles: number; mpg: number | null };
+  };
+};
+
+/** GET /api/v1/accounting/company-settlements — the list half of L.6. */
+export function listCompanySettlements(operatingCompanyId: string) {
+  return apiRequest<{ company_settlements: CompanySettlementListRow[] }>(
+    withCompany("/api/v1/accounting/company-settlements", operatingCompanyId)
+  );
+}
+
+/** GET /api/v1/accounting/company-settlements/:id/report — the 8-section waterfall for one settlement. */
+export function getCompanySettlementReport(id: string, operatingCompanyId: string) {
+  return apiRequest<CompanySettlementReport>(
+    withCompany(`/api/v1/accounting/company-settlements/${encodeURIComponent(id)}/report`, operatingCompanyId)
   );
 }

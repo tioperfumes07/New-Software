@@ -25,6 +25,7 @@ import { emitDispatchSpineEvent } from "./dispatch-spine-emit.js";
 import { bindLoadToGeofences } from "./geofences/load-geofence-binding.service.js";
 import { buildLoadSaveProof } from "./load-save-proof.js";
 import { linkLoadToPresettlementAtBookingInClientTx } from "./presettlement-link.service.js";
+import { geocodeStopsBackfill } from "../telematics/stops-geocode-backfill.service.js";
 import { autoCreateGeofencesForLoad } from "../telematics/auto-geofence.service.js";
 import { computeAndPersistGoogleReferenceMilesForLoad } from "./google-reference-miles.service.js";
 
@@ -74,7 +75,7 @@ export type BookLoadInput = {
   customer_id: string;
   status: DispatchStatus;
   // Trip Pairing (Block 04): NB starts a tour (fresh tour_id), TR/SB join an existing tour_id.
-  trip_type?: "NB" | "TR" | "SB";
+  trip_type?: "NB" | "TR" | "SB" | "LOCAL";
   tour_id?: string;
   customer_wo_number?: string;
   customer_po_number?: string;
@@ -453,6 +454,15 @@ type DriverPayResolution = {
   milesDeadheadUsed: number | null;
   /** The resolved empty-mile rate actually used — null when deadhead pay is 0. */
   rateEmptyPerMileCentsUsed: number | null;
+  /**
+   * CC-3 ROOT-CAUSE FINDING (2026-09-05, "book-load.service.ts mints a blended (wrong)
+   * driver_bills.rate_per_mile_cents"): the configured/override per-mile LOADED rate actually
+   * used, in cents — null on a flat per_load_pay basis (there is no real per-mile rate to report).
+   * This is the TRUE card/override figure (e.g. $0.60/mi), never re-derived from dividing a
+   * loaded+deadhead(+bonus) total by loaded-only miles — that blended division is exactly the bug
+   * this field exists to stop callers from reproducing.
+   */
+  rateLoadedPerMileCentsUsed: number | null;
 };
 
 async function resolveDriverBasePayCents(
@@ -520,21 +530,52 @@ async function resolveDriverBasePayCents(
     }
   }
 
+  // GO-21 B5 — an explicit, reason-carrying override. A typed rate with no reason is never used
+  // (treated as absent, falling through to the card above) — this is the "never a bare editable box"
+  // rule enforced in code, not just in the wizard. Hoisted above the deadhead block (SET-RATE-TIEOUT,
+  // 2026-09-05) so a genuine override governs the WHOLE load's pay, not just its loaded portion — see
+  // that comment below for why a loaded-only override was itself a defect.
+  const overrideReason = typeof load.driver_pay_rate_override_reason === "string" ? load.driver_pay_rate_override_reason.trim() : "";
+  const perLoadRateDollars = Number(load.driver_pay_rate_per_mile ?? Number.NaN);
+  const perLoadMiles =
+    Number(load.miles_shortest ?? Number.NaN) > 0
+      ? Number(load.miles_shortest)
+      : Number(load.miles_practical ?? Number.NaN);
+  const hasValidOverride =
+    overrideReason.length >= 10 &&
+    Number.isFinite(perLoadRateDollars) &&
+    perLoadRateDollars > 0 &&
+    Number.isFinite(perLoadMiles) &&
+    perLoadMiles > 0;
+
   // MILES SPEC (owner 2026-09-02) — the empty-mile leg, computed once here regardless of which
   // branch resolves the LOADED portion below. rate_empty_per_mile_cents is its OWN config value;
   // when not yet set for this driver it falls back to the loaded rate_per_mile_cents LIVE (never a
   // stored duplicate — "it equals rate_loaded today, do not hardcode the equality"). Deadhead pay
   // needs a per-mile rate even when the driver's loaded basis is flat per_load_pay — deadhead is
   // inherently mileage-based ("a property of where the truck was, not of the lane").
+  //
+  // SET-RATE-TIEOUT (owner order 2026-09-05, SETL-TIEOUT-01 blocker fix): a reason-carrying GO-21-B5
+  // override used to govern the LOADED leg only — deadhead always fell through to the driver's LIVE
+  // rate-card empty rate, even on an override load. That is wrong for the exact case the override
+  // exists for: a historical/reconciliation-sourced rate that differs from today's card. Measured on
+  // settlement 5772 (docs/lockdown/Coders-Faro/CC-1/CC-1-HUMAN-SEQUENCE-REPLAY.txt, load 13512): the
+  // signed source's Driver RPM is a flat $0.45/mi for BOTH the loaded and empty legs, but driver
+  // Pedro Abraham Lopez Collado's LIVE card is $0.48/mi with no configured empty rate — an override
+  // that only touched the loaded leg would still silently overpay the deadhead leg at the wrong,
+  // current-day rate on a load explicitly minted to reproduce a historical, signed figure to the
+  // cent. An active override now governs BOTH legs at the SAME override rate — it is one real,
+  // documented rate for the whole load, not two different figures depending on which mile is which.
   let deadheadCents = 0;
   let milesDeadheadUsed: number | null = null;
   let rateEmptyPerMileCentsUsed: number | null = null;
   const milesDeadhead = Number(load.miles_deadhead ?? Number.NaN);
-  if (rate && Number.isFinite(milesDeadhead) && milesDeadhead > 0) {
-    const resolvedEmptyRate =
-      rate.rate_empty_per_mile_cents != null && Number(rate.rate_empty_per_mile_cents) > 0
+  if (Number.isFinite(milesDeadhead) && milesDeadhead > 0) {
+    const resolvedEmptyRate = hasValidOverride
+      ? perLoadRateDollars * 100
+      : rate && rate.rate_empty_per_mile_cents != null && Number(rate.rate_empty_per_mile_cents) > 0
         ? Number(rate.rate_empty_per_mile_cents)
-        : Number(rate.rate_per_mile_cents ?? 0);
+        : Number(rate?.rate_per_mile_cents ?? 0);
     if (Number.isFinite(resolvedEmptyRate) && resolvedEmptyRate > 0) {
       deadheadCents = Math.round(resolvedEmptyRate * milesDeadhead);
       milesDeadheadUsed = milesDeadhead;
@@ -542,22 +583,7 @@ async function resolveDriverBasePayCents(
     }
   }
 
-  // GO-21 B5 — an explicit, reason-carrying override. A typed rate with no reason is never used
-  // (treated as absent, falling through to the card above) — this is the "never a bare editable box"
-  // rule enforced in code, not just in the wizard.
-  const overrideReason = typeof load.driver_pay_rate_override_reason === "string" ? load.driver_pay_rate_override_reason.trim() : "";
-  const perLoadRateDollars = Number(load.driver_pay_rate_per_mile ?? Number.NaN);
-  const perLoadMiles =
-    Number(load.miles_shortest ?? Number.NaN) > 0
-      ? Number(load.miles_shortest)
-      : Number(load.miles_practical ?? Number.NaN);
-  if (
-    overrideReason.length >= 10 &&
-    Number.isFinite(perLoadRateDollars) &&
-    perLoadRateDollars > 0 &&
-    Number.isFinite(perLoadMiles) &&
-    perLoadMiles > 0
-  ) {
+  if (hasValidOverride) {
     const overrideCents = Math.round(perLoadRateDollars * 100 * perLoadMiles);
     if (actorUserId) {
       await appendCrudAudit(
@@ -584,6 +610,9 @@ async function resolveDriverBasePayCents(
       deadheadCents,
       milesDeadheadUsed,
       rateEmptyPerMileCentsUsed,
+      // A GO-21-B5 override IS a per-mile rate by construction (hasValidOverride requires
+      // perLoadRateDollars > 0) — this is the one, real, documented rate for the whole load.
+      rateLoadedPerMileCentsUsed: Math.round(perLoadRateDollars * 100),
     };
   }
 
@@ -598,6 +627,11 @@ async function resolveDriverBasePayCents(
     deadheadCents,
     milesDeadheadUsed,
     rateEmptyPerMileCentsUsed,
+    // per_load_pay (flat) has no real per-mile rate to report — null, never a division artifact.
+    rateLoadedPerMileCentsUsed:
+      rate.basis_type !== "per_load_pay" && Number(rate.rate_per_mile_cents ?? 0) > 0
+        ? Math.round(Number(rate.rate_per_mile_cents))
+        : null,
   };
 }
 
@@ -810,7 +844,14 @@ export async function createDriverBillArtifacts(
 
     for (const row of inserts) {
       if (row.cents <= 0) continue;
-      const ratePerMileCents = milesBasis && milesBasis > 0 ? Math.round(row.cents / milesBasis) : null;
+      // CC-3 ROOT-CAUSE FIX (2026-09-05 finding, docs/bus/INBOX-CC-2.md): this used to be
+      // Math.round(row.cents / milesBasis) — row.cents is this driver's SHARE of loaded+deadhead
+      // pay, milesBasis is loaded-ONLY miles, so dividing one by the other produced a blended
+      // figure that was neither the loaded nor the empty rate. The real per-mile rate is a
+      // load-level configured/override value (basePayCents.rateLoadedPerMileCentsUsed), not
+      // something to re-derive from a driver's split share — both team-split rows report the
+      // SAME rate, exactly like rate_empty_per_mile_cents already does below.
+      const ratePerMileCents = basePayCents.rateLoadedPerMileCentsUsed;
       const rowLoadedCents = row.cents - row.deadheadCents;
       const billRes = await client.query<{ id: string }>(
         `
@@ -887,7 +928,14 @@ export async function createDriverBillArtifacts(
 
   if (!input.assigned_primary_driver_id) return { outcome: "not_applicable" };
 
-  const ratePerMileCents = milesBasis && milesBasis > 0 ? Math.round(totalBillCents / milesBasis) : null;
+  // CC-3 ROOT-CAUSE FIX (2026-09-05 finding, docs/bus/INBOX-CC-2.md): this used to be
+  // Math.round(totalBillCents / milesBasis) — totalBillCents includes the deadhead portion (and
+  // extra-stop/tarp/lumper bonuses), milesBasis is loaded-ONLY miles, so the division produced a
+  // blended figure that was neither the loaded nor the empty per-mile rate (measured live on load
+  // 13526: rate_per_mile_cents=60 while the real card rate was $0.45/mi). The real per-mile rate
+  // is the configured card rate or GO-21-B5 override, resolved once in resolveDriverBasePayCents()
+  // and never re-derived from totals.
+  const ratePerMileCents = basePayCents.rateLoadedPerMileCentsUsed;
 
   const billRes = await client.query<{ id: string }>(
     `
@@ -1033,6 +1081,28 @@ export async function bookLoad(input: BookLoadInput): Promise<BookLoadResult> {
     return { kind: "error", status: 400, payload: { error: "solo_or_team_assignment_required_not_both" } };
   }
 
+  // DSP-49 (owner order 2026-09-06, "every load carries its pickup and delivery appointments" —
+  // measured live 02:15Z: load 13526's stops have NO appointment window, so the Round Trips
+  // timeline had to fall back to created_at). The wizard (BookLoadStopsSection.tsx) enforces this
+  // client-side, but a real booking action must never trust the client alone -- book-load.service
+  // is the ONE path every caller (HTTP route, a future seed/import script) goes through, matching
+  // this file's own established rule for the geofence/Google-reference hooks above. Sorted by
+  // sequence_number so this is correct regardless of the array's own send order; "has an
+  // appointment" accepts either scheduled_arrival_at (the wizard's single fixed-time field) OR
+  // appointment_start_at (a start+end window) -- never invents a missing time, only refuses to
+  // book without one.
+  const sortedStops = [...(input.stops ?? [])].sort((a, b) => a.sequence_number - b.sequence_number);
+  const firstPickup = sortedStops.find((s) => s.stop_type === "pickup");
+  const deliveries = sortedStops.filter((s) => s.stop_type === "delivery");
+  const lastDelivery = deliveries[deliveries.length - 1];
+  const hasAppointment = (s: BookLoadStop | undefined) => Boolean(s?.scheduled_arrival_at || s?.appointment_start_at);
+  if (!hasAppointment(firstPickup)) {
+    return { kind: "error", status: 400, payload: { error: "pickup_appointment_required" } };
+  }
+  if (!hasAppointment(lastDelivery)) {
+    return { kind: "error", status: 400, payload: { error: "delivery_appointment_required" } };
+  }
+
   const result = await bookLoadInTransaction(input);
 
   // Inv #40 (owner order 2026-09-05, SAMSARA-CAPABILITIES-AND-INTEGRATION-PLAN-2026-09-05.md §4):
@@ -1044,6 +1114,13 @@ export async function bookLoad(input: BookLoadInput): Promise<BookLoadResult> {
   // commits (its own separate withCurrentUser transaction, same non-blocking best-effort shape
   // the HTTP route always used) -- a geofence/Samsara failure must never roll back or delay the
   // load booking response.
+  //
+  // TEL40-GEOFENCE-HOOK-DROPPED-FROM-BOOKLOAD (found + filed CC-2 2026-09-05, restored here):
+  // TEL-40 (ab250b0225, #20771) REPLACED the autoCreateGeofencesForLoad call below with
+  // geocodeStopsBackfill in this exact slot instead of adding it alongside -- a freshly booked
+  // load stopped auto-creating its geofences at all, only the stop-geocode backfill still fired.
+  // Both are legitimate, independent post-book side effects (this comment's own original wording
+  // already said "await/catch them independently") -- restored side by side below.
   if (result.kind === "ok") {
     const createdLoadId = String(result.row.id ?? "");
     if (createdLoadId) {
@@ -1052,6 +1129,9 @@ export async function bookLoad(input: BookLoadInput): Promise<BookLoadResult> {
         load_id: createdLoadId,
       }).catch((err) => {
         console.error("auto_geofence_post_book_failed", { err, load_id: createdLoadId });
+      });
+      void geocodeStopsBackfill(input.requestingUserUuid, input.operating_company_id, createdLoadId).catch((err) => {
+        console.error("stops_geocode_backfill_post_book_failed", { err, load_id: createdLoadId });
       });
       // DSP-48 (owner ruling 2026-09-05, "Google distance = REFERENCE ONLY"): quotes + persists
       // the Google Routes reference distance for each practical-route leg, purely for operator

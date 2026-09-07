@@ -325,6 +325,7 @@ export async function listLoadStopsRefined(userId: string, operatingCompanyId: s
           ls.status::text AS status,
           ls.latitude,
           ls.longitude,
+          ls.geocode_precision,
           ls.signature_required,
           ls.photo_required,
           ls.pickup_time_type_id,

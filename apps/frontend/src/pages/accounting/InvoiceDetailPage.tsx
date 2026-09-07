@@ -20,6 +20,7 @@ import { useToast } from "../../components/Toast";
 import { RecordPaymentModal } from "./RecordPaymentModal";
 import { AccountingSubNavWrapper } from "./AccountingSubNavWrapper";
 import { MoneyProofTrailPanel } from "../../components/accounting/MoneyProofTrailPanel";
+import { JournalPostingsPanel } from "../../components/accounting/PostingGrid";
 import { MoneyInput } from "../../components/forms/MoneyInput";
 import { ReferenceSelect } from "../../components/parity/ReferenceSelect";
 import { ParityTable, type ParityColumn } from "../../components/parity/ParityTable";
@@ -739,6 +740,7 @@ export function InvoiceDetailPage() {
           }}
         />
       ) : null}
+      <JournalPostingsPanel sourceTransactionType="invoice" sourceTransactionId={id} operatingCompanyId={selectedCompanyId} />
       <MoneyProofTrailPanel operatingCompanyId={selectedCompanyId!} documentType="invoice" documentId={id} />
     </AccountingSubNavWrapper>
   );

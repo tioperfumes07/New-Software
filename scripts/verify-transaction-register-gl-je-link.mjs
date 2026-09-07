@@ -36,7 +36,7 @@ const checks = [
     /jep\.source_transaction_type = 'bill'[\s\S]{0,40}AND jep\.source_transaction_id = b\.id::text/,
     "bill arm resolves journal_entry_id via the same source_transaction_type lookup",
   ],
-  ["backend", /status, detail_path, journal_entry_id,\s*\n\s*count\(\*\) OVER\(\)/, "outer SELECT actually forwards journal_entry_id (not dropped after the UNION)"],
+  ["backend", /status, detail_path, journal_entry_id, journal_entry_memo,\s*\n\s*count\(\*\) OVER\(\)/, "outer SELECT actually forwards journal_entry_id (not dropped after the UNION)"],
   ["apiType", /journal_entry_id: string \| null;/, "RegisterTransaction type carries journal_entry_id"],
   [
     "frontend",

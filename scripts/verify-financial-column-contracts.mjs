@@ -81,6 +81,8 @@ const KNOWN_COLUMNS = {
   "banking.transaction_categories": new Set([
     "id", "operating_company_id", "plaid_category_pattern", "coa_account_id",
     "priority", "is_active", "created_at", "updated_at",
+    // migration 202611300000 — ADD COLUMN IF NOT EXISTS description_pattern text
+    "description_pattern",
   ]),
 };
 

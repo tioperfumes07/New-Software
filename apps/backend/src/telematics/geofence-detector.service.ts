@@ -4,7 +4,7 @@ import { normalizeVertices, pointInPolygon } from "./geofence.js";
 export { pointInPolygon } from "./geofence.js";
 
 type DbClient = {
-  query: <T = Record<string, unknown>>(sql: string, values?: unknown[]) => Promise<{ rows: T[] }>;
+  query: <T = Record<string, unknown>>(sql: string, values?: unknown[]) => Promise<{ rows: T[]; rowCount?: number | null }>;
 };
 
 type Transition = "entered" | "exited" | null;
@@ -28,6 +28,11 @@ export type GpsPointInput = {
 export type GeofenceDetectionResult = {
   checked_geofences: number;
   transitions_written: number;
+};
+
+export type GeofenceDetectionOptions = {
+  /** Historical replay must only rebuild immutable fence evidence. */
+  suppressOperationalSideEffects?: boolean;
 };
 
 export function computeGeofenceTransition(
@@ -76,6 +81,7 @@ async function fetchContainmentRows(
           WHERE ge.operating_company_id = $1::uuid
             AND ge.geofence_id = g.id
             AND ge.unit_id = $2::uuid
+            AND ge.occurred_at <= $3::timestamptz
           ORDER BY ge.occurred_at DESC, ge.created_at DESC
           LIMIT 1
         )::text AS last_event_kind
@@ -83,14 +89,15 @@ async function fetchContainmentRows(
       WHERE g.operating_company_id = $1::uuid
         AND g.is_active = true
     `,
-    [input.operating_company_id, input.unit_id]
+    [input.operating_company_id, input.unit_id, input.occurred_at]
   );
   return res.rows;
 }
 
 export async function processGeofenceDetectionsForGpsPoint(
   client: DbClient,
-  input: GpsPointInput
+  input: GpsPointInput,
+  options: GeofenceDetectionOptions = {}
 ): Promise<GeofenceDetectionResult> {
   const rows = await fetchContainmentRows(client, input);
   if (rows.length === 0) {
@@ -104,7 +111,7 @@ export async function processGeofenceDetectionsForGpsPoint(
     const isInside = pointInPolygon(input.latitude, input.longitude, normalizeVertices(row.vertices_json));
     const transition = computeGeofenceTransition(row.last_event_kind, isInside);
     if (!transition) continue;
-    await client.query(
+    const inserted = await client.query(
       `
         INSERT INTO geo.geofence_events (
           operating_company_id,
@@ -142,6 +149,9 @@ export async function processGeofenceDetectionsForGpsPoint(
         input.source ?? "samsara_gps",
       ]
     );
+    if ((inserted.rowCount ?? 0) === 0) continue;
+    transitionsWritten += 1;
+    if (options.suppressOperationalSideEffects) continue;
     // D-1 — a bound load-stop geofence is first-class arrival/departure evidence. Persist the
     // observation on the canonical stop in the same transaction as the immutable geofence event.
     // Never overwrite driver/manual evidence and never backfill: only a newly inserted live event
@@ -208,7 +218,6 @@ export async function processGeofenceDetectionsForGpsPoint(
       event_kind: transition,
       occurred_at: input.occurred_at,
     });
-    transitionsWritten += 1;
   }
 
   return {

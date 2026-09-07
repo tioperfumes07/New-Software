@@ -26,7 +26,9 @@ function verify(sources) {
   if (!/UPDATE mdata\.loads[\s\S]{0,300}?operating_company_id = \$2::uuid[\s\S]{0,100}?RETURNING id/.test(service)) {
     failures.push("approved cancellation load transition must be company-scoped and return identity");
   }
-  if (!/if \(!cancelledLoad\.rows\[0\]\?\.id\) throw new Error\("E_CANCELLATION_LOAD_WRITE_FAILED"\);/.test(cancelBlock)) {
+  // RE-PIN 2026-09-06: cancelLoad delegates to cancelLoadInClientTx — the write-identity check
+  // lives in the helper, not in the cancelLoad block itself. Check the full service source.
+  if (!/if \(!cancelledLoad\.rows\[0\]\?\.id\) throw new Error\("E_CANCELLATION_LOAD_WRITE_FAILED"\);/.test(service)) {
     failures.push("cancelLoad must reject a lost load transition");
   }
   if (!/UPDATE dispatch\.load_cancellations[\s\S]{0,260}?operating_company_id = \$3::uuid[\s\S]{0,100}?status = 'requested'[\s\S]{0,100}?RETURNING id, load_id, status/.test(approveBlock)) {
@@ -70,7 +72,7 @@ if (process.argv.includes("--selftest")) {
       from: "WHERE id = $1\n              AND operating_company_id = $2::uuid\n            RETURNING id",
       to: "WHERE id = $1\n              AND true\n            RETURNING id",
     },
-    { key: "load", source: "service", from: 'if (!cancelledLoad.rows[0]?.id) throw new Error("E_CANCELLATION_LOAD_WRITE_FAILED");', to: "if (false) throw new Error();" },
+    { key: "load", source: "service", from: 'if (!cancelledLoad.rows[0]?.id) throw new Error("E_CANCELLATION_LOAD_WRITE_FAILED");', to: "if (false) throw new Error();", replaceAll: true },
     { key: "route", source: "routes", from: "return { status: 409, payload: { error: code } };", to: "return { status: 500, payload: { error: code } };" },
     { key: "kanban", source: "loads", from: "cancellationRecordId = cancellationRecord.id;", to: "cancellationRecordId = null;" },
     { key: "cancel-nested-begin", source: "service", from: "await setScopedCompanyContext(client, userId, input.operating_company_id);", to: 'await setScopedCompanyContext(client, userId, input.operating_company_id);\n    await client.query("BEGIN");' },
@@ -84,7 +86,7 @@ if (process.argv.includes("--selftest")) {
     },
   ];
   for (const mutation of mutations) {
-    const changed = { ...fixed, [mutation.source]: fixed[mutation.source].replace(mutation.from, mutation.to) };
+    const changed = { ...fixed, [mutation.source]: mutation.replaceAll ? fixed[mutation.source].replaceAll(mutation.from, mutation.to) : fixed[mutation.source].replace(mutation.from, mutation.to) };
     if (changed[mutation.source] === fixed[mutation.source]) throw new Error(`selftest mutation did not apply: ${mutation.key}`);
     if (verify(changed).length === 0) throw new Error(`selftest mutation escaped: ${mutation.key}`);
   }

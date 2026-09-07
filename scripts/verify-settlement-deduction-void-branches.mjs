@@ -2,21 +2,39 @@
 /**
  * verify-settlement-deduction-void-branches — ACCT-SETL-DEDUCTION-VOID-DESIGN / ACCT-F5861.
  *
- * Owner ruling (docs/bus/OUTBOX-CURSOR.md, CURSOR -> CC-1): driver_settlement_deductions void is ONE
- * route, THREE branches keyed off status. "Void is a reversal, never a delete."
+ * ORIGINAL owner ruling (docs/bus/OUTBOX-CURSOR.md, CURSOR -> CC-1): driver_settlement_deductions
+ * void is ONE route, THREE branches keyed off status. "Void is a reversal, never a delete." That
+ * ruling said APPLIED (fully collected) -> a reversing JE crediting the driver back.
+ *
+ * ACCT-F25102 (2026-09-06): that APPLIED treatment was RETRACTED by a later, explicit owner ruling
+ * (docs/bus/STANDING-DIRECTIVES-2026-09-05.md, docs/bus/OUTBOX-CURSOR.md "CURSOR (lead,
+ * retract+correct)", docs/bus/INBOX-CC-3.md — all three dated 2026-09-05 19:44Z, owner: "why would
+ * I forgive the debt — asked and answered"): a void NEVER forgives, refunds, or writes off the
+ * debt -- it only changes WHEN/HOW an amount is collected, never WHETHER. A reversing JE crediting
+ * the driver back for an APPLIED (already fully collected) deduction IS the forgiveness the owner
+ * explicitly rejected. settlement-deduction-void.service.ts was rewritten to the corrected ruling
+ * (see its own header comment) and a sibling guard (verify-deduction-void-never-forgives.mjs,
+ * currently exempt pending its own claimed verify-step) already asserts the corrected invariant
+ * whole-file. THIS guard was never updated to match and kept demanding the retracted
+ * reversing-JE-on-APPLIED behavior -- it was asserting a defect the code no longer has, against a
+ * design the owner no longer wants. The service file did not change here; only this guard's
+ * APPLIED-branch assertion was corrected to match the current, correct, owner-ruled design:
  *
  *   PENDING (nothing collected)  -> void the row (voided_at/void_reason/voided_by), no money moved.
  *   PARTIAL (some collected)     -> NEVER touch the collected portion; void/close only the
  *                                   uncollected REMAINING schedule going forward.
- *   APPLIED (fully collected)    -> NOT a void — a reversing JE that credits the driver back.
+ *   APPLIED (fully collected)    -> RECORD-ONLY void. No reversing JE, no money moves, the driver
+ *                                   is NEVER credited back -- the already-collected amount stays
+ *                                   correctly applied (it really did pay down the debt).
  *
  * WHAT IT ASSERTS, statically against apps/backend/src/driver-finance/settlement-deduction-void.service.ts:
  *   - a 'pending' branch stamps the void register and does NOT call createJournalEntryOnClient
  *   - a 'partial' branch zeroes remaining_balance_cents (stops future collection) while amount_cents
  *     itself is never assigned to (the historical collected amount is untouched), and the branch
  *     records how much was already collected in the reason text
- *   - an 'applied' branch DOES call createJournalEntryOnClient (a real reversing JE, never a silent
- *     void) and stamps void_reversal_entry_id with the posted JE's id
+ *   - an 'applied' branch does NOT call createJournalEntryOnClient (a silent, unposted void would
+ *     be a bug too, but so would a reversing JE -- neither may run) and does NOT write
+ *     void_reversal_entry_id (there is nothing to reverse; the branch is record-only)
  *   - an unrecognized status is refused (fails closed) rather than silently falling through to one
  *     of the three named branches
  */
@@ -75,8 +93,8 @@ export function check(targetPath = TARGET) {
   if (!applied) {
     offenders.push("no APPLIED branch found (expected d.status === \"applied\")");
   } else {
-    if (!/createJournalEntryOnClient/.test(applied)) offenders.push("APPLIED branch does not post a reversing JE — an applied (fully collected) deduction must never be a silent void");
-    if (!/void_reversal_entry_id\s*=\s*\$4::uuid/.test(applied)) offenders.push("APPLIED branch does not stamp void_reversal_entry_id with the posted JE's id");
+    if (/createJournalEntryOnClient/.test(applied)) offenders.push("APPLIED branch posts a JE — owner ruling 2026-09-05 19:44Z ('why would I forgive the debt') retracted the reversing-JE design; an applied (fully collected) deduction must be a RECORD-ONLY void, never a reversal that credits the driver back");
+    if (/void_reversal_entry_id\s*=/.test(applied)) offenders.push("APPLIED branch stamps void_reversal_entry_id — there is nothing to reverse under the corrected ruling; this column must stay untouched");
   }
 
   if (!/deduction_status_not_voidable/.test(src)) {
@@ -114,12 +132,24 @@ async function selftest() {
   fs.writeFileSync(f, badPending);
   if (!check(f).some((o) => /PENDING branch must never post a JE/.test(o))) failures.push("case2 FAIL — JE in the pending branch must be caught.");
 
-  // Plant: APPLIED branch never posts a JE (turned into a silent void) — must be caught.
-  const badApplied = real.replace(/createJournalEntryOnClient/g, "SOME_OTHER_CALL");
-  fs.writeFileSync(f, badApplied);
-  const appliedFailures = check(f);
-  if (!appliedFailures.some((o) => /APPLIED branch does not post a reversing JE/.test(o))) {
-    failures.push("case3 FAIL — a silently-voided applied branch (no JE call anywhere) must be caught.");
+  // Plant: APPLIED branch reintroduces the retracted reversing-JE — must be caught.
+  const badAppliedJe = real.replace(
+    'if (d.status === "applied") {',
+    'if (d.status === "applied") { await createJournalEntryOnClient(client, {}, {});'
+  );
+  fs.writeFileSync(f, badAppliedJe);
+  if (!check(f).some((o) => /APPLIED branch posts a JE/.test(o))) {
+    failures.push("case3 FAIL — a reversing JE reintroduced into the applied branch must be caught.");
+  }
+
+  // Plant: APPLIED branch reintroduces a void_reversal_entry_id stamp — must be caught.
+  const badAppliedReversalId = real.replace(
+    'if (d.status === "applied") {',
+    'if (d.status === "applied") { const void_reversal_entry_id = "x";'
+  );
+  fs.writeFileSync(f, badAppliedReversalId);
+  if (!check(f).some((o) => /APPLIED branch stamps void_reversal_entry_id/.test(o))) {
+    failures.push("case4 FAIL — a void_reversal_entry_id stamp reintroduced into the applied branch must be caught.");
   }
 
   fs.rmSync(tmp, { recursive: true, force: true });
@@ -127,7 +157,7 @@ async function selftest() {
     for (const x of failures) console.error(`${LABEL} ${x}`);
     process.exit(1);
   }
-  console.log(`${LABEL} SELFTEST PASS — real file GREEN, JE-in-pending caught, silently-voided-applied caught`);
+  console.log(`${LABEL} SELFTEST PASS — real file GREEN, JE-in-pending caught, reversing-JE-in-applied caught, void_reversal_entry_id-in-applied caught`);
   return 0;
 }
 

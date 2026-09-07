@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
 import { PageHeader } from "../../components/layout/PageHeader";
 import { ListErrorState } from "../../components/ListErrorState";
 import { ParityTable, type ParityColumn } from "../../components/parity/ParityTable";
-import { CollapsedListFilters, useStagedListFilters } from "../../components/table";
+import { ReportFilterBar } from "../../components/reports/ReportFilterBar";
 import { SelectCombobox } from "../../components/Combobox";
 import { ReportsSubNav } from "./ReportsSubNav";
 import { resolveApiUrl } from "../../api/client";
@@ -61,13 +62,10 @@ export function BookingGapReport() {
   // report page sources the entity id from the reactive company-switcher context instead.
   const { selectedCompanyId } = useCompanyContext();
   const operatingCompanyId = selectedCompanyId ?? "";
+  const [searchParams, setSearchParams] = useSearchParams();
   const emptyFilters = { period: DEFAULT_PERIOD as Period, groupBy: "week" as GroupBy, minLoads: "" };
   const [applied, setApplied] = useState(emptyFilters);
-  const staged = useStagedListFilters({
-    applied,
-    empty: emptyFilters,
-    onApply: setApplied,
-  });
+  const [reportSearch, setReportSearch] = useState("");
   const { from, to } = periodDates(applied.period);
 
   const { data, isLoading, isError, error, refetch, isFetching } = useQuery<{ data: { dispatchers: DispatcherStats[] } }>({
@@ -83,6 +81,12 @@ export function BookingGapReport() {
   });
 
   const dispatchers = data?.data?.dispatchers ?? [];
+
+  const filtered = useMemo(() => {
+    const q = reportSearch.toLowerCase();
+    if (!q) return dispatchers;
+    return dispatchers.filter((d) => String(d.dispatcher_label ?? "").toLowerCase().includes(q));
+  }, [dispatchers, reportSearch]);
 
   const columns = useMemo<ParityColumn<DispatcherStats>[]>(
     () => [
@@ -151,68 +155,65 @@ export function BookingGapReport() {
         </button>
       </div>
 
-      <CollapsedListFilters
-        activeFilterCount={applied.period !== DEFAULT_PERIOD || applied.groupBy !== "week" || applied.minLoads !== "" ? 1 : 0}
-        defaultOpen={true}
-        onApply={staged.apply}
-        onReset={staged.reset}
-        onCancel={staged.cancel}
-        applyDisabled={!staged.dirty}
+      <ReportFilterBar
         testIdPrefix="reports-booking-gap"
-        className="mb-4"
+        fromDate={from}
+        toDate={to}
+        onFromDateChange={() => {}}
+        onToDateChange={() => {}}
+        onPresetSelect={(preset) => {
+          const next = new URLSearchParams(searchParams);
+          next.set("preset", preset);
+          setSearchParams(next, { replace: true });
+        }}
+        search={reportSearch}
+        onSearchChange={setReportSearch}
       >
-        <div className="flex flex-wrap items-end gap-3">
-          <label className="text-xs text-gray-600">
-            Period
-            <SelectCombobox
-              className="mt-1 block h-9 rounded-sm border border-gray-300 px-2"
-              value={staged.draft.period}
-              onChange={(event) =>
-                staged.setDraft((p) => ({ ...p, period: event.target.value as Period }))
-              }
-              aria-label="Period"
-              data-testid="reports-booking-gap-period"
-            >
-              {(Object.keys(PERIOD_LABELS) as Period[]).map((p) => (
-                <option key={p} value={p}>
-                  {PERIOD_LABELS[p]}
-                </option>
-              ))}
-            </SelectCombobox>
-          </label>
-          <label className="text-xs text-gray-600">
-            Group by
-            <SelectCombobox
-              className="mt-1 block h-9 rounded-sm border border-gray-300 px-2"
-              value={staged.draft.groupBy}
-              onChange={(event) =>
-                staged.setDraft((p) => ({ ...p, groupBy: event.target.value as GroupBy }))
-              }
-              aria-label="Group by"
-              data-testid="reports-booking-gap-group-by"
-            >
-              {(Object.keys(GROUP_BY_LABELS) as GroupBy[]).map((g) => (
-                <option key={g} value={g}>
-                  {GROUP_BY_LABELS[g]}
-                </option>
-              ))}
-            </SelectCombobox>
-          </label>
-          <label className="text-xs text-gray-600">
-            Min loads
-            <input
-              type="number"
-              min={0}
-              className="mt-1 block h-9 w-24 rounded-sm border border-gray-300 px-2 text-xs"
-              value={staged.draft.minLoads}
-              onChange={(e) => staged.setDraft((p) => ({ ...p, minLoads: e.target.value }))}
-              aria-label="Min loads"
-              data-testid="reports-booking-gap-min-loads"
-              // TODO: wire to backend filter
-            />
-          </label>
-        </div>
-      </CollapsedListFilters>
+        <label className="flex items-center gap-1 text-xs text-slate-600">
+          <span className="font-semibold text-slate-600">Period</span>
+          <SelectCombobox
+            className="h-7 rounded-sm border border-slate-300 px-2 text-xs"
+            value={applied.period}
+            onChange={(event) => setApplied((p) => ({ ...p, period: event.target.value as Period }))}
+            aria-label="Period"
+            data-testid="reports-booking-gap-period"
+          >
+            {(Object.keys(PERIOD_LABELS) as Period[]).map((p) => (
+              <option key={p} value={p}>
+                {PERIOD_LABELS[p]}
+              </option>
+            ))}
+          </SelectCombobox>
+        </label>
+        <label className="flex items-center gap-1 text-xs text-slate-600">
+          <span className="font-semibold text-slate-600">Group by</span>
+          <SelectCombobox
+            className="h-7 rounded-sm border border-slate-300 px-2 text-xs"
+            value={applied.groupBy}
+            onChange={(event) => setApplied((p) => ({ ...p, groupBy: event.target.value as GroupBy }))}
+            aria-label="Group by"
+            data-testid="reports-booking-gap-group-by"
+          >
+            {(Object.keys(GROUP_BY_LABELS) as GroupBy[]).map((g) => (
+              <option key={g} value={g}>
+                {GROUP_BY_LABELS[g]}
+              </option>
+            ))}
+          </SelectCombobox>
+        </label>
+        <label className="flex items-center gap-1 text-xs text-slate-600">
+          <span className="font-semibold text-slate-600">Min loads</span>
+          <input
+            type="number"
+            min={0}
+            className="h-7 w-20 rounded-sm border border-slate-300 px-2 text-xs"
+            value={applied.minLoads}
+            onChange={(e) => setApplied((p) => ({ ...p, minLoads: e.target.value }))}
+            aria-label="Min loads"
+            data-testid="reports-booking-gap-min-loads"
+          />
+        </label>
+      </ReportFilterBar>
 
       <p className="text-xs text-gray-500 mb-4">
         Average time between load delivery and next truck assignment. Lower is better (driver stays
@@ -230,14 +231,14 @@ export function BookingGapReport() {
 
       {!isError && (
         <ParityTable
-          rows={dispatchers}
+          rows={filtered}
           columns={columns}
           rowKey={(row) => row.dispatcher_id ?? row.dispatcher_label}
-          loading={isLoading || (isFetching && dispatchers.length === 0)}
+          loading={isLoading || (isFetching && filtered.length === 0)}
           storageKey="booking-gap-report"
           emptyText="No data available for this period."
           exportFilename="booking-gap-report.csv"
-          rowClassName={(row) => rowColor(row.rank, dispatchers.length)}
+          rowClassName={(row) => rowColor(row.rank, filtered.length)}
         />
       )}
     </div>

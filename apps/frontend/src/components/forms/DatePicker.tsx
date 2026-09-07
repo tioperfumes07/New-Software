@@ -199,7 +199,10 @@ export function DatePicker({
           disabled={disabled}
           aria-label={ariaLabel}
           placeholder={placeholder || DATE_PLACEHOLDER_US}
-          className="min-w-0 flex-1 bg-transparent outline-hidden placeholder:text-gray-400 disabled:cursor-not-allowed"
+          // dp-input: marks this as DatePicker's OWN internal input so page-level CSS (e.g.
+          // .ldt-fld input) that targets bare <input> elements does not paint a second
+          // border/background around it — see tokens-load-detail.css ROUND 16.18 comment.
+          className="dp-input min-w-0 flex-1 bg-transparent outline-hidden placeholder:text-gray-400 disabled:cursor-not-allowed"
           value={dateInputValue}
           onFocus={() => {
             setEditingDate(true);
@@ -266,7 +269,7 @@ export function DatePicker({
             <div className="flex min-w-0 flex-1 items-center gap-1">
               <select
                 aria-label="Month"
-                className="min-w-0 flex-1 rounded-sm border border-gray-200 px-1 py-0.5 text-[11px]"
+                className="dp-select min-w-0 flex-1 rounded-sm border border-gray-200 px-1 py-0.5 text-[11px]"
                 value={viewM}
                 onChange={(e) => setViewM(Number(e.target.value))}
               >
@@ -278,7 +281,7 @@ export function DatePicker({
               </select>
               <select
                 aria-label="Year"
-                className="w-16 rounded-sm border border-gray-200 px-1 py-0.5 text-[11px]"
+                className="dp-select w-16 rounded-sm border border-gray-200 px-1 py-0.5 text-[11px]"
                 value={viewY}
                 onChange={(e) => setViewY(Number(e.target.value))}
               >

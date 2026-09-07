@@ -183,6 +183,27 @@ function locationSelectSql() {
 }
 
 export async function registerLocationRoutes(app: FastifyInstance) {
+  app.get("/api/v1/locations/yard", { config: { rateLimit: { max: 60, timeWindow: "1 minute" } } }, async (req, reply) => {
+    const authUser = currentAuthUser(req, reply);
+    if (!authUser) return reply;
+    const requestedCompany = z.object({ operating_company_id: z.string().uuid().optional() }).safeParse(req.query ?? {});
+    if (!requestedCompany.success) return sendValidationError(reply, requestedCompany.error);
+    const result = await withCurrentUser(authUser.uuid, async (client) => {
+      const companyId = await resolveOperatingCompanyId(client, authUser.uuid, requestedCompany.data.operating_company_id);
+      if (!companyId) return { error: "operating_company_id_required" as const };
+      const yard = (await client.query(`
+        ${locationSelectSql()}
+         WHERE operating_company_id = $1::uuid
+           AND is_ih35_yard
+           AND deactivated_at IS NULL
+         LIMIT 1`, [companyId])).rows[0] ?? null;
+      return { yard };
+    });
+    if ("error" in result) return reply.code(400).send({ error: result.error });
+    if (!result.yard) return reply.code(404).send({ error: "yard_location_not_configured" });
+    return { yard: result.yard };
+  });
+
   app.get("/api/v1/mdata/locations", { config: { rateLimit: { max: 60, timeWindow: "1 minute" } } }, async (req, reply) => {
     const authUser = currentAuthUser(req, reply);
     if (!authUser) return reply;

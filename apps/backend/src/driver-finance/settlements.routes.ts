@@ -736,6 +736,66 @@ export async function registerDriverFinanceSettlementRoutes(app: FastifyInstance
     return detail;
   });
 
+  // SETL-DETAIL-01 — the reference's NUMBER box ("empty, editable while open; typed wins"), the
+  // settlement equivalent of resolveInvoiceDisplayId/resolveBillDisplayId's typed-override pattern
+  // (settlements had no such endpoint at all before this — display_id was always auto-assigned at
+  // create, never user-editable after). A blank body is a no-op (keeps the auto-assigned number);
+  // a non-empty typed value wins, uniqueness-checked within the entity, and is refused once the
+  // settlement is CLOSED (frozen, matches every other field on a closed settlement).
+  const patchDisplayIdBodySchema = z.object({
+    operating_company_id: z.string().uuid(),
+    display_id: z.string().trim().max(40).optional(),
+  });
+  app.patch("/api/v1/driver-finance/settlements/:id/display-id", { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } }, async (req, reply) => {
+    const user = authed(req, reply);
+    if (!user) return;
+    const params = idParamsSchema.safeParse(req.params ?? {});
+    if (!params.success) return validationError(reply, params.error);
+    const body = patchDisplayIdBodySchema.safeParse(req.body ?? {});
+    if (!body.success) return validationError(reply, body.error);
+    const typed = body.data.display_id?.trim();
+    if (!typed) return { updated: false, reason: "blank_keeps_auto_assigned" as const };
+
+    type PatchOutcome =
+      | { kind: "not_found" }
+      | { kind: "closed" }
+      | { kind: "duplicate" }
+      | { kind: "unchanged"; display_id: string }
+      | { kind: "updated"; display_id: string };
+    const result: PatchOutcome = await withCompany(user.uuid, body.data.operating_company_id, async (client): Promise<PatchOutcome> => {
+      const cur = await client.query(
+        `SELECT display_id, status FROM driver_finance.driver_settlements WHERE id = $1::uuid AND operating_company_id = $2::uuid LIMIT 1`,
+        [params.data.id, body.data.operating_company_id]
+      );
+      const row = cur.rows[0] as { display_id: string | null; status: string } | undefined;
+      if (!row) return { kind: "not_found" };
+      if (row.status === "closed") return { kind: "closed" };
+      if (row.display_id === typed) return { kind: "unchanged", display_id: typed };
+      const dupe = await client.query(
+        `SELECT 1 FROM driver_finance.driver_settlements WHERE operating_company_id = $1::uuid AND display_id = $2 AND id <> $3::uuid AND voided_at IS NULL LIMIT 1`,
+        [body.data.operating_company_id, typed, params.data.id]
+      );
+      if (dupe.rows[0]) return { kind: "duplicate" };
+      await client.query(
+        `UPDATE driver_finance.driver_settlements SET display_id = $2, updated_at = now() WHERE id = $1::uuid AND operating_company_id = $3::uuid`,
+        [params.data.id, typed, body.data.operating_company_id]
+      );
+      await appendCrudAudit(
+        client,
+        user.uuid,
+        "driver_finance.settlement.display_id_retyped",
+        { resource_type: "driver_finance.driver_settlements", resource_id: params.data.id, operating_company_id: body.data.operating_company_id, old_display_id: row.display_id, new_display_id: typed },
+        "info",
+        "SETL-DETAIL-01"
+      );
+      return { kind: "updated", display_id: typed };
+    });
+    if (result.kind === "not_found") return reply.code(404).send({ error: "settlement_not_found" });
+    if (result.kind === "closed") return reply.code(409).send({ error: "settlement_closed_display_id_frozen" });
+    if (result.kind === "duplicate") return reply.code(409).send({ error: "display_id_already_in_use" });
+    return { updated: result.kind === "updated", display_id: result.display_id };
+  });
+
   // LOAD-SETTLEMENT-TAB-SHOWS-OPEN-NOT-SETTLING — the load→settlement REVERSE hop. Before this route,
   // nothing resolved "which settlement actually covers load X" — the load drawer's Settlement tab
   // called a DRIVER-scoped "open pre-settlement" lookup instead, so a load already paid on a LOCKED

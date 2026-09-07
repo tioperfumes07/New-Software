@@ -9,8 +9,15 @@ import { VendorsPage } from "../../Vendors";
 
 vi.mock("../../../api/mdata", () => ({
   listVendors: vi.fn().mockResolvedValue({ vendors: [] }),
+  listAllVendors: vi.fn().mockResolvedValue({ vendors: [], total: 0 }),
   createVendor: vi.fn(),
   listPaymentTermOptions: vi.fn().mockResolvedValue({ payment_terms: [] }),
+  getVendorRollups: vi.fn().mockResolvedValue([]),
+  listVendorPaymentMethods: vi.fn().mockResolvedValue({ payment_methods: [] }),
+}));
+
+vi.mock("../../../hooks/useCatalogQuery", () => ({
+  useCatalogQuery: () => ({ data: { rows: [] }, isError: false, isLoading: false, refetch: vi.fn() }),
 }));
 
 vi.mock("../../../api/catalog-accounts", () => ({
@@ -20,6 +27,7 @@ vi.mock("../../../api/catalog-accounts", () => ({
 vi.mock("../../../api/accounting", () => ({
   listVendorBalances: vi.fn().mockResolvedValue({ rows: [] }),
   listBills: vi.fn().mockResolvedValue({ rows: [] }),
+  listExpenses: vi.fn().mockResolvedValue({ rows: [] }),
 }));
 
 vi.mock("../../../contexts/CompanyContext", () => ({

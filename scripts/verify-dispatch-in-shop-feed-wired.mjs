@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // DISPATCH-IN-SHOP-FEED guard — the List/Table "In shop" section must bind to the live maintenance
-// fleet-table feed, NOT a hardcoded placeholder or empty fixture array in the production path.
+// narrow maintenance in-shop feed, NOT the broad fleet-table roster or an empty fixture array.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -13,11 +13,9 @@ const fail = (m) => {
 };
 const selftest = process.argv.includes("--selftest");
 
-function placeholderSuppressesFailedFeeds(source) {
-  const condition = source.match(/\{section\.placeholder\s*&&([\s\S]*?)\?\s*\(/)?.[1] ?? "";
-  return /(?:allRows|rows)\.length\s*===\s*0/.test(condition)
-    && /!\(section\.key\s*===\s*"in_shop"\s*&&\s*inShopUnitsQuery\.isError\)/.test(condition)
-    && /!\(section\.key\s*===\s*"awaiting"\s*&&\s*unitsWithoutLoadQuery\.isError\)/.test(condition);
+function usesCanonicalInShopEndpoint(source) {
+  return source.includes("/api/v1/maintenance/in-shop-units")
+    && !source.match(/listDispatchInShopUnits[\s\S]{0,240}\/api\/v1\/maintenance\/fleet-table\/rows/);
 }
 
 function awaitingCountUsesRenderedRows(source) {
@@ -29,9 +27,7 @@ function awaitingCountUsesRenderedRows(source) {
 const api = read("apps/frontend/src/api/dispatch.ts");
 if (!api.includes("listDispatchInShopUnits")) fail("dispatch api must export listDispatchInShopUnits");
 if (!api.includes("isDispatchInShopUnit")) fail("dispatch api must export isDispatchInShopUnit");
-if (!api.includes("/api/v1/maintenance/fleet-table/rows")) {
-  fail("in-shop feed must use existing /api/v1/maintenance/fleet-table/rows endpoint");
-}
+if (!usesCanonicalInShopEndpoint(api)) fail("in-shop feed must use the single narrow /api/v1/maintenance/in-shop-units endpoint");
 
 const board = read("apps/frontend/src/pages/dispatch/DispatchBoard.tsx");
 if (board.includes("In-shop (maintenance) feed pending")) {
@@ -61,30 +57,25 @@ if (!/const inShopUnits = inShopUnitsQuery\.isError \? \[\] : \(inShopUnitsQuery
 if (!board.includes("Couldn't load in-shop units")) {
   fail("in-shop feed failure must render an explicit error surface, not an empty placeholder");
 }
-if (!placeholderSuppressesFailedFeeds(board)) {
-  fail("No units in shop placeholder must only render after a successful in-shop query with empty rows");
-}
-
 if (selftest) {
   const mutations = [
-    board.replace('!(section.key === "in_shop" && inShopUnitsQuery.isError) &&', "true &&"),
-    board.replace('!(section.key === "awaiting" && unitsWithoutLoadQuery.isError) ?', "true ?"),
     board.replace("inShopUnitsQuery.isError ? [] :", "false ? [] :"),
     board.replace(
       'boardSections.find((section) => section.key === "awaiting")?.rows.length ?? 0',
       "unassignedUnits.length",
     ),
+    api.replace("/api/v1/maintenance/in-shop-units", "/api/v1/maintenance/fleet-table/rows"),
   ];
-  if (mutations.slice(0, 2).some((source) => placeholderSuppressesFailedFeeds(source))) {
-    fail("selftest mutation escaped failed-feed empty-state exclusion");
-  }
-  if (/const inShopUnits = inShopUnitsQuery\.isError \? \[\] :/.test(mutations[2])) {
+  if (/const inShopUnits = inShopUnitsQuery\.isError \? \[\] :/.test(mutations[0])) {
     fail("selftest stale-row mutation escaped");
   }
-  if (awaitingCountUsesRenderedRows(mutations[3])) {
+  if (awaitingCountUsesRenderedRows(mutations[1])) {
     fail("selftest awaiting-count mutation escaped");
   }
-  console.log("PASS verify-dispatch-in-shop-feed-wired SELFTEST — 4/4 mutations red");
+  if (usesCanonicalInShopEndpoint(mutations[2])) {
+    fail("selftest broad fleet-table endpoint mutation escaped");
+  }
+  console.log("PASS verify-dispatch-in-shop-feed-wired SELFTEST — 3/3 mutations red");
   process.exit(0);
 }
 

@@ -64,12 +64,28 @@ type BankTxn = {
   review_state: string | null;
 };
 
+export type MatchCounterpartyKind = "vendor" | "customer" | null;
+
 export type MatchCandidate = {
   ledger_entry_kind: LedgerEntryKind;
   ledger_entry_id: string;
   amount_cents: number;
   event_date: string;
   memo: string;
+  /**
+   * BANK-MATCH-QBO (owner 2026-09-06: "BY VENDOR, OR CUSTOMER … IT DOES NOT SHOW THE TYPE DESCRIPTION"):
+   * the QuickBooks "Find match" columns — Payee (vendor / customer), Ref no. (our document number),
+   * Description (the record's memo), Open balance (bills only — what is still owed on the document).
+   * Null when the source has no such field (a transfer has no payee; only a bill has an open balance).
+   */
+  counterparty_kind: MatchCounterpartyKind;
+  counterparty_id: string | null;
+  counterparty_name: string | null;
+  reference: string | null;
+  description: string | null;
+  open_balance_cents: number | null;
+  /** How strongly the PAYEE name matches the bank line (0..1) — the "Holiday Inn → Holiday Inn expense" signal. */
+  payee_similarity: number;
   amount_gap_cents: number;
   date_gap_days: number;
   memo_similarity: number;
@@ -149,7 +165,10 @@ const AUTO_MATCH_DATE_WINDOW_DAYS = 5;
  * cannot auto-match. That is a data-completeness gap in the poster's fallback label, not a matching-
  * threshold problem, and is out of scope for this fix (see REMAINING in the shipping commit).
  */
-const AUTO_MATCH_MEMO_SIMILARITY_MIN = 0.8;
+// 2026-09-06 (lead, BANK-MATCH-QBO): the constant read 0.8 while the calibration note above and the
+// regression test (match-auto-vs-manual: boilerplate-diluted JE, similarity 0.6, must auto-match)
+// both say 0.5 — the test was failing on main. Restored to the measured value.
+const AUTO_MATCH_MEMO_SIMILARITY_MIN = 0.5;
 
 function normalizeText(input: string | null | undefined) {
   return String(input ?? "")
@@ -324,7 +343,82 @@ type RawLedgerCandidate = {
   amount_cents: number;
   event_date: string;
   memo: string;
+  counterparty_kind: MatchCounterpartyKind;
+  counterparty_id: string | null;
+  counterparty_name: string | null;
+  reference: string | null;
+  description: string | null;
+  open_balance_cents: number | null;
 };
+
+type RawRow = {
+  id: string;
+  amount_cents: number;
+  event_date: string;
+  memo: string | null;
+  counterparty_id?: string | null;
+  counterparty_name?: string | null;
+  reference?: string | null;
+  description?: string | null;
+  open_balance_cents?: number | null;
+};
+
+function toCandidate(kind: LedgerEntryKind, row: RawRow, counterpartyKind: MatchCounterpartyKind): RawLedgerCandidate {
+  return {
+    ledger_entry_kind: kind,
+    ledger_entry_id: row.id,
+    amount_cents: Math.abs(Number(row.amount_cents ?? 0)),
+    event_date: row.event_date,
+    memo: row.memo ?? "",
+    counterparty_kind: row.counterparty_id ? counterpartyKind : null,
+    counterparty_id: row.counterparty_id ?? null,
+    counterparty_name: row.counterparty_name ?? null,
+    reference: row.reference ?? null,
+    description: row.description ?? null,
+    open_balance_cents: row.open_balance_cents == null ? null : Math.abs(Number(row.open_balance_cents)),
+  };
+}
+
+/**
+ * BANK-MATCH-QBO — the QuickBooks "Find match" filter set: Show (transaction type), Payee, date From/To,
+ * amount From/To. QuickBooks' default recommendation window is 90 calendar days BEFORE the bank date and
+ * 20 after (quickbooks.intuit.com community answer, read 2026-09-06); the old ±7 here hid most real
+ * documents. `windowDays` (symmetric) is kept for callers that pass it (Search all, the cron).
+ */
+export type CandidateFilters = {
+  windowDays?: number;
+  searchQuery?: string;
+  kinds?: LedgerEntryKind[];
+  payee?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  amountMinCents?: number;
+  amountMaxCents?: number;
+};
+
+export const QBO_DAYS_BEFORE = 90;
+export const QBO_DAYS_AFTER = 20;
+
+function shiftDate(iso: string, days: number) {
+  const d = new Date(`${iso.slice(0, 10)}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Payee-name signal: every meaningful token of the vendor / customer name found in the bank line is a
+ * hit ("HOLIDAY INN LAREDO" ↔ vendor "Holiday Inn Express" = 2 of 3 tokens = 0.67; all tokens = 1.0).
+ * Tokens shorter than 3 characters and generic corporate suffixes carry no signal.
+ */
+const PAYEE_NOISE = new Set(["inc", "llc", "ltd", "co", "corp", "the", "and", "of", "de", "sa", "cv"]);
+export function payeeSimilarity(bankText: string | null | undefined, payeeName: string | null | undefined) {
+  const bank = new Set(tokenize(normalizeText(bankText)));
+  const payee = tokenize(normalizeText(payeeName)).filter((t) => t.length >= 3 && !PAYEE_NOISE.has(t));
+  if (bank.size === 0 || payee.length === 0) return 0;
+  let hits = 0;
+  for (const t of payee) if (bank.has(t)) hits += 1;
+  return Number((hits / payee.length).toFixed(6));
+}
 
 // Open-state list for accounting.bills. accounting.bills.status is plain text with NO
 // enum/CHECK constraint (confirmed against 0090_p5_d2_bill_payment_balance.sql), so there is no
@@ -347,27 +441,37 @@ async function fetchLedgerCandidates(
   txnDate: string,
   isCredit: boolean,
   bankAccountId: string,
-  options: { windowDays?: number; searchQuery?: string } = {}
+  options: CandidateFilters = {}
 ): Promise<RawLedgerCandidate[]> {
   const results: RawLedgerCandidate[] = [];
-  // QBO Match: default ±7d recommendations; Search all widens (up to 2y) + optional memo/payee filter.
-  const windowDays = Math.min(Math.max(Number(options.windowDays ?? 7) || 7, 1), 730);
+  // Date range: explicit From/To wins; else a symmetric windowDays (Search all / cron); else the
+  // QuickBooks default of 90 days before and 20 days after the bank date.
+  const windowDays = options.windowDays == null ? null : Math.min(Math.max(Number(options.windowDays) || 7, 1), 730);
+  const fromDate = options.dateFrom ?? (windowDays != null ? shiftDate(txnDate, -windowDays) : shiftDate(txnDate, -QBO_DAYS_BEFORE));
+  const toDate = options.dateTo ?? (windowDays != null ? shiftDate(txnDate, windowDays) : shiftDate(txnDate, QBO_DAYS_AFTER));
   const searchNeedle = (options.searchQuery ?? "").trim().toLowerCase();
-  // When searching, push the filter into SQL BEFORE LIMIT so we don't silently drop matches
+  const payeeNeedle = (options.payee ?? "").trim().toLowerCase();
+  const hasFilters = Boolean(searchNeedle || payeeNeedle || options.kinds?.length || options.amountMinCents != null || options.amountMaxCents != null);
+  // When filtering, push the text filter into SQL BEFORE LIMIT so we don't silently drop matches
   // that fall outside the first 500 rows of the date window.
-  const rowLimit = searchNeedle ? 2000 : 500;
+  const rowLimit = hasFilters ? 2000 : 500;
   const likeParam = searchNeedle ? `%${searchNeedle}%` : null;
+  const wants = (kind: LedgerEntryKind) => !options.kinds?.length || options.kinds.includes(kind);
 
   // --- MONEY IN (deposit) sources ------------------------------------------------
   if (isCredit) {
-    const payments = await client.query<{ id: string; amount_cents: number; event_date: string; memo: string | null }>(
+    const payments = wants("payment") ? await client.query<RawRow>(
       `
-        SELECT id::text, amount_cents::int, payment_date::text AS event_date, display_id::text AS memo
+        SELECT p.id::text, p.amount_cents::int, p.payment_date::text AS event_date, p.display_id::text AS memo,
+               p.customer_id::text AS counterparty_id, c.customer_name::text AS counterparty_name,
+               COALESCE(NULLIF(p.reference, ''), p.display_id)::text AS reference,
+               NULL::text AS description, NULL::int AS open_balance_cents
         FROM accounting.payments p
-        WHERE operating_company_id = $1::uuid
-          AND payment_date BETWEEN ($2::date - make_interval(days => $3)) AND ($2::date + make_interval(days => $3))
-          AND voided_at IS NULL
-          AND ($4::text IS NULL OR lower(COALESCE(display_id, '')) LIKE $4)
+        LEFT JOIN mdata.customers c ON c.id = p.customer_id
+        WHERE p.operating_company_id = $1::uuid
+          AND p.payment_date BETWEEN $2::date AND $3::date
+          AND p.voided_at IS NULL
+          AND ($4::text IS NULL OR lower(COALESCE(p.display_id, '') || ' ' || COALESCE(p.reference, '') || ' ' || COALESCE(c.customer_name, '')) LIKE $4)
           -- BANK-F9998 F4 — was offered/matchable to unlimited bank rows; only bill/expense had this
           -- guard. Extended to every kind so a document already confirmed-matched drops out.
           AND NOT EXISTS (
@@ -378,29 +482,25 @@ async function fetchLedgerCandidates(
           )
         LIMIT $5
       `,
-      [operatingCompanyId, txnDate, windowDays, likeParam, rowLimit]
-    );
-    for (const row of payments.rows) {
-      results.push({
-        ledger_entry_kind: "payment",
-        ledger_entry_id: row.id,
-        amount_cents: Math.abs(Number(row.amount_cents ?? 0)),
-        event_date: row.event_date,
-        memo: row.memo ?? "",
-      });
-    }
+      [operatingCompanyId, fromDate, toDate, likeParam, rowLimit]
+    ) : { rows: [] as RawRow[] };
+    for (const row of payments.rows) results.push(toCandidate("payment", row, "customer"));
   }
 
   // --- MONEY OUT (withdrawal) sources --------------------------------------------
   if (!isCredit) {
-    const billPayments = await client.query<{ id: string; amount_cents: number; event_date: string; memo: string | null }>(
+    const billPayments = wants("bill_payment") ? await client.query<RawRow>(
       `
-        SELECT id::text, amount_cents::int, payment_date::text AS event_date, COALESCE(reference_number, memo)::text AS memo
+        SELECT bp.id::text, bp.amount_cents::int, bp.payment_date::text AS event_date, COALESCE(bp.reference_number, bp.memo)::text AS memo,
+               bp.vendor_id::text AS counterparty_id, v.vendor_name::text AS counterparty_name,
+               COALESCE(NULLIF(bp.check_number, ''), bp.reference_number)::text AS reference,
+               bp.memo::text AS description, NULL::int AS open_balance_cents
         FROM accounting.bill_payments bp
-        WHERE operating_company_id = $1::uuid
-          AND payment_date BETWEEN ($2::date - make_interval(days => $3)) AND ($2::date + make_interval(days => $3))
-          AND revoked_at IS NULL
-          AND ($4::text IS NULL OR lower(COALESCE(reference_number, memo, '')) LIKE $4)
+        LEFT JOIN mdata.vendors v ON v.id::text = bp.vendor_id
+        WHERE bp.operating_company_id = $1::uuid
+          AND bp.payment_date BETWEEN $2::date AND $3::date
+          AND bp.revoked_at IS NULL
+          AND ($4::text IS NULL OR lower(COALESCE(bp.reference_number, '') || ' ' || COALESCE(bp.memo, '') || ' ' || COALESCE(bp.check_number, '') || ' ' || COALESCE(v.vendor_name, '')) LIKE $4)
           AND NOT EXISTS (
             SELECT 1 FROM banking.reconciliation_matches m
             WHERE m.ledger_entry_kind = 'bill_payment'
@@ -409,38 +509,36 @@ async function fetchLedgerCandidates(
           )
         LIMIT $5
       `,
-      [operatingCompanyId, txnDate, windowDays, likeParam, rowLimit]
-    );
-    for (const row of billPayments.rows) {
-      results.push({
-        ledger_entry_kind: "bill_payment",
-        ledger_entry_id: row.id,
-        amount_cents: Math.abs(Number(row.amount_cents ?? 0)),
-        event_date: row.event_date,
-        memo: row.memo ?? "",
-      });
-    }
+      [operatingCompanyId, fromDate, toDate, likeParam, rowLimit]
+    ) : { rows: [] as RawRow[] };
+    for (const row of billPayments.rows) results.push(toCandidate("bill_payment", row, "vendor"));
 
     // OPEN BILLS (candidate kind 'bill'). Open-states passed as $3 text[] (b.status = ANY($3)).
     // amount = open balance (amount_cents − paid_cents). Read-only SUGGESTION only in Part 1.
-    const bills = await client.query<{ id: string; amount_cents: number; event_date: string; memo: string | null }>(
+    const bills = wants("bill") ? await client.query<RawRow>(
       `
         SELECT
           b.id::text,
           (COALESCE(b.amount_cents, 0) - COALESCE(b.paid_cents, 0))::int AS amount_cents,
           b.bill_date::text AS event_date,
+          COALESCE(b.mdata_vendor_id::text, b.vendor_uuid, b.vendor_id)::text AS counterparty_id,
+          v.vendor_name::text AS counterparty_name,
+          COALESCE(NULLIF(b.bill_number, ''), b.display_id)::text AS reference,
+          b.memo::text AS description,
+          (COALESCE(b.amount_cents, 0) - COALESCE(b.paid_cents, 0))::int AS open_balance_cents,
           -- BILL-DISPLAY-ID-01: bill_number FIRST. bills.display_id is NULL on every row on prod, so
           -- the old display_id-first order only produced the right answer by accident; the moment a
           -- display_id existed it would outrank the vendor's own reference, which is what a
           -- reconciler actually matches a bank line against.
           COALESCE(NULLIF(b.bill_number, ''), b.display_id, b.memo)::text AS memo
         FROM accounting.bills b
+        LEFT JOIN mdata.vendors v ON v.id::text = COALESCE(b.mdata_vendor_id::text, b.vendor_uuid, b.vendor_id)
         WHERE b.operating_company_id = $1::uuid
-          AND b.bill_date BETWEEN ($2::date - make_interval(days => $4)) AND ($2::date + make_interval(days => $4))
+          AND b.bill_date BETWEEN $2::date AND $4::date
           AND b.revoked_at IS NULL
           AND b.status = ANY($3::text[])
           AND (COALESCE(b.amount_cents, 0) - COALESCE(b.paid_cents, 0)) > 0
-          AND ($5::text IS NULL OR lower(COALESCE(NULLIF(b.bill_number, ''), b.display_id, b.memo, '')) LIKE $5)
+          AND ($5::text IS NULL OR lower(COALESCE(b.bill_number, '') || ' ' || COALESCE(b.display_id, '') || ' ' || COALESCE(b.memo, '') || ' ' || COALESCE(v.vendor_name, '')) LIKE $5)
           AND NOT EXISTS (
             SELECT 1 FROM banking.reconciliation_matches m
             WHERE m.ledger_entry_kind = 'bill'
@@ -449,34 +547,32 @@ async function fetchLedgerCandidates(
           )
         LIMIT $6
       `,
-      [operatingCompanyId, txnDate, OPEN_BILL_STATUSES as unknown as string[], windowDays, likeParam, rowLimit]
-    );
-    for (const row of bills.rows) {
-      results.push({
-        ledger_entry_kind: "bill",
-        ledger_entry_id: row.id,
-        amount_cents: Math.abs(Number(row.amount_cents ?? 0)),
-        event_date: row.event_date,
-        memo: row.memo ?? "",
-      });
-    }
+      [operatingCompanyId, fromDate, OPEN_BILL_STATUSES as unknown as string[], toDate, likeParam, rowLimit]
+    ) : { rows: [] as RawRow[] };
+    for (const row of bills.rows) results.push(toCandidate("bill", row, "vendor"));
 
     // EXPENSES (candidate kind 'expense'). Columns confirmed from
     // 202606151300_expenses_header_phase1_foundation.sql: total_amount_cents, transaction_date, memo,
     // expense_number, is_active, voided_at. amount = total_amount_cents. Read-only SUGGESTION only.
-    const expenses = await client.query<{ id: string; amount_cents: number; event_date: string; memo: string | null }>(
+    const expenses = wants("expense") ? await client.query<RawRow>(
       `
         SELECT
           e.id::text,
           e.total_amount_cents::int AS amount_cents,
           e.transaction_date::text AS event_date,
-          COALESCE(e.expense_number, e.memo)::text AS memo
+          COALESCE(e.expense_number, e.memo)::text AS memo,
+          e.vendor_uuid::text AS counterparty_id,
+          v.vendor_name::text AS counterparty_name,
+          COALESCE(NULLIF(e.vendor_document_number, ''), e.expense_number)::text AS reference,
+          e.memo::text AS description,
+          NULL::int AS open_balance_cents
         FROM accounting.expenses e
+        LEFT JOIN mdata.vendors v ON v.id = e.vendor_uuid
         WHERE e.operating_company_id = $1::uuid
-          AND e.transaction_date BETWEEN ($2::date - make_interval(days => $3)) AND ($2::date + make_interval(days => $3))
+          AND e.transaction_date BETWEEN $2::date AND $3::date
           AND e.is_active = true
           AND e.voided_at IS NULL
-          AND ($4::text IS NULL OR lower(COALESCE(e.expense_number, e.memo, '')) LIKE $4)
+          AND ($4::text IS NULL OR lower(COALESCE(e.expense_number, '') || ' ' || COALESCE(e.memo, '') || ' ' || COALESCE(e.vendor_document_number, '') || ' ' || COALESCE(v.vendor_name, '')) LIKE $4)
           AND NOT EXISTS (
             SELECT 1 FROM banking.reconciliation_matches m
             WHERE m.ledger_entry_kind = 'expense'
@@ -485,17 +581,9 @@ async function fetchLedgerCandidates(
           )
         LIMIT $5
       `,
-      [operatingCompanyId, txnDate, windowDays, likeParam, rowLimit]
-    );
-    for (const row of expenses.rows) {
-      results.push({
-        ledger_entry_kind: "expense",
-        ledger_entry_id: row.id,
-        amount_cents: Math.abs(Number(row.amount_cents ?? 0)),
-        event_date: row.event_date,
-        memo: row.memo ?? "",
-      });
-    }
+      [operatingCompanyId, fromDate, toDate, likeParam, rowLimit]
+    ) : { rows: [] as RawRow[] };
+    for (const row of expenses.rows) results.push(toCandidate("expense", row, "vendor"));
   }
 
   // --- TRANSFERS (direction-scoped to this bank account's side) -------------------
@@ -503,12 +591,14 @@ async function fetchLedgerCandidates(
   const transferDirectionClause = isCredit
     ? "t.to_account_id = $3::uuid AND t.to_account_kind = 'bank'"
     : "t.from_account_id = $3::uuid AND t.from_account_kind = 'bank'";
-  const transfers = await client.query<{ id: string; amount_cents: number; event_date: string; memo: string | null }>(
+  const transfers = wants("transfer") ? await client.query<RawRow>(
     `
-      SELECT t.id::text, t.amount_cents::int, t.transfer_date::text AS event_date, COALESCE(t.memo, t.reference_number)::text AS memo
+      SELECT t.id::text, t.amount_cents::int, t.transfer_date::text AS event_date, COALESCE(t.memo, t.reference_number)::text AS memo,
+             NULL::text AS counterparty_id, NULL::text AS counterparty_name, t.reference_number::text AS reference,
+             t.memo::text AS description, NULL::int AS open_balance_cents
       FROM banking.transfers t
       WHERE t.operating_company_id = $1::uuid
-        AND t.transfer_date BETWEEN ($2::date - make_interval(days => $4)) AND ($2::date + make_interval(days => $4))
+        AND t.transfer_date BETWEEN $2::date AND $4::date
         AND t.revoked_at IS NULL
         AND (${transferDirectionClause})
         AND ($5::text IS NULL OR lower(COALESCE(t.memo, t.reference_number, '')) LIKE $5)
@@ -520,30 +610,24 @@ async function fetchLedgerCandidates(
         )
       LIMIT $6
     `,
-    [operatingCompanyId, txnDate, bankAccountId, windowDays, likeParam, rowLimit]
-  );
-  for (const row of transfers.rows) {
-    results.push({
-      ledger_entry_kind: "transfer",
-      ledger_entry_id: row.id,
-      amount_cents: Math.abs(Number(row.amount_cents ?? 0)),
-      event_date: row.event_date,
-      memo: row.memo ?? "",
-    });
-  }
+    [operatingCompanyId, fromDate, bankAccountId, toDate, likeParam, rowLimit]
+  ) : { rows: [] as RawRow[] };
+  for (const row of transfers.rows) results.push(toCandidate("transfer", row, null));
 
   // --- JOURNAL ENTRIES (double-sided; offered in both directions) -----------------
-  const journalEntries = await client.query<{ id: string; amount_cents: number; event_date: string; memo: string | null }>(
+  const journalEntries = wants("je") ? await client.query<RawRow>(
     `
       SELECT
         je.id::text,
         COALESCE(SUM(jep.amount_cents) FILTER (WHERE jep.debit_or_credit = 'debit'), 0)::int AS amount_cents,
         je.entry_date::text AS event_date,
-        je.memo::text AS memo
+        je.memo::text AS memo,
+        NULL::text AS counterparty_id, NULL::text AS counterparty_name,
+        je.source::text AS reference, je.memo::text AS description, NULL::int AS open_balance_cents
       FROM accounting.journal_entries je
       LEFT JOIN accounting.journal_entry_postings jep ON jep.journal_entry_uuid = je.id
       WHERE je.operating_company_id = $1::uuid
-        AND je.entry_date BETWEEN ($2::date - make_interval(days => $3)) AND ($2::date + make_interval(days => $3))
+        AND je.entry_date BETWEEN $2::date AND $3::date
         AND ($4::text IS NULL OR lower(COALESCE(je.memo, '')) LIKE $4)
         -- BANK-F9998 F3 — a reversed JE (Rule 4 VOID=reversal) is no longer real economic activity;
         -- it must not be offered as a match candidate. Every other of the 6 sources already excludes
@@ -555,26 +639,24 @@ async function fetchLedgerCandidates(
             AND m.ledger_entry_id = je.id
             AND m.match_state IN ('auto_matched', 'user_matched')
         )
-      GROUP BY je.id, je.entry_date, je.memo
+      GROUP BY je.id, je.entry_date, je.memo, je.source
       LIMIT $5
     `,
-    [operatingCompanyId, txnDate, windowDays, likeParam, rowLimit]
-  );
-  for (const row of journalEntries.rows) {
-    results.push({
-      ledger_entry_kind: "je",
-      ledger_entry_id: row.id,
-      amount_cents: Math.abs(Number(row.amount_cents ?? 0)),
-      event_date: row.event_date,
-      memo: row.memo ?? "",
-    });
-  }
+    [operatingCompanyId, fromDate, toDate, likeParam, rowLimit]
+  ) : { rows: [] as RawRow[] };
+  for (const row of journalEntries.rows) results.push(toCandidate("je", row, null));
 
-  // SQL already filtered when searchNeedle set; keep a defensive in-memory pass.
-  if (searchNeedle) {
-    return results.filter((row) => (row.memo ?? "").toLowerCase().includes(searchNeedle));
-  }
-  return results;
+  // Defensive in-memory pass for the text search (SQL already filtered), plus the QuickBooks filters
+  // that are cheaper to apply here than in six queries: Payee, amount From/To.
+  const haystack = (r: RawLedgerCandidate) =>
+    `${r.memo ?? ""} ${r.reference ?? ""} ${r.description ?? ""} ${r.counterparty_name ?? ""}`.toLowerCase();
+  return results.filter((row) => {
+    if (searchNeedle && !haystack(row).includes(searchNeedle)) return false;
+    if (payeeNeedle && !(row.counterparty_name ?? "").toLowerCase().includes(payeeNeedle)) return false;
+    if (options.amountMinCents != null && row.amount_cents < options.amountMinCents) return false;
+    if (options.amountMaxCents != null && row.amount_cents > options.amountMaxCents) return false;
+    return true;
+  });
 }
 
 async function loadLedgerAmountCents(client: DbClient, operatingCompanyId: string, kind: LedgerEntryKind, entryId: string) {
@@ -884,6 +966,13 @@ export async function findCandidates(input: {
   window_days?: number;
   /** Optional memo/payee/ref text filter (case-insensitive contains). */
   search_query?: string;
+  /** BANK-MATCH-QBO filters — Show (kinds), Payee, date From/To, amount From/To. */
+  kinds?: LedgerEntryKind[];
+  payee?: string;
+  date_from?: string;
+  date_to?: string;
+  amount_min_cents?: number;
+  amount_max_cents?: number;
 }): Promise<MatchCandidate[]> {
   return withLuciaBypass(async (client) => {
     await client.query(`SELECT set_config('app.operating_company_id', $1::text, true)`, [input.operating_company_id]);
@@ -899,14 +988,31 @@ export async function findCandidates(input: {
       txn.transaction_date,
       txn.is_credit,
       txn.bank_account_id,
-      { windowDays: input.window_days, searchQuery: input.search_query }
+      {
+        windowDays: input.window_days,
+        searchQuery: input.search_query,
+        kinds: input.kinds,
+        payee: input.payee,
+        dateFrom: input.date_from,
+        dateTo: input.date_to,
+        amountMinCents: input.amount_min_cents,
+        amountMaxCents: input.amount_max_cents,
+      }
     );
 
     const ranked = rawCandidates
       .map((candidate) => {
         const amountGapCents = Math.abs(txnAmountAbs - candidate.amount_cents);
         const dateGapDays = daysBetween(txn.transaction_date, candidate.event_date);
-        const similarity = memoSimilarity(txnMemo, candidate.memo);
+        // BANK-MATCH-QBO: the payee NAME is the strongest text signal a bank line carries ("HOLIDAY INN
+        // LAREDO TX" names the vendor, never our expense number). The old memo-only comparison scored a
+        // Holiday Inn expense at 0 because its memo is "13568-1". Best of memo / description / payee.
+        const payeeSim = payeeSimilarity(txnMemo, candidate.counterparty_name);
+        const similarity = Math.max(
+          memoSimilarity(txnMemo, candidate.memo),
+          memoSimilarity(txnMemo, candidate.description),
+          payeeSim
+        );
         const autoMatch =
           amountGapCents <= toleranceCents &&
           dateGapDays <= AUTO_MATCH_DATE_WINDOW_DAYS &&
@@ -923,6 +1029,7 @@ export async function findCandidates(input: {
           amount_gap_cents: amountGapCents,
           date_gap_days: dateGapDays,
           memo_similarity: similarity,
+          payee_similarity: payeeSim,
           match_score: score,
           auto_match: autoMatch,
           exact_amount: amountGapCents === 0,

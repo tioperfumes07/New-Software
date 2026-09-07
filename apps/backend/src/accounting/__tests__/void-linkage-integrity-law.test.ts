@@ -58,6 +58,33 @@ describe("unmatchBankTransactionById — LINKAGE-INTEGRITY-LAW", () => {
     expect(resetCall?.sql).toContain("matched_transfer_id = NULL");
   });
 
+  // ACC-20 (owner-defect register 2026-09-03): a void-cascade unmatch must also release
+  // review_state back to 'for_review' — leaving it stale at 'matched' permanently blocks
+  // match.service.ts's own confirm-match idempotency guard from ever re-matching this transaction
+  // again, even though every matched_*_id pointer this same statement just cleared says it's free.
+  it("resets review_state to 'for_review', the same 'back in the queue' state the manual /unmatch route uses", async () => {
+    const { client, calls } = makeMockClient({
+      matched_load_id: LOAD_ID,
+      matched_bill_id: null,
+      matched_settlement_id: null,
+      matched_expense_id: null,
+      matched_transfer_id: null,
+      matched_payment_id: null,
+      matched_bill_payment_id: null,
+    });
+
+    await unmatchBankTransactionById(client as never, OPCO, BANK_TX_ID, {
+      userId: "user-1",
+      reason: "test unmatch",
+    });
+
+    const resetCall = calls.find((c) => /^\s*UPDATE banking\.bank_transactions/.test(c.sql));
+    expect(resetCall?.sql).toContain("review_state = 'for_review'");
+    // Never the illegal bare 'unmatched' value — CHECK constraint only allows for_review/
+    // categorized/excluded/matched/transfer.
+    expect(resetCall?.sql).not.toContain("review_state = 'unmatched'");
+  });
+
   it("writes ONE reconciliation_matches 'rejected' row per previously-matched kind, carrying the actor and reason", async () => {
     const { client, calls } = makeMockClient({
       matched_load_id: LOAD_ID,
@@ -137,5 +164,29 @@ describe("unmatchBankTransactionsForVoid — LINKAGE-INTEGRITY-LAW", () => {
     expect(matchInsert?.values[2]).toBe("bill");
     expect(matchInsert?.values).toContain("user-2");
     expect(matchInsert?.values.some((v) => typeof v === "string" && v.includes(BILL_ID))).toBe(true);
+  });
+
+  // ACC-20 — same fix, shared SQL: voiding a document must release its bank transaction's
+  // review_state too, not just the matched_*_id pointer, or the transaction is stuck unable to be
+  // re-matched (match.service.ts's own idempotency guard treats review_state='matched' as final).
+  it("resets review_state to 'for_review' on the SAME shared reset SQL unmatchBankTransactionById uses", async () => {
+    const { client, calls } = makeMockClient({
+      matched_bill_id: BILL_ID,
+      matched_load_id: null,
+      matched_settlement_id: null,
+      matched_expense_id: null,
+      matched_transfer_id: null,
+      matched_payment_id: null,
+      matched_bill_payment_id: null,
+    });
+
+    await unmatchBankTransactionsForVoid(
+      client as never,
+      { operatingCompanyId: OPCO, entityType: "bill", entityId: BILL_ID },
+      { userId: "user-2" }
+    );
+
+    const resetCall = calls.find((c) => /^\s*UPDATE banking\.bank_transactions/.test(c.sql));
+    expect(resetCall?.sql).toContain("review_state = 'for_review'");
   });
 });

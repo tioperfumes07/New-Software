@@ -14,13 +14,20 @@ const listPaymentTermOptionsMock = vi.fn();
 
 vi.mock("../../../api/mdata", () => ({
   listCustomers: (...args: unknown[]) => listCustomersMock(...args),
+  listAllCustomers: (...args: unknown[]) => listCustomersMock(...args),
   getCustomerBillingSummary: (...args: unknown[]) => getCustomerBillingSummaryMock(...args),
+  listAllAtRiskCustomerRelationshipScores: vi.fn().mockResolvedValue({ customers: [] }),
   listPaymentTermOptions: (...args: unknown[]) => listPaymentTermOptionsMock(...args),
   createCustomer: vi.fn(),
 }));
 
+vi.mock("../../../api/reports", () => ({
+  getCustomerProfitability: vi.fn().mockResolvedValue({ period: { start: "", end: "" }, totals: { revenue_cents: 0, direct_cost_cents: 0, gross_margin_cents: 0, gross_margin_pct: 0, customer_count: 0 }, by_customer: [] }),
+}));
+
 vi.mock("../../../api/accounting", () => ({
   listInvoices: (...args: unknown[]) => listInvoicesMock(...args),
+  listAllInvoices: vi.fn().mockResolvedValue({ invoices: [] }),
 }));
 
 vi.mock("../../../contexts/CompanyContext", () => ({

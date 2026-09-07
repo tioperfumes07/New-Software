@@ -43,7 +43,17 @@ export function analyze(src) {
   if (!/COALESCE\(bt\.merchant_name, bt\.description, 'Bank transaction'\)/.test(fn)) {
     failures.push(`${FILE}: the label must fall back through merchant_name -> description -> a literal, never a bare NULL.`);
   }
-  if (!/src_banktx\.display_label/.test(fn) || !/COALESCE\(src_inv\.display_id, src_bill\.display_id, src_banktx\.display_label\)/.test(fn)) {
+  // JE-SOURCE-LINKS-BILL-USES-WRONG-COLUMN (ACCT-F5708) and JE-SOURCE-LINKS-EXPENSE-NEVER-JOINED
+  // (ACCT-F9511) legitimately grew this COALESCE beyond the original 3-arg literal this check used
+  // to require exact-match (src_bill.bill_number, src_fueltx/src_reimbursement/src_expense.display_label
+  // all joined the same list afterward) — assert src_banktx.display_label is present in the SAME
+  // source_transaction_display_id COALESCE as src_inv/src_bill, not an exact arg count/order.
+  const coalesceMatch = /COALESCE\(([\s\S]*?)\)\s*AS\s*source_transaction_display_id/.exec(fn);
+  const coalesceBody = coalesceMatch ? coalesceMatch[1] : "";
+  const invIdx = coalesceBody.indexOf("src_inv.display_id");
+  const billIdx = coalesceBody.indexOf("src_bill.display_id");
+  const banktxIdx = coalesceBody.indexOf("src_banktx.display_label");
+  if (invIdx === -1 || billIdx === -1 || banktxIdx === -1 || !(invIdx < banktxIdx && billIdx < banktxIdx)) {
     failures.push(`${FILE}: the bank-categorization label must be folded into the same source_transaction_display_id COALESCE the invoice/bill labels already use.`);
   }
   return failures;

@@ -12,9 +12,11 @@
  *
  * This guard asserts:
  * 1. poster.service.ts exports reverseFactoringAdvanceEvent, and it calls reverseJournalEntryNoFlip
- *    (reuses the shared poster) after looking the funding JE up via findLifecyclePostingKeyJe with the
- *    exact (source_transaction_type: "factoring_advance", event_key: "funding") key the funding poster
- *    itself claims — not a fresh/guessed lookup.
+ *    (reuses the shared poster) once per live leg found via findAllLifecyclePostingKeyJes — the
+ *    ORIGINAL narrow assumption ("void only ever happens before any downstream JE exists") was
+ *    proven false live (FAC-VOID-ENUM-2150: a factoring_customer_payment JE posted while the advance
+ *    was still 'advanced', then the advance was voided anyway, leaving that leg un-reversed) — the
+ *    fix generalized to reverse EVERY still-live linked posting, not just a hardcoded "funding" leg.
  * 2. factoring-advances.routes.ts's void handler actually calls reverseFactoringAdvanceEvent, and does
  *    so BEFORE its own `UPDATE accounting.factoring_advances SET status = 'voided'` (same lock-order
  *    discipline ACCT-F5651 already established for the advance-posting call — the reversal opens its
@@ -31,13 +33,13 @@ const checks = [
   ["poster", /export async function reverseFactoringAdvanceEvent/, "poster.service.ts exports reverseFactoringAdvanceEvent"],
   [
     "poster",
-    /findLifecyclePostingKeyJe\(client, \{[\s\S]{0,200}source_transaction_type: "factoring_advance",[\s\S]{0,60}event_key: "funding"/,
-    "looks up the funding JE via the same lifecycle posting key the funding poster itself claims",
+    /findAllLifecyclePostingKeyJes\(client, \{[\s\S]{0,120}operating_company_id: input\.operating_company_id,[\s\S]{0,60}factoring_advance_id: input\.factoring_advance_id,/,
+    "looks up EVERY live linked posting (not just a hardcoded 'funding' leg) via findAllLifecyclePostingKeyJes — FAC-VOID-ENUM-2150",
   ],
   [
     "poster",
-    /await reverseJournalEntryNoFlip\(client, \{[\s\S]{0,200}journalEntryId,/,
-    "reverses the found JE via the SHARED reverseJournalEntryNoFlip helper (reuse, not new GL math)",
+    /for \(const leg of liveLegs\) \{\s*\n\s*const \{ reversal \} = await reverseJournalEntryNoFlip\(client, \{[\s\S]{0,200}journalEntryId: leg\.journal_entry_id,/,
+    "reverses EACH found leg via the SHARED reverseJournalEntryNoFlip helper (reuse, not new GL math)",
   ],
   ["routes", /reverseFactoringAdvanceEvent,?\s*\n?\s*} from "\.\/factoring-posting\/poster\.service\.js"/, "routes.ts imports reverseFactoringAdvanceEvent"],
   [

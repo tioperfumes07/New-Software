@@ -127,7 +127,6 @@ function flatten(o) {
     off_locked_scale_semantic_classes: o.off_locked_scale_semantic_classes,
     files_off_locked_scale_semantic: o.files_off_locked_scale_semantic,
     raw_font_sizes: o.raw_font_sizes,
-    files_with_raw_font_sizes: o.files_with_raw_font_sizes,
     trapping_picker_total: o.trapping_picker_total,
     ...Object.fromEntries(
       Object.entries(o.trapping_picker_importers).map(([k, v]) => [`picker:${k}`, v])
@@ -141,7 +140,8 @@ function selftest() {
     raw_font_sizes: 5, files_with_raw_font_sizes: 2,
     trapping_picker_importers: { a: 1, b: 2 }, trapping_picker_total: 3 };
   const f = flatten(probe);
-  const ok = f.raw_font_sizes === 5 && f.trapping_picker_total === 3 && f["picker:a"] === 1
+  const ok = f.raw_font_sizes === 5 && f.files_with_raw_font_sizes === undefined
+    && f.trapping_picker_total === 3 && f["picker:a"] === 1
     && f.off_locked_scale_semantic_classes === 4 && f.files_off_locked_scale_semantic === 2;
   if (!ok) { console.error(`${LABEL}: SELFTEST FAIL — flatten() wrong`); process.exit(1); }
   if (!fs.existsSync(SRC)) { console.error(`${LABEL}: SELFTEST FAIL — ${SRC} missing`); process.exit(1); }

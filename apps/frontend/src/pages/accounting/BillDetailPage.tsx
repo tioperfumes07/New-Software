@@ -1,4 +1,5 @@
 import { entityLabel, visibleDocumentLabel } from "../../lib/entity-label";
+import { ReceiptAttach } from "../../components/documents/ReceiptAttach";
 import { formatDateUS } from "../../lib/formatDate";
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
@@ -26,6 +27,7 @@ import { AccountingSubNavWrapper } from "./AccountingSubNavWrapper";
 import { MoneyProofTrailPanel } from "../../components/accounting/MoneyProofTrailPanel";
 import { EntityLink } from "../../components/shared/EntityLink";
 import { ParityTable, type ParityColumn } from "../../components/parity/ParityTable";
+import { JournalPostingsPanel } from "../../components/accounting/PostingGrid";
 import { useUrlSort } from "../../hooks/useUrlSort";
 
 import { formatUsdCents } from "../../lib/money";
@@ -223,6 +225,12 @@ export function BillDetailPage() {
         actions={
           <div className="flex items-center gap-2">
             <StatusBadge variant={statusVariant(bill.status)}>{bill.status}</StatusBadge>
+            {/* ACC-50 (LAW §2) — "open tour posts nothing": this bill has a line naming a load
+                whose tour/settlement is still open, so it was held instead of posting, even if
+                bill GL posting is enabled for this entity. Clears itself once the tour closes. */}
+            {bill.posting_hold_reason === "tour_open" ? (
+              <StatusBadge variant="crit">held — tour open</StatusBadge>
+            ) : null}
             {bill.is_reconciled ? (
               <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-700">
                 <svg aria-hidden="true" viewBox="0 0 12 12" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2">
@@ -301,6 +309,11 @@ export function BillDetailPage() {
         <DataPanelRow>
           <span className="text-xs font-semibold text-gray-600">Bill #</span>
           <span className="text-xs text-gray-900">{bill.display_id ?? "—"}</span>
+        </DataPanelRow>
+        {/* LDT-1 (2026-09-06): receipt / vendor invoice image on EVERY bill editor — documents.attachments 'bill'. */}
+        <DataPanelRow>
+          <span className="text-xs font-semibold text-gray-600">Receipt</span>
+          <ReceiptAttach operatingCompanyId={selectedCompanyId!} entityType="bill" entityId={bill.id} readOnly={Boolean(bill.revoked_at)} testId="bill-detail-receipt" />
         </DataPanelRow>
         <DataPanelRow>
           <span className="text-xs font-semibold text-gray-600">Vendor Invoice #</span>
@@ -447,6 +460,7 @@ export function BillDetailPage() {
           )}
         </div>
       </DataPanel>
+      <JournalPostingsPanel sourceTransactionType="bill" sourceTransactionId={id} operatingCompanyId={selectedCompanyId} />
       <MoneyProofTrailPanel operatingCompanyId={selectedCompanyId!} documentType="bill" documentId={id} />
     </AccountingSubNavWrapper>
   );

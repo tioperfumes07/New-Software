@@ -13,7 +13,14 @@ const listBillsMock = vi.fn();
 
 vi.mock("../../../api/mdata", () => ({
   listVendors: (...args: unknown[]) => listVendorsMock(...args),
+  listAllVendors: (...args: unknown[]) => listVendorsMock(...args),
   listPaymentTermOptions: vi.fn().mockResolvedValue({ payment_terms: [] }),
+  getVendorRollups: vi.fn().mockResolvedValue([]),
+  listVendorPaymentMethods: vi.fn().mockResolvedValue({ payment_methods: [] }),
+}));
+
+vi.mock("../../../hooks/useCatalogQuery", () => ({
+  useCatalogQuery: () => ({ data: { rows: [] }, isError: false, isLoading: false, refetch: vi.fn() }),
 }));
 
 vi.mock("../../../api/catalog-accounts", () => ({
@@ -23,6 +30,7 @@ vi.mock("../../../api/catalog-accounts", () => ({
 vi.mock("../../../api/accounting", () => ({
   listVendorBalances: (...args: unknown[]) => listVendorBalancesMock(...args),
   listBills: (...args: unknown[]) => listBillsMock(...args),
+  listExpenses: vi.fn().mockResolvedValue({ rows: [] }),
 }));
 
 vi.mock("../../../contexts/CompanyContext", () => ({

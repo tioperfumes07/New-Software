@@ -265,7 +265,9 @@ describe("DispatchBoard ETA chip (P5-T20)", () => {
     expect(screen.getByText("L-HIST")).toBeTruthy();
   });
 
-  it("gives every live section independent headers, sorting, and filtering", async () => {
+  // LB-DESIGN-1 (owner 2026-09-06, DISPATCH-BOARD-PREVIEW-2026-09-05.pdf § 2): the List board is ONE table with the
+  // status sections as band rows — never a stacked header row per section.
+  it("renders ONE grouped table with the sections as band rows (no per-section header tables)", async () => {
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={qc}>
@@ -290,14 +292,13 @@ describe("DispatchBoard ETA chip (P5-T20)", () => {
       </QueryClientProvider>
     );
 
-    expect(await screen.findByTestId("dispatch-board-section-table-awaiting")).toBeTruthy();
-    expect(screen.getByTestId("dispatch-board-section-table-booked")).toBeTruthy();
-    expect(screen.getByTestId("dispatch-board-section-table-in_shop")).toBeTruthy();
-
-    fireEvent.change(screen.getByTestId("dispatch-board-filter-awaiting"), { target: { value: "no-match" } });
-    expect(screen.getByText("No awaiting assignment rows match this section filter.")).toBeTruthy();
+    expect(await screen.findByTestId("dispatch-board-section-table-all")).toBeTruthy();
+    expect(screen.queryByTestId("dispatch-board-section-table-awaiting")).toBeNull();
+    expect(screen.queryByTestId("dispatch-board-section-table-booked")).toBeNull();
+    expect(await screen.findByTestId("dispatch-board-section-booked")).toHaveTextContent(/booked/i);
     expect(screen.getByText("L-BOOKED")).toBeTruthy();
-    expect((screen.getByTestId("dispatch-board-filter-booked") as HTMLInputElement).value).toBe("");
+    // exactly one column header row for the whole board
+    expect(screen.getAllByText("Load #").length).toBe(1);
   });
 
   it("does not disguise a failed pre-settlement linkage read as no open cycle", async () => {

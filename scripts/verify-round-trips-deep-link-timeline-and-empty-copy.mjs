@@ -21,12 +21,16 @@ if (!roundTrips.includes("deepLink?: boolean;")) {
   fails.push("RoundTrips Props missing optional deepLink prop");
 }
 
-if (!/function readView\(deepLink\?\s*:\s*boolean\)\s*:\s*BoardView/.test(roundTrips)) {
+// RT-FIX (owner ruling 2026-09-06, #20846 / 10441-verify-round-trips-default-and-list-dates): the approved design
+// (GO-RT-01 22a26613) opens on the LOAD BOARD on every entry, deep link included; BRD-10's timeline-on-deep-link flip is
+// what the owner saw as "changed completely". This guard's BRD-10 pins are re-targeted to the ruling: readView keeps the
+// deepLink parameter (unused, underscored) and defaults to "board"; the timeline stays one click away and remembered.
+if (!/function readView\(_?deepLink\?\s*:\s*boolean\)\s*:\s*BoardView/.test(roundTrips)) {
   fails.push("readView does not accept a deepLink parameter");
 }
 
-if (!roundTrips.includes("return deepLink ? \"timeline\" : \"board\";")) {
-  fails.push("readView does not default to timeline when deepLink is true and no saved view exists");
+if (!/if \(raw === "timeline" \|\| raw === "board"\) return raw;\s*\n\s*return "board";/.test(roundTrips)) {
+  fails.push("readView must honour the remembered view and default to the LOAD BOARD (owner ruling RT-FIX 2026-09-06), never flip to timeline on deep link");
 }
 
 if (!roundTrips.includes("const [boardView, setBoardView] = useState<BoardView>(() => readView(deepLink));")) {
@@ -51,4 +55,4 @@ if (fails.length) {
   process.exit(1);
 }
 
-console.log("Round-trips BRD-10 contract OK: deep-link defaults to timeline and empty-state copy is present.");
+console.log("Round-trips contract OK: readView keeps deepLink, defaults to the LOAD BOARD (RT-FIX ruling), empty-state copy present.");

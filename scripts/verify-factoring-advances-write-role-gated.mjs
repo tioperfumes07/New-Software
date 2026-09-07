@@ -43,11 +43,15 @@ function assertAll(src) {
       problems.push(`${label}: route not found (guard target moved; update this guard)`);
       continue;
     }
-    // Look at the next ~800 chars of the handler body for the role-gate call (long enough to span
-    // the create route's multi-line ACCT-F5578 comment block).
-    const window = src.slice(idx, idx + 800);
-    if (!/requireVoidCancelExecutor\(reply, String\(user\.role \?\? ""\)\)/.test(window)) {
-      problems.push(`${label}: missing requireVoidCancelExecutor role gate`);
+    // Look at the next ~1200 chars of the handler body for the role-gate call (long enough to span
+    // the create route's multi-line ACCT-F5578 comment block + the schema-parse lines before the
+    // PERMISSION WIRING 10.4 requireVoidCancelExecutorWired call, ~990 chars at its farthest).
+    const window = src.slice(idx, idx + 1200);
+    // PERMISSION WIRING 10.4: the sync requireVoidCancelExecutor(reply, role) call was superseded
+    // by the async requireVoidCancelExecutorWired(reply, { role, client, ... }) across this file —
+    // a role-floor-plus-future-permission-key tightening, not a regression.
+    if (!/requireVoidCancelExecutorWired\(reply, \{\s*\n\s*role: String\(user\.role \?\? ""\),/.test(window)) {
+      problems.push(`${label}: missing requireVoidCancelExecutorWired role gate`);
     }
   }
   return problems;
@@ -60,10 +64,15 @@ if (SELFTEST) {
 
   // Plant defect: drop the role gate from the create route specifically (leave the others intact,
   // proving the guard checks each route independently rather than a single file-wide grep count).
-  const planted = src.replace(
-    'app.post("/api/v1/accounting/factoring-advances", { config: { rateLimit: { max: 60, timeWindow: "1 minute" } } }, async (req, reply) => {\n    const user = currentAuthUser(req, reply);\n    if (!user) return;\n    // ACCT-F5578: this route (and 4 siblings below) had no role gate -- currentAuthUser only requires\n    // a session. Reusing the file\'s own void/cancel executor role set (Owner/Administrator/Accountant,\n    // Jorge-locked 2026-06-29) since creating/advancing/holding/releasing a factoring advance is the\n    // same tier of financial-executor operation as this file\'s own already-gated void route.\n    if (!requireVoidCancelExecutor(reply, String(user.role ?? ""))) return;\n',
-    'app.post("/api/v1/accounting/factoring-advances", { config: { rateLimit: { max: 60, timeWindow: "1 minute" } } }, async (req, reply) => {\n    const user = currentAuthUser(req, reply);\n    if (!user) return;\n',
-  );
+  // The 6 requireVoidCancelExecutorWired call blocks are textually near-identical, so this splices
+  // out ONLY the first (create route's) occurrence by index, never a global string replace.
+  const createIdx = src.indexOf('app.post("/api/v1/accounting/factoring-advances", ');
+  const gateStart = src.indexOf("const allowedCreate = await withCompanyScope", createIdx);
+  const gateEnd = src.indexOf(");\n", gateStart) + 3;
+  let planted = src;
+  if (createIdx !== -1 && gateStart !== -1 && gateEnd > gateStart) {
+    planted = src.slice(0, gateStart) + "const allowedCreate = true;\n" + src.slice(gateEnd);
+  }
   if (planted === src) {
     console.error(`${LABEL} SELFTEST SETUP FAILED: mutation target not found (guard text drifted from real code)`);
     process.exit(1);

@@ -65,6 +65,10 @@ const listBillsQuerySchema = companyQuerySchema.extend({
   offset: z.coerce.number().int().min(0).default(0),
 });
 
+const billRegisterQuerySchema = listBillsQuerySchema.extend({
+  bill_type: z.enum(["all", "vendor_bill", "driver_bill"]).optional().default("all"),
+});
+
 const listBillPaymentsQuerySchema = companyQuerySchema.extend({
   vendor_id: z.string().trim().min(1).optional(),
   date_from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
@@ -263,6 +267,70 @@ export async function registerBillsRoutes(app: FastifyInstance) {
       offset: query.data.offset,
       sort: query.data.sort && BILL_LIST_SORT_SQL[query.data.sort] ? query.data.sort : null,
       dir: query.data.dir ?? null,
+    };
+  });
+
+  // BILLS-DRIVER (inventory #13): one read model for the Bills workspace. Vendor bills and
+  // driver bills remain canonical in their own tables; this route unions their read shapes so
+  // the UI cannot silently omit driver liabilities or issue two independently drifting reads.
+  app.get("/api/v1/accounting/bills/register", { config: { rateLimit: { max: 60, timeWindow: "1 minute" } } }, async (req, reply) => {
+    const user = currentAuthUser(req, reply);
+    if (!user) return;
+    if (!canAccessAccounting(String(user.role ?? ""))) return reply.code(403).send({ error: "forbidden" });
+    const query = billRegisterQuerySchema.safeParse(req.query ?? {});
+    if (!query.success) return validationError(reply, query.error);
+    await assertCompanyMembership(String(user.uuid), query.data.operating_company_id);
+
+    const listOptions = {
+      status: query.data.status === "unpaid" ? ("open" as const) : query.data.status === "all" ? ("all" as const) : query.data.status,
+      fromDate: query.data.date_from,
+      toDate: query.data.date_to,
+      hasBalance: query.data.has_balance,
+      search: query.data.search,
+      insuranceClaimId: query.data.insurance_claim_id,
+      legalMatterId: query.data.legal_matter_id,
+      unitId: query.data.unit_id,
+      loadId: query.data.load_id,
+      sort: query.data.sort,
+      dir: query.data.dir,
+    };
+    const vendorRows = query.data.bill_type === "driver_bill" ? [] : await listBills(String(user.uuid), query.data.operating_company_id, {
+      ...listOptions,
+      vendorId: query.data.vendor_id,
+      limit: query.data.limit,
+      offset: query.data.offset,
+    });
+    const driverRows = query.data.bill_type === "vendor_bill" ? [] : await withCompanyScope(String(user.uuid), query.data.operating_company_id, async (client) => {
+      const result = await client.query(
+        `SELECT db.id::text, db.bill_number, db.driver_id::text,
+                concat_ws(' ', d.first_name, d.last_name) AS driver_name,
+                db.load_id::text, db.load_number, db.miles_basis, db.rate_per_mile_cents,
+                db.miles_deadhead, db.rate_empty_per_mile_cents, db.gross_amount_cents,
+                db.status, db.settled_in_settlement_id::text,
+                ds.display_id AS settlement_display_id, db.voided_at::text, db.created_at::text
+           FROM driver_finance.driver_bills db
+           LEFT JOIN mdata.drivers d ON d.id = db.driver_id AND d.operating_company_id = db.operating_company_id
+           LEFT JOIN driver_finance.driver_settlements ds ON ds.id = db.settled_in_settlement_id AND ds.operating_company_id = db.operating_company_id
+          WHERE db.operating_company_id = $1::uuid
+            AND ($2::boolean OR (db.status <> 'void' AND db.voided_at IS NULL))
+          ORDER BY db.created_at DESC
+          LIMIT $3 OFFSET $4`,
+        [query.data.operating_company_id, query.data.status === "all" || query.data.status === "voided", query.data.limit, query.data.offset]
+      );
+      return result.rows;
+    });
+
+    const vendorTotalCents = vendorRows.reduce((sum: number, row: { amount_cents?: number | string | null }) => sum + Number(row.amount_cents ?? 0), 0);
+    const driverTotalCents = driverRows.reduce((sum: number, row: { gross_amount_cents?: number | string | null }) => sum + Number(row.gross_amount_cents ?? 0), 0);
+    return {
+      rows: [
+        ...vendorRows.map((bill: unknown) => ({ bill_type: "vendor_bill" as const, bill })),
+        ...driverRows.map((bill: unknown) => ({ bill_type: "driver_bill" as const, bill })),
+      ],
+      totals: {
+        vendor_bill: { count: vendorRows.length, amount_cents: vendorTotalCents },
+        driver_bill: { count: driverRows.length, amount_cents: driverTotalCents },
+      },
     };
   });
 

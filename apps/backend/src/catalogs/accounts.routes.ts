@@ -124,6 +124,7 @@ const mergeAccountsBodySchema = z.object({
 
 const ACCOUNT_SELECT_COLS = `
   id, account_number, account_name, account_type, account_subtype, detail_type_id, parent_account_id,
+  system_purpose,
   qbo_account_id, qbo_account_qrn, is_postable, currency_code,
   opening_balance_cents, opening_balance_as_of,
   is_locked, notes, operating_company_id,

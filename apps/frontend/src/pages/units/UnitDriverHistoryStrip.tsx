@@ -28,6 +28,28 @@ const COLUMNS: Array<ParityColumn<VehicleDriverHistoryRow>> = [
       row.driver_name ? <EntityLinkOrTombstone kind="driver" id={row.driver_id} name={row.driver_name} noun="Driver" /> : "Unassigned",
   },
   {
+    key: "trailer_number",
+    label: "Trailer",
+    sortable: true,
+    render: (row) => row.trailer_id
+      ? <EntityLinkOrTombstone kind="trailer" id={row.trailer_id} name={row.trailer_number} noun="Trailer" />
+      : "—",
+  },
+  {
+    key: "load_number",
+    label: "Load",
+    sortable: true,
+    render: (row) => row.load_id
+      ? <EntityLinkOrTombstone kind="load" id={row.load_id} name={row.load_number} noun="Load" />
+      : "—",
+  },
+  {
+    key: "driven_miles",
+    label: "Miles",
+    sortable: true,
+    render: (row) => row.driven_miles == null ? "—" : Number(row.driven_miles).toLocaleString(undefined, { maximumFractionDigits: 1 }),
+  },
+  {
     key: "started_at",
     label: "Started",
     sortable: true,

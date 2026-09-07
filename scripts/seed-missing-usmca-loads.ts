@@ -43,6 +43,7 @@ import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import pg from "pg";
 import { bookLoad, type BookLoadInput } from "../apps/backend/src/dispatch/book-load.service.js";
+import { correctOpenDriverBillMileage } from "../apps/backend/src/driver-finance/void-open-driver-bill.service.js";
 import { withCurrentUser } from "../apps/backend/src/auth/db.js";
 import { setScopedCompanyContext } from "../apps/backend/src/_helpers/scoped-company-context.js";
 import { createSettlementDeduction } from "../apps/backend/src/driver-finance/deductions.service.js";
@@ -328,7 +329,69 @@ async function main() {
     try {
       const existing = await client.query<{ id: string }>(`SELECT id::text FROM mdata.loads WHERE operating_company_id = $1::uuid AND load_number = $2 LIMIT 1`, [USMCA_COMPANY_ID, loadNumber]);
       if (existing.rows[0]) {
-        report.push(`CC-3 | SEED ${loadNumber} SKIP | load already exists (id ${existing.rows[0].id}) — never re-booking`);
+        // SETL-TIEOUT-01 (owner order 2026-09-05): the load, stops, and pro forma invoice for
+        // 13512/13513 were already seeded by an earlier pass — never re-booking the load itself.
+        // What was wrong is the driver bill: it was minted before miles_shortest was wired into
+        // this script's bookInput, so the GO-21-B5 override's perLoadMiles fell back to
+        // miles_practical (loaded+empty combined) instead of loaded-only miles, producing a
+        // blended total ($429.39/$248.40) instead of the signed source's exact figure
+        // ($422.46/$244.94). If the existing bill's total doesn't match what THIS (corrected)
+        // data would produce, repair it: void the wrong bill + its settlement lines (real
+        // service function, void-not-delete — see void-open-driver-bill.service.ts) and remint
+        // through the SAME real create-bill code path with the corrected inputs. Never a raw
+        // UPDATE of the dollar amounts in place.
+        const loadedMi = load.loaded_miles ?? 0;
+        const emptyMi = load.empty_miles ?? 0;
+        const loadedRt = load.loaded_rate ?? 0;
+        const emptyRt = load.empty_rate ?? load.loaded_rate ?? 0;
+        const expectedLoadedCents = Math.round(loadedMi * loadedRt * 100);
+        const expectedDeadheadCents = emptyMi > 0 ? Math.round(emptyMi * emptyRt * 100) : 0;
+        const expectedTotalCents = expectedLoadedCents + expectedDeadheadCents;
+
+        const loadId = existing.rows[0].id;
+        const billRes = await client.query<{ id: string; gross_amount_cents: number; driver_id: string; is_sample_data: boolean }>(
+          `SELECT db.id::text, db.gross_amount_cents, db.driver_id::text, ds.is_sample_data
+             FROM driver_finance.driver_bills db
+             LEFT JOIN driver_finance.settlement_lines sl ON sl.source_driver_bill_id = db.id AND sl.is_active = true
+             LEFT JOIN driver_finance.driver_settlements ds ON ds.id = sl.settlement_id
+            WHERE db.operating_company_id = $1::uuid AND db.load_id = $2::uuid AND db.status <> 'void'
+            LIMIT 1`,
+          [USMCA_COMPANY_ID, loadId]
+        );
+        const existingBill = billRes.rows[0];
+        if (!existingBill || Number(existingBill.gross_amount_cents) === expectedTotalCents) {
+          report.push(
+            `CC-3 | SEED ${loadNumber} SKIP | load already exists (id ${loadId}) — never re-booking; bill ${existingBill ? `already ties out ($${(Number(existingBill.gross_amount_cents) / 100).toFixed(2)})` : "absent, not this script's job to mint one standalone"}`
+          );
+          await client.query(`COMMIT`);
+          continue;
+        }
+
+        if (dryRun) {
+          report.push(
+            `CC-3 | SEED ${loadNumber} DRY-RUN REPAIR | bill ${existingBill.id} $${(Number(existingBill.gross_amount_cents) / 100).toFixed(2)} would be voided + reminted at $${(expectedTotalCents / 100).toFixed(2)} (loaded ${loadedMi}mi x $${loadedRt}=$${(expectedLoadedCents / 100).toFixed(2)}, deadhead ${emptyMi}mi x $${emptyRt}=$${(expectedDeadheadCents / 100).toFixed(2)})`
+          );
+          await client.query(`ROLLBACK`);
+          continue;
+        }
+
+        const correction = await correctOpenDriverBillMileage(client, {
+          operatingCompanyId: USMCA_COMPANY_ID,
+          loadId,
+          loadNumber,
+          actorUserId: OWNER_USER_ID,
+          reason: `SETL-TIEOUT-01 repair: bill total $${(Number(existingBill.gross_amount_cents) / 100).toFixed(2)} did not match the signed reconciliation source's $${(expectedTotalCents / 100).toFixed(2)} for load ${loadNumber} (settlement ${load.settlement_ref ?? "?"}, driver leg miles sheet) — the prior bill blended loaded+deadhead miles into one divisor instead of pricing each leg on its own real miles`,
+          milesBasis: loadedMi,
+          ratePerMileCents: Math.round(loadedRt * 100),
+          loadedPayCents: expectedLoadedCents,
+          milesDeadhead: emptyMi > 0 ? emptyMi : null,
+          rateEmptyPerMileCents: emptyMi > 0 ? Math.round(emptyRt * 100) : null,
+          deadheadPayCents: expectedDeadheadCents,
+          isSampleData: existingBill.is_sample_data ?? false,
+        });
+        report.push(
+          `CC-3 | SEED ${loadNumber} REPAIRED | voided bill ${correction.voided_bill_id} ($${(Number(existingBill.gross_amount_cents) / 100).toFixed(2)}) + ${correction.voided_settlement_line_ids.length} line(s) → new bill ${correction.new_bill_id} ($${(correction.new_gross_amount_cents / 100).toFixed(2)}) ties to signed source`
+        );
         await client.query(`COMMIT`);
         continue;
       }
@@ -375,6 +438,7 @@ async function main() {
 
       const tripLinkage = await resolveTripLinkage(client, pool, driverId);
       const rate = load.loaded_rate ?? load.empty_rate ?? null;
+      const loadedMilesForRate = load.loaded_miles ?? 0;
 
       const bookInput: BookLoadInput = {
         requestingUserUuid: OWNER_USER_ID,
@@ -398,6 +462,12 @@ async function main() {
         assigned_trailer_unit_id: trailerId ?? undefined,
         trailer_type: "dry_van",
         miles_practical: (load.loaded_miles ?? 0) + (load.empty_miles ?? 0) || null,
+        // SETL-TIEOUT-01 (2026-09-05): miles_shortest is the LOADED-ONLY figure the GO-21-B5
+        // override's perLoadMiles actually multiplies the rate by (book-load.service.ts) — without
+        // it, perLoadMiles fell back to miles_practical (loaded+deadhead COMBINED, immediately
+        // above), overpricing the loaded leg by the deadhead miles' worth. Measured live on loads
+        // 13512/13513: this produced $429.39/$248.40 against the signed source's $422.46/$244.94.
+        miles_shortest: loadedMilesForRate > 0 ? loadedMilesForRate : null,
         miles_deadhead: load.empty_miles ?? null,
         mileage_source: "History",
         driver_pay_rate_per_mile: rate ?? undefined,

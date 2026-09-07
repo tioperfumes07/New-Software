@@ -59,10 +59,12 @@ export function audit(src) {
     failures.push(`${API_FILE}: PlaidBankTransaction type must declare matched_settlement_display_id`);
   }
 
-  if (!/tx\.matched_bill_id \?[\s\S]{0,120}kind="bill"[\s\S]{0,120}id=\{tx\.matched_bill_id\}[\s\S]{0,120}entityLabel\(tx\.matched_bill_number,\s*tx\.matched_bill_id/.test(src.view)) {
+  // entityLabel() was later split into a more specific visibleDocumentLabel() helper for
+  // real-document-numbered matches (expense/bill) — both are legitimate; accept either name here.
+  if (!/tx\.matched_bill_id \?[\s\S]{0,120}kind="bill"[\s\S]{0,120}id=\{tx\.matched_bill_id\}[\s\S]{0,120}(?:entityLabel|visibleDocumentLabel)\(tx\.matched_bill_number,\s*tx\.matched_bill_id/.test(src.view)) {
     failures.push(`${VIEW_FILE}: transaction row must render a real EntityLink kind="bill" for matched_bill_id`);
   }
-  if (!/kind="bill" id=\{t\.matched_bill_id\} label=\{entityLabel\(t\.matched_bill_number, t\.matched_bill_id, "Bill"\)\}/.test(src.panel)) {
+  if (!/kind="bill" id=\{t\.matched_bill_id\} label=\{(?:entityLabel|visibleDocumentLabel)\(t\.matched_bill_number, t\.matched_bill_id, "Bill"\)\}/.test(src.panel)) {
     failures.push(`${PANEL_FILE}: Plaid table must drill matched bill with its resolved label`);
   }
   if (!/kind="settlement" id=\{t\.matched_settlement_id\} label=\{entityLabel\(t\.matched_settlement_display_id, t\.matched_settlement_id, "Settlement"\)\}/.test(src.panel)) {

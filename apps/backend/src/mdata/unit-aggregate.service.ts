@@ -437,7 +437,7 @@ export async function buildUnitAggregate(
     ? (await getLatestHosClocksByDriver(client as unknown as PgClient, operatingCompanyId)).get(currentDriverId) ?? null
     : null;
 
-  const current_driver = await mapDriverRow(currentDriverRes.rows[0], {
+  let current_driver = await mapDriverRow(currentDriverRes.rows[0], {
     source: currentDriverRes.rows[0]?.source ?? null,
     logged_in_at: currentDriverRes.rows[0]?.logged_in_at ?? null,
     hos_drive_remaining_min: currentDriverEld?.drive_remaining_min ?? null,
@@ -456,6 +456,9 @@ export async function buildUnitAggregate(
         l.status,
         l.customer_id::text AS customer_id,
         c.customer_name AS customer,
+        d.id::text AS driver_id,
+        d.first_name AS driver_first_name,
+        d.last_name AS driver_last_name,
         (
           SELECT NULLIF(TRIM(CONCAT_WS(', ', ls.city, ls.state)), '')
           FROM mdata.load_stops ls
@@ -483,6 +486,18 @@ export async function buildUnitAggregate(
         FROM mdata.get_customer_same_company(l.customer_id, l.operating_company_id) scoped_customer
         LIMIT 1
       ) c ON TRUE
+      LEFT JOIN mdata.drivers d
+        ON d.id = l.assigned_primary_driver_id
+       AND (
+         d.operating_company_id = l.operating_company_id
+         OR EXISTS (
+           SELECT 1 FROM mdata.driver_company_authorizations unit_load_driver_dca
+           WHERE unit_load_driver_dca.driver_id = d.id
+             AND unit_load_driver_dca.company_id = l.operating_company_id
+             AND unit_load_driver_dca.is_authorized = true
+             AND unit_load_driver_dca.deactivated_at IS NULL
+         )
+       )
       WHERE l.assigned_unit_id = $1::uuid
         AND l.operating_company_id = $2::uuid
         AND l.soft_deleted_at IS NULL
@@ -493,6 +508,16 @@ export async function buildUnitAggregate(
     [unitId, operatingCompanyId]
   );
   const current_load = loadRes.rows[0] ?? null;
+  if (!current_driver && current_load?.driver_id) {
+    current_driver = await mapDriverRow({
+      id: current_load.driver_id,
+      first_name: current_load.driver_first_name,
+      last_name: current_load.driver_last_name,
+    }, {
+      source: "dispatch_load",
+      logged_in_at: null,
+    });
+  }
 
   const woRes = await client.query(
     `

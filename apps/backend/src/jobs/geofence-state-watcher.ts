@@ -13,12 +13,14 @@ import type { FastifyInstance } from "fastify";
 import { withLuciaBypass } from "../auth/db.js";
 import { USMCA_COMPANY_ID } from "../org/companies.routes.js";
 import { fetchActiveGeofences, processGpsBatch } from "../integrations/samsara/geofences/state-machine/transitions.service.js";
+import { backfillGeofenceEventsFromPositions } from "../telematics/geofence-events-backfill.service.js";
 
 const WORKER_NAME = "integrations.geofence_state_watcher";
 const DEFAULT_INTERVAL_MS = 5 * 60 * 1000;
 const STALE_POSITION_MINUTES = 30;
 
 let timer: NodeJS.Timeout | undefined;
+let historicalReplayComplete = false;
 
 type DbClient = {
   query: <T = Record<string, unknown>>(sql: string, values?: unknown[]) => Promise<{ rows: T[] }>;
@@ -95,6 +97,11 @@ async function tick(app: FastifyInstance) {
     // USMCA only — TRANSPORTATION (91e0bf0a-...) and TRUCKING (b49a737b-...) stay frozen per
     // standing law; this watcher used to walk every company in org.companies.
     await client.query(`SELECT set_config('app.operating_company_id', $1::text, true)`, [USMCA_COMPANY_ID]);
+    if (!historicalReplayComplete) {
+      const replay = await backfillGeofenceEventsFromPositions(client as DbClient, USMCA_COMPANY_ID);
+      app.log.info(replay, `[${WORKER_NAME}] seven-day event replay complete`);
+      historicalReplayComplete = true;
+    }
     const geofences = await fetchActiveGeofences(client as DbClient, USMCA_COMPANY_ID);
     const { positions, staleSkipped } = await fetchLatestPositions(client as DbClient, USMCA_COMPANY_ID);
     geofenceCount = geofences.length;

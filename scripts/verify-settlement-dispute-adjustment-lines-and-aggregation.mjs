@@ -25,24 +25,38 @@ const WRITER_FILES = [
   "apps/backend/src/driver-finance/settlement-disputes-p6.service.ts",
 ];
 const AGG_FILE = "apps/backend/src/driver-finance/settlements-load-bookended.service.ts";
-const AGG_MARKER = "CASE WHEN line_type IN ('reimbursement', 'dispute_adjustment') THEN amount ELSE 0 END";
-const WRITE_MARKER = "INSERT INTO driver_finance.settlement_lines (settlement_id, line_type, description, amount)";
+const BUCKETS_FILE = "apps/backend/src/driver-finance/settlement-line-buckets.ts";
+// disputes.routes.ts kept the original single-line VALUES tuple; settlement-dispute.service.ts and
+// settlement-disputes-p6.service.ts were hardened (ACCT-F5619 follow-up) to a multi-line SELECT ...
+// FROM driver_finance.driver_settlements shape that also propagates is_sample_data + entity scope.
+// Either shape satisfies "writes a real settlement_lines('dispute_adjustment') row".
+const WRITE_MARKER_RE =
+  /INSERT INTO driver_finance\.settlement_lines\s*\(\s*\n?\s*settlement_id, line_type, description, amount(?:, is_sample_data)?\s*\n?\s*\)/;
 const TYPE_MARKER = "'dispute_adjustment'";
+// aggregateSettlementTotals now delegates to the shared settlementReimbursementsSumSql() helper
+// (settlement-line-buckets.ts) — the SAME expression the settlements LIST read uses — rather than
+// an inline CASE string repeated per call site.
+const AGG_MARKER = "${settlementReimbursementsSumSql()} AS reimbursements";
+const BUCKET_MARKER = 'SETTLEMENT_REIMBURSEMENT_LINE_TYPES = ["reimbursement", "dispute_adjustment"]';
 
-// `overrides` maps a relative file path (one of WRITER_FILES / AGG_FILE) to an alternate absolute
-// path to read instead of path.join(ROOT, file) — the copy-to-temp mechanism a selftest uses to
-// probe a mutation without ever writing the real tracked file.
+// `overrides` maps a relative file path (one of WRITER_FILES / AGG_FILE / BUCKETS_FILE) to an
+// alternate absolute path to read instead of path.join(ROOT, file) — the copy-to-temp mechanism a
+// selftest uses to probe a mutation without ever writing the real tracked file.
 function assertAll(overrides = {}) {
   const problems = [];
   for (const file of WRITER_FILES) {
     const src = fs.readFileSync(overrides[file] ?? path.join(ROOT, file), "utf8");
-    if (!src.includes(WRITE_MARKER) || !src.includes(TYPE_MARKER)) {
+    if (!WRITE_MARKER_RE.test(src) || !src.includes(TYPE_MARKER)) {
       problems.push(`${file}: does not write a settlement_lines('dispute_adjustment') row on approval.`);
     }
   }
   const aggSrc = fs.readFileSync(overrides[AGG_FILE] ?? path.join(ROOT, AGG_FILE), "utf8");
   if (!aggSrc.includes(AGG_MARKER)) {
-    problems.push(`${AGG_FILE}: aggregateSettlementTotals no longer folds dispute_adjustment into the reimbursements bucket.`);
+    problems.push(`${AGG_FILE}: aggregateSettlementTotals no longer folds dispute_adjustment into the reimbursements bucket (shared settlementReimbursementsSumSql() helper call missing).`);
+  }
+  const bucketsSrc = fs.readFileSync(overrides[BUCKETS_FILE] ?? path.join(ROOT, BUCKETS_FILE), "utf8");
+  if (!bucketsSrc.includes(BUCKET_MARKER)) {
+    problems.push(`${BUCKETS_FILE}: SETTLEMENT_REIMBURSEMENT_LINE_TYPES no longer includes both 'reimbursement' and 'dispute_adjustment'.`);
   }
   return problems;
 }
@@ -58,7 +72,7 @@ async function selftest() {
     p6Path,
     (p6Src) => {
       const droppedWrite = p6Src.replace(
-        /\n\s*\/\/ ACCT-F5619[\s\S]*?VALUES \(\$1::uuid, 'dispute_adjustment', \$2, \$3::numeric\)\n\s*`,\n\s*\[dispute\.settlement_id, `Dispute adjustment \(\$\{nextCanonical\}\)`, adjustment \/ 100\]\n\s*\);\n/,
+        /\n\s*\/\/ ACCT-F5619[\s\S]*?SELECT ds\.id, 'dispute_adjustment', \$2, \$3::numeric, ds\.is_sample_data[\s\S]*?\[\s*\n\s*dispute\.settlement_id,\s*\n\s*`Dispute adjustment \(\$\{nextCanonical\}\)`,\s*\n\s*adjustment \/ 100,\s*\n\s*input\.operating_company_id,\s*\n\s*\]\s*\n\s*\);\n/,
         "\n"
       );
       if (droppedWrite === p6Src) {

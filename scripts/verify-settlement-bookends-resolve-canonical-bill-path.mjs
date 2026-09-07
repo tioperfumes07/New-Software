@@ -87,12 +87,41 @@ function check(src) {
   return failures;
 }
 
+// MEGA-TOUR-RULING (CC-2, 2026-09-06) fixed openLoadBookendedSettlement's reuse-detection query
+// (well ABOVE the bookend CTE this guard targets) by adding its OWN, unrelated
+// "LEFT JOIN driver_finance.driver_bills db ... COALESCE(db.load_id, sl.load_id)" shape, for a
+// completely different query. selftest()'s mutations below used to run src.replace(...) against
+// the WHOLE FILE (first-match-only for the non-global regexes) — that was safe only as long as this
+// exact substring appeared exactly once in the file. It no longer does. A non-global replace now
+// silently mutates the WRONG occurrence (the new reuse query, not the bookend CTE this guard
+// actually checks), leaving the real target untouched and making the guard SELFTEST FAIL with a
+// false "stayed green" verdict — the guard would have gone completely blind to a real regression in
+// its own target while reporting nothing wrong with itself. Fix: scope every mutation to the exact
+// same "covered" CTE window check() itself inspects (found the identical way: lastIndexOf("WITH
+// covered AS", ...) up to the UPDATE), so a mutation can never land on an unrelated occurrence
+// anywhere else in the file, now or in the future.
+function coveredCteWindow(src) {
+  const upd = src.indexOf("UPDATE driver_finance.driver_settlements s");
+  if (upd === -1) return null;
+  const cte = src.lastIndexOf("WITH covered AS", upd);
+  if (cte === -1) return null;
+  return { start: cte, end: upd, text: src.slice(cte, upd) };
+}
+
+function mutateCoveredCte(src, regex, replacement) {
+  const win = coveredCteWindow(src);
+  if (!win) return src;
+  const mutatedWindow = win.text.replace(regex, replacement);
+  if (mutatedWindow === win.text) return src; // inert — caller checks for this
+  return src.slice(0, win.start) + mutatedWindow + src.slice(win.end);
+}
+
 function selftest() {
   const src = readFileSync(join(ROOT, SVC), "utf8");
   let probes = 0;
 
   // 1. COALESCE reverted to the bare denormalized column must RED.
-  const m1 = src.replace(/COALESCE\(db\.load_id, sl\.load_id\)/g, "sl.load_id");
+  const m1 = mutateCoveredCte(src, /COALESCE\(db\.load_id, sl\.load_id\)/g, "sl.load_id");
   if (m1 === src) {
     console.error("SELFTEST INERT: the COALESCE mutation did not apply — the guard proves nothing.");
     process.exit(1);
@@ -104,7 +133,7 @@ function selftest() {
   probes++;
 
   // 2. LEFT JOIN downgraded to INNER JOIN must RED (coverage shrinks instead of widening).
-  const m2 = src.replace(/LEFT JOIN driver_finance\.driver_bills db/, "JOIN driver_finance.driver_bills db");
+  const m2 = mutateCoveredCte(src, /LEFT JOIN driver_finance\.driver_bills db/, "JOIN driver_finance.driver_bills db");
   if (m2 === src) {
     console.error("SELFTEST INERT: the LEFT-JOIN mutation did not apply.");
     process.exit(1);

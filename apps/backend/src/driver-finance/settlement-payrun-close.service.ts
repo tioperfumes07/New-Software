@@ -46,6 +46,7 @@ import {
 } from "./escrow-resolver.service.js";
 import { resolveSettlementMinNet } from "./settlement-deduction-cap.service.js";
 import { stampTripClosedForBookendedSettlement } from "./settlements-load-bookended.service.js";
+import { closeCompanySettlementAlongsideDriverSettlement } from "../accounting/company-settlement-close.service.js";
 
 import {
   SETTLEMENT_GL_POSTING_FLAG_KEY,
@@ -87,7 +88,8 @@ export type PayRunCloseErrorCode =
   | "NET_PAY_FLOOR_BREACH"
   | "UNBALANCED_ENTRY"
   | "SETTLEMENT_ALREADY_POSTED_BY_OTHER_POSTER"
-  | "OUTSTANDING_LOAN_DECISION_REQUIRED";
+  | "OUTSTANDING_LOAN_DECISION_REQUIRED"
+  | "SETTLEMENT_HAS_NO_LOAD_ACTIVITY";
 
 export class SettlementPayRunError extends Error {
   code: PayRunCloseErrorCode;
@@ -201,6 +203,15 @@ async function loadOtherDeductionsByRole(
   operatingCompanyId: string,
   settlementId: string
 ): Promise<Map<string, number>> {
+  // ROUND 16.24 (found live, not asked for): this query had NO voided_at filter — a duplicate or
+  // out-of-entity deduction voided AFTER being attached to a settlement (DED-DUP / TRANSPORTATION-
+  // NOT-USMCA quarantine / SETL-DED-GL retype all leave applied_to_settlement_id set, per void-not-
+  // delete) was still summed here and credited into the JE, understating the driver's real net pay.
+  // Live-measured impact across the 13 already-posted USMCA settlements: 8 of them wrongly included
+  // $535.25 total of voided 'other'-typed rows (S-13642 $10, S-13643 $120, S-13645 $20, S-13646 $10,
+  // S-13647 $320, S-13648 $35.25, S-13650 $10, S-13652 $10) — reported to the owner, not corrected
+  // here (a posted JE is WORM; the correction is a driver-favorable credit on a future settlement,
+  // gated on the owner's read, exactly like every other settlement money correction this session).
   const res = await client.query<{ deduction_type: string; bucket_type: string | null; amount_cents: string }>(
     `
       SELECT dsd.deduction_type, ddb.bucket_type, dsd.amount_cents::bigint AS amount_cents
@@ -208,6 +219,7 @@ async function loadOtherDeductionsByRole(
       LEFT JOIN driver_finance.driver_deduction_buckets ddb ON ddb.id = dsd.bucket_id
       WHERE dsd.operating_company_id = $1::uuid
         AND dsd.applied_to_settlement_id = $2::uuid
+        AND dsd.voided_at IS NULL
     `,
     [operatingCompanyId, settlementId]
   );
@@ -461,6 +473,31 @@ export async function closeSettlementPayRun(
       throw new SettlementPayRunError(
         "SETTLEMENT_NOT_POSTABLE",
         `Settlement ${settlement.display_id ?? settlement.id} is not finalized/locked (status=${settlement.status})`
+      );
+    }
+
+    // ROUND 16.24 item 3 — a settlement that never actually ran a load (never touched the Laredo
+    // yard) must never post a real JE, regardless of what its stored gross_pay/net_pay columns say.
+    // Checked directly against settlement_lines' own load_id (the same real-load-membership signal
+    // buildCompanySettlementReport/materializeSettlementLines already use), not the settlement's
+    // own possibly-stale header figures — a $0 shell (e.g. a cancelled-load settlement) would
+    // otherwise only be caught later by assertBalanced's generic "debits<=0" refusal, which never
+    // names WHY. This fails closed with a clear, specific reason instead.
+    const loadActivity = await client.query<{ n: string }>(
+      `
+        SELECT count(*)::text AS n
+          FROM driver_finance.settlement_lines sl
+         WHERE sl.settlement_id = $1::uuid
+           AND sl.is_active = true
+           AND sl.line_type IN ('earnings', 'deadhead_pay')
+           AND sl.load_id IS NOT NULL
+      `,
+      [settlementId]
+    );
+    if (Number(loadActivity.rows[0]?.n ?? 0) === 0) {
+      throw new SettlementPayRunError(
+        "SETTLEMENT_HAS_NO_LOAD_ACTIVITY",
+        `Settlement ${settlement.display_id ?? settlement.id} never touched the Laredo yard — no active earnings/deadhead_pay line carries a real load_id — refusing to post`
       );
     }
 
@@ -816,6 +853,20 @@ export async function closeSettlementPayRun(
           actorUserId: actor.userId,
         });
       }
+      // ROUND 16.2 CLOSE-CREATES-COMPANY-SETTLEMENT (owner 2026-09-06 20:3xZ) — "one close, two
+      // settlements" (25-TASK #4) was wired into the driver-PWA tour-close path but NOT into this
+      // payrun-close path — the exact path SETL-CLOSE-POST-A's real --apply calls. Same rule as
+      // tour-close.service.ts: whenever the driver settlement ends up closed (freshly stamped now,
+      // or already closed from an earlier call), the company settlement must exist alongside it.
+      // Idempotent (find-or-create by exact period, at-most-one-link junction) — safe to call on
+      // every re-entry, never a second computation.
+      if (settlement.settlement_model === "load_bookended" && (trip_close_stamp?.stamped || settlement.trip_closed_at)) {
+        await closeCompanySettlementAlongsideDriverSettlement(client, {
+          operatingCompanyId: opco,
+          driverSettlementId: settlementId,
+          actorUserId: actor.userId,
+        });
+      }
       return {
         result: "posted" as const,
         posting_enabled: true,
@@ -973,6 +1024,19 @@ export async function closeSettlementPayRun(
       [payrunRunId, opco, je.id]
     );
 
+    // SETL-POST-01 (lead ROUND 13, 2026-09-06): migration 202607520000 added driver_settlements.
+    // posted_at/posted_by_user_id anticipating this exact stamp ("posted_at <- post UPDATE (now())")
+    // but the write never landed in either live poster — a settlement genuinely posted through THIS
+    // path still read posted_at IS NULL forever. COALESCE guards a re-entrant call (the idempotency
+    // claim above already prevents a double-post; this only protects against overwriting a real
+    // timestamp if this branch is ever reached twice for the same run).
+    await client.query(
+      `UPDATE driver_finance.driver_settlements
+          SET posted_at = COALESCE(posted_at, now()), posted_by_user_id = COALESCE(posted_by_user_id, $3::uuid)
+        WHERE id = $1::uuid AND operating_company_id = $2::uuid`,
+      [settlementId, opco, actor.userId]
+    );
+
     // ACCT-R-01: keep accounting.escrow_accounts.balance_cents (the GL-linked liability balance
     // releaseDriverEscrowSeparation() trusts) in sync with the driver_finance.escrow_balances /
     // escrow_ledger contribution just recorded above. The JE leg already credited the driver's escrow
@@ -1028,6 +1092,16 @@ export async function closeSettlementPayRun(
       trip_close_stamp = await stampTripClosedForBookendedSettlement(client, {
         settlementId,
         operatingCompanyId: opco,
+        actorUserId: actor.userId,
+      });
+    }
+    // ROUND 16.2 CLOSE-CREATES-COMPANY-SETTLEMENT — same rule as the idempotent-reentry branch
+    // above: whenever the driver settlement ends up closed, the company settlement must exist
+    // alongside it, in this SAME transaction (a failure here rolls back the whole payrun close).
+    if (settlement.settlement_model === "load_bookended" && (trip_close_stamp?.stamped || settlement.trip_closed_at)) {
+      await closeCompanySettlementAlongsideDriverSettlement(client, {
+        operatingCompanyId: opco,
+        driverSettlementId: settlementId,
         actorUserId: actor.userId,
       });
     }

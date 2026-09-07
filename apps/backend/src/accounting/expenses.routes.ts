@@ -9,6 +9,7 @@ import { generateExpenseNumber } from "../expense-attribution/expense-number.js"
 import { emitAccountingSpineEvent } from "./accounting-spine-emit.js";
 import { resolveExpenseCategoryId } from "./expense-category-catalog.js";
 import { postSourceTransaction, reversePostedSourceTransactionInClientTx, PostingEngineError } from "./posting-engine.service.js";
+import { expenseOpenTourLoadId, TOUR_OPEN_HOLD_REASON } from "./tour-open-gate.service.js";
 import { todayIso } from "./void.service.js";
 import { canVoid, isVoidEnforcementEnabled } from "./void.service.js";
 import { canVoidCancel } from "../lib/authz/void-cancel-authz.js";
@@ -123,6 +124,10 @@ const createExpenseBodySchema = z.object({
   // FAIL-F2 / ACCT-F262 — without this the flag could not be SUPPLIED at all, so the writer below had
   // nothing to write. Optional so existing callers are unchanged; only an explicit true marks sample.
   is_sample_data: z.boolean().optional(),
+  // SET-14 (ROUND 16.26) — two INDEPENDENT flags per cost row, migration 202613930000. Optional,
+  // default false server-side when omitted; a row can be neither, either, or both.
+  is_reimbursable: z.boolean().optional(),
+  is_company_expense: z.boolean().optional(),
   payment_account_uuid: z.string().uuid().optional(),
   // HARD cross-module link (maintenance): persist the WO + unit id as a real FK, not just a memo string.
   work_order_id: z.string().uuid().optional().nullable(),
@@ -220,6 +225,10 @@ export type ExpenseListRow = {
   status: string;
   posting_status: string;
   memo: string | null;
+  // REG-PARSE-DATA (ROUND 11, additive, 2026-09-06) — structured fields the seed's composite memo
+  // string parsed to for display only; the register reads these first, the parser is fallback-only.
+  merchant_address: string | null;
+  source_settlement_ref: string | null;
   load_id: string | null;
   vendor_uuid: string | null;
   driver_uuid: string | null;
@@ -353,7 +362,12 @@ export async function queryExpensesList(
         e.total_amount_cents::text                   AS total_amount_cents,
         e.status                                     AS status,
         e.posting_status                             AS posting_status,
+        e.posting_hold_reason                        AS posting_hold_reason,
         e.memo                                       AS memo,
+        -- REG-PARSE-DATA (ROUND 11, additive, 2026-09-06) — structured fields backfilled from the
+        -- seed's composite memo string; the register reads these first, parser is fallback-only.
+        e.merchant_address                           AS merchant_address,
+        e.source_settlement_ref                      AS source_settlement_ref,
         e.load_id::text                              AS load_id,
         e.vendor_uuid::text                          AS vendor_uuid,
         e.driver_uuid::text                          AS driver_uuid,
@@ -391,9 +405,32 @@ export async function queryExpensesList(
             AND rm.match_state IN ('auto_matched', 'user_matched')
         )                                            AS is_reconciled,
         ${EXPENSE_MATCHED_BANK_TRANSACTION_ID_SQL}   AS matched_bank_transaction_id,
-        ${EXPENSE_MATCHED_BANK_TRANSACTION_LABEL_SQL} AS matched_bank_transaction_description
+        ${EXPENSE_MATCHED_BANK_TRANSACTION_LABEL_SQL} AS matched_bank_transaction_description,
+        -- LDT-1 (2026-09-06, lead): the Load Costs cards render Paid-with, Category and the receipt count
+        -- straight from this list — no second read path. Additive columns, nullable, no filter change.
+        pa.account_number                            AS payment_account_number,
+        pa.account_name                              AS payment_account_name,
+        ca.account_number                            AS category_account_number,
+        ca.account_name                              AS category_account_name,
+        (
+          SELECT COUNT(*)::int
+          FROM documents.attachments att
+          WHERE att.operating_company_id = e.operating_company_id
+            AND att.entity_type = 'expense'
+            AND att.entity_id = e.id
+            AND att.is_deleted = false
+        )                                            AS attachment_count
       FROM accounting.expenses e
       LEFT JOIN mdata.vendors v ON v.id = e.vendor_uuid AND v.operating_company_id = e.operating_company_id
+      LEFT JOIN catalogs.accounts pa ON pa.id = e.payment_account_uuid AND pa.operating_company_id = e.operating_company_id
+      LEFT JOIN LATERAL (
+        SELECT acc.account_number, acc.account_name
+        FROM accounting.expense_lines el
+        JOIN catalogs.accounts acc ON acc.id = el.expense_account_uuid
+        WHERE el.expense_id = e.id
+        ORDER BY el.line_sequence ASC
+        LIMIT 1
+      ) ca ON true
       LEFT JOIN mdata.drivers dr ON dr.id = e.driver_uuid AND dr.operating_company_id = e.operating_company_id
       LEFT JOIN mdata.loads l ON l.id = e.load_id AND l.operating_company_id = e.operating_company_id
       LEFT JOIN mdata.equipment tr ON tr.id = e.trailer_id
@@ -550,7 +587,10 @@ export async function registerExpenseRoutes(app: FastifyInstance) {
             e.total_amount_cents::text                   AS total_amount_cents,
             e.status                                     AS status,
             e.posting_status                             AS posting_status,
+            e.posting_hold_reason                        AS posting_hold_reason,
             e.memo                                       AS memo,
+            e.merchant_address                           AS merchant_address,
+            e.source_settlement_ref                      AS source_settlement_ref,
             -- VIS-01: the DETAIL payload never exposed voided_at/void_reason at all (list-page callers
             -- can infer void from status='void' alone, but the detail page needs the date + reason for
             -- the top-of-page VoidedBanner -- same fields invoices.routes.ts already returns).
@@ -798,6 +838,15 @@ export async function registerExpenseRoutes(app: FastifyInstance) {
         // `true` marks sample.
         columns.push(`is_sample_data`);
         values.push(body.is_sample_data === true);
+
+        // SET-14 (ROUND 16.26) — two independent flags per cost row: is_reimbursable (owed back
+        // to the driver who fronted it) and is_company_expense (a direct company cost). Same
+        // optional/default-false-on-omit treatment as is_sample_data above — a caller that omits
+        // either keeps today's behaviour exactly (both false), never a silent re-classification.
+        columns.push(`is_reimbursable`);
+        values.push(body.is_reimbursable === true);
+        columns.push(`is_company_expense`);
+        values.push(body.is_company_expense === true);
 
         if (hasVendor) {
           columns.push(`vendor_uuid`);
@@ -1272,10 +1321,29 @@ export async function registerExpenseRoutes(app: FastifyInstance) {
       const expenseId = created.expense_id ?? "";
       let posting_status: "posted" | "unposted" = "unposted";
       let journal_entry_id: string | null = null;
+      let posting_hold_reason: string | null = null;
       if (expenseId && created.category_account_id && created.has_payment_account) {
-        const flagOn = await withCompanyScope(user.uuid, body.operating_company_id, (client) =>
-          isEnabled(client, EXPENSE_GL_POSTING_FLAG_KEY, { operating_company_id: body.operating_company_id, user_uuid: String(user.uuid) })
+        // ACC-50 (LAW §2, ROUND 5) — "open tour posts nothing." Checked BEFORE the posting flag:
+        // an expense on a still-open tour must never post even when EXPENSE_GL_POSTING_ENABLED is
+        // on. Held here means posting_status stays 'unposted' with a named reason instead of the
+        // engine ever being called — same shape as the flag-off path, just with an honest cause.
+        const openTourLoadId = await withCompanyScope(user.uuid, body.operating_company_id, (client) =>
+          expenseOpenTourLoadId(client, body.operating_company_id, expenseId)
         );
+        if (openTourLoadId) posting_hold_reason = TOUR_OPEN_HOLD_REASON;
+        if (openTourLoadId) {
+          await withCompanyScope(user.uuid, body.operating_company_id, (client) =>
+            client.query(
+              `UPDATE accounting.expenses SET posting_hold_reason=$2, updated_at=now() WHERE id=$1::uuid AND operating_company_id=$3::uuid`,
+              [expenseId, TOUR_OPEN_HOLD_REASON, body.operating_company_id]
+            )
+          );
+        }
+        const flagOn =
+          !openTourLoadId &&
+          (await withCompanyScope(user.uuid, body.operating_company_id, (client) =>
+            isEnabled(client, EXPENSE_GL_POSTING_FLAG_KEY, { operating_company_id: body.operating_company_id, user_uuid: String(user.uuid) })
+          ));
         if (flagOn) {
           try {
             const posting = await postSourceTransaction(
@@ -1300,7 +1368,7 @@ export async function registerExpenseRoutes(app: FastifyInstance) {
         }
       }
 
-      return reply.code(201).send({ ...payload, posting_status, journal_entry_id });
+      return reply.code(201).send({ ...payload, posting_status, journal_entry_id, posting_hold_reason });
     } catch (error) {
       const code = (error as { code?: string }).code;
       if (code === "23503") return reply.code(400).send({ error: "invalid_foreign_key" });
@@ -1493,6 +1561,15 @@ export async function registerExpenseRoutes(app: FastifyInstance) {
       if (!exp) return { kind: "not_found" as const };
       if (exp.status === "void") return { kind: "not_eligible" as const };
       if (exp.posting_status !== "unposted") return { kind: "already_posted" as const };
+      // ACC-50 (LAW §2) — a manual "Post to GL" click can never override the open-tour hold either.
+      const openTourLoadId = await expenseOpenTourLoadId(client, oci, expenseId);
+      if (openTourLoadId) {
+        await client.query(
+          `UPDATE accounting.expenses SET posting_hold_reason=$2, updated_at=now() WHERE id=$1::uuid AND operating_company_id=$3::uuid`,
+          [expenseId, TOUR_OPEN_HOLD_REASON, oci]
+        );
+        return { kind: "tour_open" as const, load_id: openTourLoadId };
+      }
       // orphan guard (decision 3): no payment account AND no vendor → reject (no orphan payable). Clean 409 here;
       // buildExpenseLines keeps the same guard as the engine-level backstop.
       if (!exp.payment_account_uuid && !exp.vendor_uuid) return { kind: "orphan" as const };
@@ -1512,6 +1589,8 @@ export async function registerExpenseRoutes(app: FastifyInstance) {
     if (pre.kind === "not_eligible") return reply.code(409).send({ error: "expense_not_posting_eligible" });
     if (pre.kind === "already_posted") return reply.code(409).send({ error: "expense_already_posted" });
     if (pre.kind === "orphan") return reply.code(409).send({ error: "expense_orphan_no_payment_account_or_vendor" });
+    if (pre.kind === "tour_open")
+      return reply.code(409).send({ error: "expense_tour_open", posting_hold_reason: TOUR_OPEN_HOLD_REASON, load_id: pre.load_id });
 
     // Step B: post the balanced JE (own tx, idempotent — re-post returns the existing batch).
     let journalEntryId: string;

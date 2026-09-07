@@ -79,7 +79,7 @@ export function collectFkOnCreateProblems(sources = {}) {
     problems.push(`${PATHS.invoices}: invoice INSERT must bind source_load_id`);
   }
   if (
-    !/FROM mdata\.loads\s+WHERE\s+id\s*=\s*\$1::uuid\s+AND\s+operating_company_id\s*=\s*\$2::uuid/.test(invoices)
+    !/FROM mdata\.loads\s+l?\s*WHERE\s+l?\.?id\s*=\s*\$1::uuid\s+AND\s+l?\.?operating_company_id\s*=\s*\$2::uuid/.test(invoices)
   ) {
     problems.push(`${PATHS.invoices}: source_load_id must be validated entity-scoped against mdata.loads`);
   }

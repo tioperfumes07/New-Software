@@ -1978,11 +1978,43 @@ export type VendorRollup = {
   purchases_total_cents: number;
   last_purchase_date: string | null;
   expense_count: number;
+  // VC-LIST-01 (owner ROUND 11): real Open balance (unpaid non-void bills) + Spend MTD/YTD
+  // (bills + expenses) + Last activity (max of either). Optional so a stale/older API response
+  // still typechecks; the list falls back to 0 / null.
+  spend_total_cents?: number;
+  spend_ytd_cents?: number;
+  spend_mtd_cents?: number;
+  last_activity_date?: string | null;
+  open_balance_cents?: number;
 };
 
 export function getVendorRollups(operatingCompanyId: string) {
   const query = new URLSearchParams({ operating_company_id: operatingCompanyId });
   return apiRequest<VendorRollup[]>(`/api/v1/mdata/vendor-rollups?${query.toString()}`);
+}
+
+// ROUND 16.10 (owner 2026-09-06 21:59Z): per-customer days-to-pay + cost-of-finance rollup.
+// late_fee_cents/avg_days_to_pay_us/avg_days_to_pay_factor/avg_days_late are null (never 0) when
+// no real ledger source exists for that customer — LAW §8 "zero is a claim".
+export type CustomerFinanceRollup = {
+  customer_id: string;
+  customer_name: string;
+  invoices_count: number;
+  revenue_cents: number;
+  avg_days_to_pay_us: number | null;
+  avg_days_to_pay_factor: number | null;
+  avg_days_late: number | null;
+  factoring_fee_cents: number;
+  factoring_interest_cents: number;
+  late_fee_cents: number | null;
+  reserve_held_cents: number;
+  finance_cost_total_cents: number;
+  finance_cost_pct: number | null;
+};
+
+export function getCustomerFinanceRollup(operatingCompanyId: string) {
+  const query = new URLSearchParams({ operating_company_id: operatingCompanyId });
+  return apiRequest<CustomerFinanceRollup[]>(`/api/v1/mdata/customer-finance-rollup?${query.toString()}`);
 }
 
 // GO-24: mdata.locations is the live stop-location catalog (FK'd from mdata.load_stops.location_id,

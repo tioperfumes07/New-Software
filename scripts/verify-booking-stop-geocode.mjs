@@ -59,7 +59,13 @@ export function collectProblems(root = ROOT) {
   }
   // Non-blocking by construction: a provider failure must degrade to null, never throw out of
   // this module (every caller already treats "no coordinates" as legitimate state).
-  if (!/catch\s*\{\s*\n?\s*\/\//.test(fallback) && !/catch\s*\{\s*return null/.test(fallback)) {
+  // RG-08 — geocodeAddress evolved into a thin wrapper over geocodeAddressWithEvidence (the
+  // evidence-preserving variant durable backfills use), whose own `catch (error) { return
+  // {ok:false, reason: stableProviderFailureReason(error)} }` is a BOUND catch clause (captures
+  // the error to classify WHY it failed) — a real improvement over a bare `catch {}`, not a
+  // regression. The old regex only matched a bare `catch {`, never `catch (error) {`, so it
+  // false-failed on the better code. Accept an optional parenthesized binding.
+  if (!/catch\s*(?:\([^)]*\))?\s*\{\s*\n?\s*\/\//.test(fallback) && !/catch\s*(?:\([^)]*\))?\s*\{\s*return/.test(fallback)) {
     problems.push(`${FALLBACK_SERVICE}: geocodeAddress must catch provider failures and return null, never throw`);
   }
 

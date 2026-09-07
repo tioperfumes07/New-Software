@@ -247,6 +247,9 @@ export const ACCOUNTING_SUB_NAV_ITEMS: readonly NavItem[] = [
   // Group labels navigate to the primary list (nav-split); chevron opens the dropdown.
   { label: GROUP_LABELS.bills, href: "/accounting/bills", children: childrenOf("bills") },
   { label: GROUP_LABELS.expenses, href: "/accounting/expenses/list", children: childrenOf("expenses") },
+  // NAV-LOAD-COSTS-01 (owner 2026-09-06 04:5xZ "IN ACCOUNTING, WHERE ARE THE TABS?") — Load costs is a top-row leaf,
+  // not only buried under Expenses ▾: it is the same board Dispatch → Load costs opens, with its own tab row.
+  leafOf("/accounting/load-costs"),
   { label: GROUP_LABELS.billpay, href: "/accounting/bill-payments", children: childrenOf("billpay") },
   // ACCT-F5050 — Invoices ▾ peer of Bills / Expenses / Bill payment (group label → list).
   { label: GROUP_LABELS.invoices, href: "/accounting/invoices", children: childrenOf("invoices") },

@@ -301,6 +301,58 @@ export async function registerBankingRoutes(app: FastifyInstance) {
     return { accounts };
   });
 
+  // ── Petty Cash account creation (owner request 2026-09-06) ──────────────────────────────────────────
+  // A Petty Cash account is a REAL banking.bank_accounts row (tile_kind='real'), created manually
+  // (not via Plaid). It holds actual cash. When a check is generated (payBill with payment_method='check'),
+  // the check amount posts a transfer FROM the source bank account TO this account.
+  app.post("/api/v1/banking/accounts/petty-cash", { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } }, async (req, reply) => {
+    const user = currentAuthUser(req, reply);
+    if (!user) return;
+    const body = z.object({
+      operating_company_id: z.string().uuid(),
+      display_name: z.string().trim().min(1).max(120).optional(),
+    }).safeParse(req.body ?? {});
+    if (!body.success) return sendValidationError(reply, body.error);
+    const companyId = body.data.operating_company_id;
+    await assertCompanyMembership(String(user.uuid), companyId);
+
+    try {
+      const account = await withCompanyScope(user.uuid, companyId, async (client) => {
+        // Idempotent: if a petty cash account already exists for this entity, return it.
+        const existing = await client.query<{ id: string }>(
+          `SELECT id FROM banking.bank_accounts WHERE operating_company_id = $1::uuid AND is_petty_cash = true AND is_active = true AND deactivated_at IS NULL LIMIT 1`,
+          [companyId]
+        );
+        if (existing.rows[0]) return { id: existing.rows[0].id, already_existed: true };
+
+        const inserted = await client.query<{ id: string }>(
+          `
+            INSERT INTO banking.bank_accounts (
+              operating_company_id, account_name, display_name, account_type,
+              current_balance_cents, available_balance_cents, currency_code,
+              is_active, sync_status, is_petty_cash
+            )
+            VALUES ($1, $2, $2, 'petty_cash', 0, 0, 'USD', true, 'active', true)
+            RETURNING id
+          `,
+          [companyId, body.data.display_name ?? "Petty Cash"]
+        );
+        await appendCrudAudit(
+          client,
+          String(user.uuid),
+          "banking.bank_accounts.petty_cash_created",
+          { resource_type: "banking.bank_accounts", resource_id: inserted.rows[0].id, operating_company_id: companyId },
+          "info",
+          "P5-T1.1-PETTY-CASH"
+        );
+        return { id: inserted.rows[0].id, already_existed: false };
+      });
+      return reply.code(201).send({ account });
+    } catch (error) {
+      return reply.code(500).send({ error: "petty_cash_create_failed", message: String((error as Error)?.message ?? "") });
+    }
+  });
+
   app.post("/api/v1/banking/accounts/visibility", { config: { rateLimit: { max: 60, timeWindow: "1 minute" } } }, async (req, reply) => {
     const user = currentAuthUser(req, reply);
     if (!user) return;

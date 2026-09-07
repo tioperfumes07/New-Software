@@ -44,6 +44,25 @@ function stripComments(src) {
 }
 
 /**
+ * BANK-MATCH-QBO-c (2026-09-06) added buildMatchCandidateColumns(), a SEPARATE column-array
+ * factory for the match-candidates register, defined earlier in the file than the main
+ * transactions register's own columns. It happens to reuse the plain key "description" (a
+ * different table, same generic column name) WITHOUT an explicit `sortable: true` (ParityColumn
+ * defaults to sortable — the literal string just isn't needed there). columnWindow()'s .match()
+ * is non-global and returns the FIRST occurrence in the file, so once a second "description" key
+ * exists upstream, this guard silently started checking the WRONG column and never noticed. Strip
+ * that helper's body out before scanning so this guard always checks the MAIN register's columns,
+ * regardless of how many other column-array factories the file grows.
+ */
+function stripMatchCandidateColumnsHelper(src) {
+  const start = src.indexOf("function buildMatchCandidateColumns(");
+  if (start === -1) return src;
+  const end = src.indexOf("\n}\n", start);
+  if (end === -1) return src;
+  return src.slice(0, start) + src.slice(end + 3);
+}
+
+/**
  * Window around a ParityColumn def. Require `label:` after the key so we don't match
  * unrelated state like `useState({ key: "date", dir: "desc" })`.
  */
@@ -55,7 +74,9 @@ function columnWindow(src, columnKey) {
 const SORT_COLUMNS = ["date", "description", "amount", "payee"];
 
 /** The assertions, each a predicate over the comment-stripped source. */
-export function checksFor(src) {
+export function checksFor(rawSrc) {
+  // Column-key lookups must target the MAIN register only — see stripMatchCandidateColumnsHelper.
+  const src = stripMatchCandidateColumnsHelper(rawSrc);
   const cols = Object.fromEntries(SORT_COLUMNS.map((k) => [k, columnWindow(src, k)]));
 
   const headerExistsAndSortable = SORT_COLUMNS.every(

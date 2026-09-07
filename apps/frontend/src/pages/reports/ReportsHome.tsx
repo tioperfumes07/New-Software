@@ -233,6 +233,7 @@ export function ReportsHomePage() {
                   ["fuel-reconciliation", "Fuel reconciliation"],
                   ["maintenance-cost-per-unit", "Maintenance cost per unit"],
                   ["geofence-dwell", "Geofence dwell report"],
+                  ["posted-while-tour-open", "Posted while tour open"],
                   ["scheduled-reports", "Default report subscriptions"],
                 ] as const
               ).map(([id, label]) => (

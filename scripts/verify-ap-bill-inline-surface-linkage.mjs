@@ -15,9 +15,13 @@ const failures = (a = allocation, s = settlements) => [
   // is no legitimate per-id drill target for an open (unsettled) driver bill.
   [
     "open driver bill honest label (never kind=bill)",
+    // entityLabel() was later split into a more specific visibleDocumentLabel() helper for
+    // real-document-numbered text (bill/expense numbers) — either name keeps this honest (plain
+    // text, no EntityLink wrap).
     /<EntityLink[\s\S]{0,200}?kind\s*=\s*["']bill["']/.test(s)
       ? false
-      : s.includes('{entityLabel(bill.bill_number, bill.id, "Driver bill")}'),
+      : s.includes('{entityLabel(bill.bill_number, bill.id, "Driver bill")}') ||
+        s.includes('{visibleDocumentLabel(bill.bill_number, bill.id, "Driver bill")}'),
   ],
 ].filter(([, ok]) => !ok).map(([name]) => name);
 if (process.argv.includes("--selftest")) {
@@ -26,8 +30,8 @@ if (process.argv.includes("--selftest")) {
     !failures(
       allocation,
       settlements.replace(
-        '{entityLabel(bill.bill_number, bill.id, "Driver bill")}',
-        '<EntityLink kind="bill" id={bill.id} label={entityLabel(bill.bill_number, bill.id, "Driver bill")} />'
+        '{visibleDocumentLabel(bill.bill_number, bill.id, "Driver bill")}',
+        '<EntityLink kind="bill" id={bill.id} label={visibleDocumentLabel(bill.bill_number, bill.id, "Driver bill")} />'
       )
     ).includes("open driver bill honest label (never kind=bill)")
   ) {
@@ -35,7 +39,7 @@ if (process.argv.includes("--selftest")) {
     process.exit(1);
   }
   if (
-    !failures(allocation, settlements.replace('{entityLabel(bill.bill_number, bill.id, "Driver bill")}', "")).includes(
+    !failures(allocation, settlements.replace('{visibleDocumentLabel(bill.bill_number, bill.id, "Driver bill")}', "")).includes(
       "open driver bill honest label (never kind=bill)"
     )
   ) {

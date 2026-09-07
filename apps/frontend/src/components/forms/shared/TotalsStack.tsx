@@ -46,7 +46,7 @@ export function TotalsStack({
           ${taxAmount.toFixed(2)}
         </span>
       </div>
-      <div className="totals-row grand flex items-center justify-end gap-6 bg-[#1b2333] px-[18px] py-3 text-white">
+      <div className="totals-row grand flex items-center justify-end gap-6 bg-[#14314F] px-[18px] py-3 text-white">
         <span className="font-semibold">{grandLabel}</span>
         <span className="text-xs font-semibold" data-testid="totals-stack-grand-amount">
           ${total.toFixed(2)}

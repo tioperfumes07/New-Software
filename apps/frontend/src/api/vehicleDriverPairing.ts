@@ -9,6 +9,11 @@ export type VehicleDriverHistoryRow = {
   started_at: string;
   ended_at: string | null;
   source: "samsara_webhook" | "manual_override" | "reconciled";
+  load_id: string | null;
+  load_number: string | null;
+  trailer_id: string | null;
+  trailer_number: string | null;
+  driven_miles: number | null;
 };
 
 export type VehicleDriverOverlapRow = {

@@ -15,7 +15,6 @@
 import { entityLabel } from "../../lib/entity-label";
 import { formatDateUS } from "../../lib/formatDate";
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
   getFactoringSummary,
@@ -37,6 +36,7 @@ import { ParityTable, type ParityColumn } from "../../components/parity/ParityTa
 import { EntityLink } from "../../components/shared/EntityLink";
 import { useCompanyContext } from "../../contexts/CompanyContext";
 import { NOT_AVAILABLE_YET } from "../../lib/prodEmptyStateCopy";
+import { KpiStatCard } from "../../components/layout/KpiStatCard";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -54,49 +54,9 @@ const fmtDollars = (value: number) => money.format(Number(value) || 0);
 const fmtD = (v: string | null | undefined) => formatDateUS(v);
 const fmtDt = (v: string | null | undefined) => formatDateUS(v);
 
-function KpiCard({
-  label,
-  value,
-  sub,
-  to,
-  disabled,
-  disabledReason,
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-  to?: string;
-  disabled?: boolean;
-  disabledReason?: string;
-}) {
-  const content = (
-    <>
-      <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">{label}</div>
-      <div className="mt-1 text-page-title font-bold text-gray-900">{value}</div>
-      {sub ? <div className="mt-0.5 text-[11px] text-gray-500">{sub}</div> : null}
-    </>
-  );
-  if (disabled) {
-    return (
-      <div
-        className="cursor-not-allowed rounded-sm border border-gray-200 bg-white p-3 text-xs opacity-70"
-        aria-disabled="true"
-        title={disabledReason}
-        data-kpi-disabled="true"
-      >
-        {content}
-      </div>
-    );
-  }
-  if (to) {
-    return (
-      <Link to={to} className="block rounded-sm border border-gray-200 bg-white p-3 text-xs transition hover:shadow-xs">
-        {content}
-      </Link>
-    );
-  }
-  return <div className="rounded-sm border border-gray-200 bg-white p-3 text-xs">{content}</div>;
-}
+// B3 BANK-KPI-CARDS (owner CONSOLIDATED 2026-09-06, item 6): this page's own KpiCard was extracted
+// to components/layout/KpiStatCard.tsx so Banking's Accounts band renders the literal same
+// component instead of a lookalike copy — imported above.
 
 // ─── ParityTable columns (display-only; order/format preserved 1:1) ──────────
 
@@ -348,34 +308,34 @@ export function ReserveTracker() {
       {/* B-A3: Reserve / fees / chargebacks / factor → real routes. Submitted / Advances have no
           batches-list route (only /factoring/batches/new and /:id) — honest disabled, not Submission Queue. */}
       <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
-        <KpiCard
+        <KpiStatCard
           label="Submitted (batches)"
           value={String(totalSubmittedCount)}
           sub={fmtM(totalSubmittedFace) + " face"}
           disabled
           disabledReason={NOT_AVAILABLE_YET}
         />
-        <KpiCard
+        <KpiStatCard
           label="Advances Received"
           value={fmtM(totalAdvances)}
           sub={`${batchesFundedQ.data?.batches?.length ?? 0} funded`}
           disabled
           disabledReason={NOT_AVAILABLE_YET}
         />
-        <KpiCard
+        <KpiStatCard
           label="FARO Reserve Held"
           value={fmtM(totalReserveHeld)}
           sub={`across ${(balancesQ.data ?? []).length} factor(s)`}
           to="/factoring/reserves"
         />
-        <KpiCard label="Fees Paid YTD" value={fmtM(totalFeesYtd)} to="/factoring/chargebacks-fees" />
-        <KpiCard
+        <KpiStatCard label="Fees Paid YTD" value={fmtM(totalFeesYtd)} to="/factoring/chargebacks-fees" />
+        <KpiStatCard
           label="Outstanding Liability"
           value={fmtDollars(outstandingLiabilityBalance)}
           sub={outstandingLiabilityBalance > 0 ? "advance + reserve owed" : "none"}
           to="/factoring/chargebacks-fees"
         />
-        <KpiCard
+        <KpiStatCard
           label="Active Factor"
           value={summaryQ.data?.active_factor_name ?? "—"}
           sub={`${summaryQ.data?.recourse_days ?? 90}-day recourse`}

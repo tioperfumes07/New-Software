@@ -106,10 +106,13 @@ body {
 /* GLB-02: every rendered table header has one unmistakable contract, including
    legacy hand-written tables that have not yet migrated to DataTable/ParityTable.
    !important is intentional: old per-screen gray utilities must not defeat the
-   owner-locked navy/white standard. */
+   owner-locked standard.
+   TABLE-HEADER-RETIRE-NAVY LAW (owner ruling 2026-09-04, verbatim: "the blue is too aggressive")
+   — navy #14314F/white left table headers for good; it stays on the rail, top banner, and
+   printed document headers only. Guard: scripts/verify-ui-design-system-ratchet.mjs. */
 thead {
-  background-color: #14314f !important;
-  color: #ffffff !important;
+  background-color: #eef2f6 !important;
+  color: #1f2937 !important;
   font-size: 11px !important;
   font-weight: 700 !important;
   text-transform: uppercase;

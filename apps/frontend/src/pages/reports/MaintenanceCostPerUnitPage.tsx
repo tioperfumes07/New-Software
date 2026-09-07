@@ -1,12 +1,11 @@
 import { useMemo, useState } from "react";
-import { DatePicker } from "../../components/forms/DatePicker";
+import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import {
   getMaintenanceCostPerUnit,
   type MaintenanceCostFlag,
-  type MaintenanceCostPerUnitResponse,
   type MaintenanceCostUnitRow,
 } from "../../api/reports";
 import { PageHeader } from "../../components/layout/PageHeader";
@@ -14,7 +13,7 @@ import { Button } from "../../components/Button";
 import { useCompanyContext } from "../../contexts/CompanyContext";
 import { ReportBlockVPendingBanner } from "./ReportBlockVPendingBanner";
 import { ReportsSubNav } from "./ReportsSubNav";
-import { CollapsedListFilters, useStagedListFilters } from "../../components/table";
+import { ReportFilterBar } from "../../components/reports/ReportFilterBar";
 import { formatChartLegendLabel } from "../../lib/chartLegend";
 import { ParityTable, type ParityColumn } from "../../components/parity/ParityTable";
 import { EntityLinkOrTombstone } from "../../components/shared/EntityLinkOrTombstone";
@@ -56,13 +55,10 @@ export function MaintenanceCostPerUnitPage() {
   const navigate = useNavigate();
   const { selectedCompanyId } = useCompanyContext();
   const companyId = selectedCompanyId ?? "";
+  const [searchParams, setSearchParams] = useSearchParams();
   const emptyRange = currentQuarterRange();
   const [applied, setApplied] = useState({ ...emptyRange, unitFilter: "" });
-  const staged = useStagedListFilters({
-    applied,
-    empty: { ...emptyRange, unitFilter: "" },
-    onApply: setApplied,
-  });
+  const [reportSearch, setReportSearch] = useState("");
 
   const query = useQuery({
     queryKey: ["reports", "maintenance-cost-per-unit", companyId, applied.start, applied.end],
@@ -83,7 +79,12 @@ export function MaintenanceCostPerUnitPage() {
       .filter((r) => r.value > 0);
   }, [query.data?.by_category]);
 
-  const rows = query.data?.by_truck ?? [];
+  const filtered = useMemo(() => {
+    const rows = query.data?.by_truck ?? [];
+    const q = reportSearch.toLowerCase();
+    if (!q) return rows;
+    return rows.filter((r) => String(r.unit_number ?? "").toLowerCase().includes(q));
+  }, [query.data?.by_truck, reportSearch]);
 
   const columns = useMemo<ParityColumn<MaintenanceCostUnitRow>[]>(
     () => [
@@ -134,9 +135,9 @@ export function MaintenanceCostPerUnitPage() {
     [],
   );
 
-  function exportCsv(data: MaintenanceCostPerUnitResponse) {
+  function exportCsv() {
     const h = ["Unit", "WOs", "Parts", "Labor", "Outsourced", "Total", "Miles", "PerMile", "Flags"];
-    const lines = (data.by_truck ?? []).map((r) =>
+    const lines = filtered.map((r) =>
       [r.unit_number, r.wo_count, r.parts_cents, r.labor_cents, r.outsourced_cents, r.total_cents, r.miles_driven, r.cost_per_mile_cents ?? "", r.flags.join("|")].join(","),
     );
     const blob = new Blob([[h.join(","), ...lines].join("\n")], { type: "text/csv" });
@@ -162,7 +163,7 @@ export function MaintenanceCostPerUnitPage() {
       .filter(([, cents]) => Number(cents) > 0)
       .map(([category, cents]) => `<tr><td>${esc(category)}</td><td style="text-align:right">${esc(money(Number(cents)))}</td></tr>`)
       .join("");
-    const rowsHtml = rows
+    const rowsHtml = filtered
       .map(
         (r) => `<tr>
           <td>${esc(r.unit_number)}</td>
@@ -232,7 +233,7 @@ export function MaintenanceCostPerUnitPage() {
             <Button size="sm" variant="secondary" onClick={printLetter} disabled={!query.data}>
               Print this page
             </Button>
-            <Button size="sm" variant="secondary" disabled={!query.data} onClick={() => query.data && exportCsv(query.data)}>
+            <Button size="sm" variant="secondary" disabled={!query.data} onClick={() => exportCsv()}>
               Export CSV
             </Button>
           </div>
@@ -241,39 +242,32 @@ export function MaintenanceCostPerUnitPage() {
       {!companyId ? <p className="text-xs text-red-600">Select an operating company.</p> : null}
       {query.isError ? <ReportBlockVPendingBanner error={query.error} onRetry={() => void query.refetch()} /> : null}
 
-      <CollapsedListFilters
-        activeFilterCount={JSON.stringify(applied) !== JSON.stringify({ ...emptyRange, unitFilter: "" }) ? 1 : 0}
-        defaultOpen={true}
-        onApply={staged.apply}
-        onReset={staged.reset}
-        onCancel={staged.cancel}
-        applyDisabled={!staged.dirty}
+      <ReportFilterBar
         testIdPrefix="reports-maintenance-cost-per-unit"
-        className="no-print rounded-sm border border-gray-200 bg-white p-3"
+        fromDate={applied.start}
+        toDate={applied.end}
+        onFromDateChange={(d) => setApplied((p) => ({ ...p, start: d ?? "" }))}
+        onToDateChange={(d) => setApplied((p) => ({ ...p, end: d ?? "" }))}
+        onPresetSelect={(preset) => {
+          const next = new URLSearchParams(searchParams);
+          next.set("preset", preset);
+          setSearchParams(next, { replace: true });
+        }}
+        search={reportSearch}
+        onSearchChange={setReportSearch}
       >
-        <div className="flex flex-wrap items-end gap-3">
-          <label className="text-xs text-gray-600">
-            From
-            <DatePicker className="mt-1 block h-9" value={staged.draft.start} onChange={(next) => staged.setDraft((p) => ({ ...p, start: next }))} />
-          </label>
-          <label className="text-xs text-gray-600">
-            To
-            <DatePicker className="mt-1 block h-9" value={staged.draft.end} onChange={(next) => staged.setDraft((p) => ({ ...p, end: next }))} />
-          </label>
-          <label className="text-xs text-gray-600">
-            Unit
-            <input
-              type="text"
-              className="mt-1 block h-9 w-28 rounded-sm border border-gray-300 px-2 text-xs"
-              value={staged.draft.unitFilter}
-              onChange={(e) => staged.setDraft((p) => ({ ...p, unitFilter: e.target.value }))}
-              placeholder="All units"
-              data-testid="reports-maintenance-cost-per-unit-unit"
-              // TODO: wire to backend filter
-            />
-          </label>
-        </div>
-      </CollapsedListFilters>
+        <label className="flex items-center gap-1 text-xs text-slate-600">
+          <span className="font-semibold text-slate-600">Unit</span>
+          <input
+            type="text"
+            className="h-7 w-24 rounded-sm border border-slate-300 px-2 text-xs"
+            value={applied.unitFilter}
+            onChange={(e) => setApplied((p) => ({ ...p, unitFilter: e.target.value }))}
+            placeholder="All units"
+            data-testid="reports-maintenance-cost-per-unit-unit"
+          />
+        </label>
+      </ReportFilterBar>
 
       {query.isLoading ? <p className="text-xs text-gray-500">Loading…</p> : null}
 
@@ -300,10 +294,10 @@ export function MaintenanceCostPerUnitPage() {
       {query.data ? (
         <div className="grid gap-3 lg:grid-cols-[1.4fr_1fr]">
           <ParityTable
-            rows={rows}
+            rows={filtered}
             columns={columns}
             rowKey={(r) => r.unit_id}
-            loading={query.isPending || (query.isFetching && rows.length === 0)}
+            loading={query.isPending || (query.isFetching && filtered.length === 0)}
             storageKey="maintenance-cost-per-unit"
             emptyText="No trucks match the current filters for this period."
             exportFilename={`maintenance-cost-per-unit-${applied.start}-${applied.end}`}

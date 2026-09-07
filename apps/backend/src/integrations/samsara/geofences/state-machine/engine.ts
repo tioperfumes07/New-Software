@@ -1,5 +1,4 @@
 import { appendCrudAudit } from "../../../../audit/crud-audit.js";
-import { recordCompletedLoadLeg } from "../real-driven-miles.service.js";
 import {
   DEFAULT_APPROACH_RADIUS_M,
   DEFAULT_ARRIVE_RADIUS_M,
@@ -278,17 +277,6 @@ export async function transitionState(
       input.stopId ?? null,
     ]
   );
-
-  if (stampEntry && input.loadId && input.stopId) {
-    await recordCompletedLoadLeg(client, {
-      operatingCompanyId: input.operatingCompanyId,
-      loadId: input.loadId,
-      unitId: input.vehicleId,
-      toStopId: input.stopId,
-      endedAt: now,
-      odometerEndMi: input.odometerMi ?? null,
-    });
-  }
 
   if (input.actorUserId) {
     await appendCrudAudit(client, input.actorUserId, "geo.geofence.state_transition", {

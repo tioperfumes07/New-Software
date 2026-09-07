@@ -473,6 +473,21 @@ export function DispatchPage({
               </button>
             );
           })}
+          {/* LB-CHROME-1 (LEAD ROUND 13, 2026-09-06 — Dispatch Board Preview PDF §1): "ONE nav row
+              + ONE segmented toolbar" — measured live 14:5xZ as two stacked control rows (this
+              row + DispatchBoard's own separate "Board view: List/Table/Assignment" card
+              underneath). DispatchBoard portals ITS OWN List/Table/Assignment toggle into this
+              exact node (apps/frontend/src/pages/dispatch/DispatchBoard.tsx) when it exists, so
+              both groups render on the same line/height as one toolbar; when List isn't the
+              active view DispatchBoard isn't mounted and this anchor is simply empty. Kept as a
+              stable id, not a ref, so a component that mounts asynchronously (DispatchBoard) can
+              find it without prop-drilling a ref through Dispatch.tsx's own render tree. */}
+          {view === "list" ? (
+            <>
+              <span className="mx-1 h-5 w-px bg-gray-300" aria-hidden="true" />
+              <div id="dispatch-board-mode-slot" className="flex flex-wrap items-center gap-1" />
+            </>
+          ) : null}
         </div>
       ) : null}
 

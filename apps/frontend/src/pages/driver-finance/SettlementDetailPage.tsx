@@ -1,4 +1,5 @@
 import { entityLabel } from "../../lib/entity-label";
+import { formatDateUS } from "../../lib/formatDate";
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams, useNavigate } from "react-router-dom";
@@ -21,7 +22,7 @@ import {
   type SettlementDisputeCategory,
   type OpenDriverBill,
 } from "../../api/driverFinance";
-import { formatUsdCents } from "../../lib/money";
+import { formatUsd, formatUsdCents } from "../../lib/money";
 import { formatQueryErrorDetail } from "../../lib/tableError";
 import { openCanonicalDocument, openPrintableDocument } from "../../lib/openPrintableDocument";
 import { EntityLink } from "../../components/shared/EntityLink";
@@ -38,6 +39,7 @@ import { previewTeamSettlementSplit } from "../../api/mdata";
 import { DebtBanner } from "./components/DebtBanner";
 import { DeadheadPaySection } from "./components/DeadheadPaySection";
 import { DeductionsSection, type DeductionRow } from "./components/DeductionsSection";
+import { CreateSettlementDeductionDrawer } from "../drivers/components/CreateSettlementDeductionDrawer";
 import { EarningsSection } from "./components/EarningsSection";
 import { EscrowVisualizer } from "./components/EscrowVisualizer";
 import { SETTLEMENT_DISPUTE_CATEGORY_OPTIONS } from "./settlementDisputeCategories";
@@ -57,6 +59,11 @@ import { SelectCombobox } from "../../components/Combobox";
 import { userFacingApiError } from "../../lib/api-error-message";
 import { ConfirmModal } from "../../components/shared/ConfirmModal";
 import { MoneyProofTrailPanel } from "../../components/accounting/MoneyProofTrailPanel";
+import { TourSettlementTab } from "../../components/dispatch/TourSettlementTab";
+import { getTourReadout } from "../../api/tourReadout";
+import { SettlementLoadsSection } from "./components/SettlementLoadsSection";
+import { CompanyWaterfallSection } from "./components/CompanyWaterfallSection";
+import { SettlementNumberBox } from "./components/SettlementNumberBox";
 
 function toDeductionRows(lines: Array<Record<string, unknown>>): DeductionRow[] {
   return lines
@@ -96,6 +103,7 @@ export function SettlementDetailPage() {
   const [ackChecked, setAckChecked] = useState(false);
   const [liabilityOpen, setLiabilityOpen] = useState(false);
   const [holdTarget, setHoldTarget] = useState<DeductionRow | null>(null);
+  const [addDeductionOpen, setAddDeductionOpen] = useState(false);
   const [bankReference, setBankReference] = useState("");
   const [bounceReason, setBounceReason] = useState("");
   const [manualPaymentMethod, setManualPaymentMethod] = useState("check");
@@ -113,6 +121,17 @@ export function SettlementDetailPage() {
     queryFn: () => getSettlement(settlementId!, companyId),
     enabled: Boolean(settlementId && companyId),
   });
+
+  // SETL-DETAIL-01 — SAME queryKey TourSettlementTab uses below (getTourReadout keyed by
+  // settlementId), so React Query dedupes this to one network request; feeds the header (tour legs
+  // NB→TR→SB with dates) and the new Revenue/Driver pay/Company margin KPI tiles from the one
+  // shared readout, never a second, independently-computed source of truth.
+  const readoutQuery = useQuery({
+    queryKey: ["tour-readout", "settlement", companyId, settlementId],
+    queryFn: () => getTourReadout(settlementId!, companyId),
+    enabled: Boolean(settlementId && companyId),
+  });
+  const readout = readoutQuery.data;
 
   // HOLD-DEDUCTION-MODAL-WRONG-PATCH-TARGET-ID: completes the hold/resume pair now that hold
   // actually persists real state (see HoldDeductionModal.tsx) — without this a held deduction had
@@ -146,6 +165,20 @@ export function SettlementDetailPage() {
   // gate rather than leaving the control ungated in the gap; swap for a permission-key check when that
   // flag flips on.
   const canVoidSettlement = auth.user?.role === "Owner" || auth.user?.role === "Accountant";
+  // SET-13 REOPEN-DISABLED-NOT-HIDDEN (owner CONSOLIDATED 2026-09-06 18:30Z item 7) — the whole
+  // Reopen control used to be nested inside BOTH `paymentState === "manual_paid"` AND an
+  // Owner/Administrator role check, so it disappeared entirely rather than showing disabled with a
+  // reason. LAW-EDITABLE-BY-PERMISSION-ALWAYS-TRACEABLE: "a hard cannot-be-mutated with no
+  // authorized path is a DEFECT, not a safety feature" — the control must always render; only its
+  // enabled state and the stated reason change.
+  const canReopenRole = auth.user?.role === "Owner" || auth.user?.role === "Administrator";
+  const reopenBlockedReason =
+    paymentState !== "manual_paid"
+      ? "Only available once this settlement is marked paid manually"
+      : !canReopenRole
+        ? "Requires Owner or Administrator role"
+        : null;
+  const canReopen = reopenBlockedReason === null;
   const settlementIsCancelled = String(settlement.status ?? "") === "cancelled";
   const settlementIsLocked = Boolean(settlement.locked_at) && !settlementIsCancelled;
   const settlementIsPaid = String(settlement.status ?? "") === "paid";
@@ -370,6 +403,16 @@ export function SettlementDetailPage() {
   // Miles/rate come from the S.1 driver_bills join already mapped onto earnings/deadhead above; rate is the
   // per-mile rate actually paid (first line with a non-zero rate — never a hardcoded default). Net = loaded +
   // empty + additional + reimbursements − deductions (all cents), matching the reference's Net pay tile.
+  //
+  // SETL-KPI-CENTS-01 (found live via S-13648 Chrome proof, 2026-09-06): `earnings`/`deadhead`/`extra`/
+  // `reimbursements`/`deductions` rows carry DOLLAR amounts (same convention the legacy NetPaySummary
+  // widget below renders directly, no /100 math) — NOT cents, despite every other tile on this grid
+  // (revenueCents/driverPayCents/companyMarginCents) sourcing true cents from `readout.*_cents`. Feeding
+  // a dollar sum into a `...Cents`-typed prop that SettlementKpiGrid's Tile formats via `formatUsdCents`
+  // (÷100) silently shows the driver's money at 1% of its real value (e.g. $161.00 rendered "$1.61").
+  // Fix: convert to true cents here, at the single point this useMemo already centralizes those sums,
+  // so every consumer of `kpi.netPayCents` / `kpi.deductionBreakdown` gets a real cents value, matching
+  // the contract its own name and the JSDoc above already claimed ("all cents") but never delivered.
   const kpi = useMemo(() => {
     // SET-RATE — miles/rate are now `undefined` (not a fake 0) for a leg with no telematics miles
     // captured; the KPI aggregate still sums only the known legs (an unknown leg contributes 0 to
@@ -378,11 +421,13 @@ export function SettlementDetailPage() {
     const loadedRate = earnings.find((r) => (r.rate ?? 0) > 0)?.rate ?? 0;
     const emptyMiles = deadhead.reduce((s, r) => s + (r.miles ?? 0), 0);
     const emptyRate = deadhead.find((r) => (r.rate ?? 0) > 0)?.rate ?? loadedRate;
+    // this_period_amount is DOLLARS (see SETL-KPI-CENTS-01 above) — formatUsd, never formatUsdCents.
     const deductionBreakdown = deductions
-      .map((d) => `${d.description} ${formatUsdCents(d.this_period_amount)}`)
+      .map((d) => `${d.description} ${formatUsd(d.this_period_amount)}`)
       .join(" · ");
-    const netPayCents =
+    const netPayDollars =
       summary.earningsTotal + summary.deadheadTotal + summary.extraTotal + summary.reimbTotal - summary.deductionTotal;
+    const netPayCents = Math.round(netPayDollars * 100);
     return { loadedMiles, loadedRate, emptyMiles, emptyRate, deductionBreakdown, netPayCents };
   }, [earnings, deadhead, deductions, summary]);
 
@@ -501,11 +546,55 @@ export function SettlementDetailPage() {
           </div>
         }
       />
+      {/* SETL-MOD-02 (owner ROUND 10, render § Settlement + DRIVER-SETTLEMENT-DETAIL-REFERENCE): the
+          Settlements-module detail leads with the APPROVED Settlement design — driver settlement card
+          (loaded × rate · empty × rate · gross · escrow · recoveries · net, 5% floor) and company
+          settlement card (revenue · costs · driver pay · factoring fee · margin with $/mi practical·real)
+          side by side, GL account on every line, PDF link, frozen note when closed. Same readout the
+          Load-costs board Settlement tab uses (TourSettlementTab keyed by settlementId), so the two
+          surfaces show one truth. The operational pay-pipeline / dispute / finalize controls below are
+          preserved (NEVER DELETE) as the workflow beneath the approved readout. */}
+      <div data-testid="settlement-detail-approved-design" data-surface="load-detail">
+        <TourSettlementTab settlementId={settlementId} operatingCompanyId={companyId} />
+      </div>
       {hasEngineTeamSplitLines ? (
         <div className="mb-3 inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 ring-1 ring-slate-400">
           Team split lines detected (primary/co-driver)
         </div>
       ) : null}
+      {/* SETL-DETAIL-01 (lead ROUND 14) — NUMBER box (typed wins) + unit(s) + tour legs NB→TR→SB
+          with dates, additive alongside the pre-existing SettlementHeader (never deleted, §7). */}
+      <div className="ldt-card" data-testid="settlement-detail-identity-strip" style={{ padding: 10, display: "flex", gap: 16, flexWrap: "wrap", alignItems: "flex-start" }}>
+        <SettlementNumberBox
+          settlementId={settlementId}
+          companyId={companyId}
+          displayId={settlementDisplayId}
+          isOpen={String(settlement.status ?? "") === "open"}
+          onSaved={() => void detailQuery.refetch()}
+        />
+        <div>
+          <div className="text-[11px] uppercase text-gray-500">Unit(s)</div>
+          <div className="text-xs font-semibold" data-testid="settlement-detail-unit">
+            {readout?.tour?.unit_number ?? "—"}
+          </div>
+        </div>
+        <div style={{ flex: 1, minWidth: 220 }}>
+          <div className="text-[11px] uppercase text-gray-500">Tour legs</div>
+          <div className="flex flex-wrap gap-1" data-testid="settlement-detail-tour-legs">
+            {readout && readout.legs.length > 0 ? (
+              readout.legs.map((leg) => (
+                <span key={leg.load_id} className={`ldt-pill ${leg.is_cancelled ? "" : leg.trip_type === "SB" ? "ok" : leg.trip_type === "NB" ? "warn" : ""}`} title={`${leg.load_number} · ${leg.lane}`}>
+                  {leg.trip_type ?? "?"} {leg.load_number}
+                  {leg.pickup_date ? ` ${formatDateUS(leg.pickup_date)}` : ""}
+                  {leg.delivery_date ? `→${formatDateUS(leg.delivery_date)}` : ""}
+                </span>
+              ))
+            ) : (
+              <span className="ldt-muted">{"—"}</span>
+            )}
+          </div>
+        </div>
+      </div>
       <SettlementHeader
         settlementId={settlementId}
         settlementDisplayId={settlementDisplayId}
@@ -519,20 +608,20 @@ export function SettlementDetailPage() {
         onRefresh={() => void debt.refresh()}
       />
       <SettlementKpiGrid
-        loadedPayCents={summary.earningsTotal}
-        loadedMiles={kpi.loadedMiles}
-        loadedRate={kpi.loadedRate}
-        emptyPayCents={summary.deadheadTotal}
-        emptyMiles={kpi.emptyMiles}
-        emptyRate={kpi.emptyRate}
-        additionalCents={summary.extraTotal}
-        additionalLines={extra.length}
-        reimbursementCents={summary.reimbTotal}
+        revenueCents={readout?.company_settlement?.revenue_cents ?? 0}
+        revenueSub={`${readout?.legs.length ?? 0} load${(readout?.legs.length ?? 0) === 1 ? "" : "s"}`}
+        driverPayCents={readout?.driver_settlement?.gross_cents ?? Math.round((summary.earningsTotal + summary.deadheadTotal) * 100)}
+        driverPaySub={`${kpi.loadedMiles.toLocaleString("en-US", { maximumFractionDigits: 0 })} mi loaded`}
+        reimbursementCents={Math.round(summary.reimbTotal * 100)}
         reimbursementLines={reimbursements.length}
-        deductionCents={summary.deductionTotal}
+        deductionCents={Math.round(summary.deductionTotal * 100)}
         deductionBreakdown={kpi.deductionBreakdown}
         netPayCents={kpi.netPayCents}
+        companyMarginCents={readout?.company_settlement?.margin_cents ?? 0}
+        companyMarginSub={readout?.totals?.margin_pct == null ? "—" : `${readout.totals.margin_pct.toFixed(1)}%`}
       />
+      {readout ? <SettlementLoadsSection legs={readout.legs} /> : null}
+      {readout ? <CompanyWaterfallSection readout={readout} /> : null}
       <MoneyProofTrailPanel operatingCompanyId={companyId} documentType="settlement" documentId={settlementId} />
       {settlementIsCancelled ? (
         <div className="rounded-sm border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-800">
@@ -662,7 +751,18 @@ export function SettlementDetailPage() {
             onHold={(row) => setHoldTarget(row)}
             onResume={(row) => void handleResumeDeduction(row)}
             isOpen={!settlementIsLocked}
+            onAdd={driverId ? () => setAddDeductionOpen(true) : undefined}
           />
+          {driverId && companyId ? (
+            <CreateSettlementDeductionDrawer
+              open={addDeductionOpen}
+              operatingCompanyId={companyId}
+              presetDriverId={driverId}
+              presetDriverName={String(settlement.driver_full_name ?? "")}
+              onClose={() => setAddDeductionOpen(false)}
+              onCreated={() => void detailQuery.refetch()}
+            />
+          ) : null}
           {/* Settlement payout poster creates a real accounting.bills row + journal entry per
               load this settlement pays out — drill-through into that posting. Empty when no
               bills were posted yet (honest-empty, not fabricated). */}
@@ -940,44 +1040,54 @@ export function SettlementDetailPage() {
                     <p className="text-xs text-gray-600">
                       Marked paid manually — no further bank pipeline actions unless bounced back to unpaid.
                     </p>
-                    {auth.user?.role === "Owner" || auth.user?.role === "Administrator" ? (
-                      // UI-01 PART 2 — flat inside the single "Payment Status" frame above, not a
-                      // nested card (QBO/NetSuite style); the top border alone separates the
-                      // correction sub-section without framing a second box.
-                      <div className="space-y-1 border-t border-slate-200 pt-2">
-                        <p className="text-xs text-slate-700">
-                          Marked paid in error? Reopen requires a written reason and is itself permanently
-                          audited — the original mark-paid record is never erased.
-                        </p>
-                        <input
-                          value={reopenReason}
-                          onChange={(event) => setReopenReason(event.target.value)}
-                          placeholder="Reason for reopening (required)"
-                          className="w-full rounded-sm border border-gray-300 px-2 py-1 text-xs"
-                        />
-                        <button
-                          type="button"
-                          className="rounded-sm border border-slate-300 px-2 py-1 text-xs text-slate-700"
-                          onClick={() => {
-                            if (!companyId) return;
-                            const reason = reopenReason.trim();
-                            if (reason.length < 3) {
-                              pushToast("Reopen reason must be at least 3 characters", "error");
-                              return;
-                            }
-                            setPendingConfirm("reopen");
-                          }}
-                        >
-                          Reopen (correction)
-                        </button>
-                      </div>
-                    ) : null}
                   </div>
                 ) : null}
 
                 {paymentState === "cleared" ? (
                   <p className="text-xs text-gray-600">Payment cleared through the bank pipeline.</p>
                 ) : null}
+
+                {/* SET-13 — always rendered (never hidden); disabled + a reason tooltip when not
+                    permitted right now, per LAW-EDITABLE-BY-PERMISSION-ALWAYS-TRACEABLE. UI-01
+                    PART 2 — flat inside the single "Payment Status" frame above, not a nested card
+                    (QBO/NetSuite style); the top border alone separates the correction sub-section
+                    without framing a second box. */}
+                <div className="space-y-1 border-t border-slate-200 pt-2" data-testid="settlement-reopen-block">
+                  <p className="text-xs text-slate-700">
+                    Marked paid in error? Reopen requires a written reason and is itself permanently
+                    audited — the original mark-paid record is never erased.
+                  </p>
+                  <input
+                    value={reopenReason}
+                    onChange={(event) => setReopenReason(event.target.value)}
+                    placeholder="Reason for reopening (required)"
+                    disabled={!canReopen}
+                    className="w-full rounded-sm border border-gray-300 px-2 py-1 text-xs disabled:bg-gray-100 disabled:text-gray-400"
+                  />
+                  <button
+                    type="button"
+                    className="rounded-sm border border-slate-300 px-2 py-1 text-xs text-slate-700 disabled:cursor-not-allowed disabled:text-gray-400"
+                    disabled={!canReopen || reopenReason.trim().length < 3}
+                    title={reopenBlockedReason ?? undefined}
+                    data-testid="settlement-reopen-button"
+                    onClick={() => {
+                      if (!companyId || !canReopen) return;
+                      const reason = reopenReason.trim();
+                      if (reason.length < 3) {
+                        pushToast("Reopen reason must be at least 3 characters", "error");
+                        return;
+                      }
+                      setPendingConfirm("reopen");
+                    }}
+                  >
+                    Reopen (correction)
+                  </button>
+                  {reopenBlockedReason ? (
+                    <p className="text-xs text-slate-500" data-testid="settlement-reopen-blocked-reason">
+                      {reopenBlockedReason}
+                    </p>
+                  ) : null}
+                </div>
 
                 <div className="space-y-1 border-t border-gray-100 pt-2">
                   <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Payment Events</p>

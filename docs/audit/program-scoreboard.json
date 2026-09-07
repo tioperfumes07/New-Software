@@ -1,10 +1,10 @@
 {
-  "healthzSha": "35a3eec",
-  "generated_at": "2026-09-05T23:03:53.710Z",
+  "healthzSha": "d918eda",
+  "generated_at": "2026-09-07T02:18:41.151Z",
   "meta": {
     "generatedAt": "2026-08-31T10:22:35-05:00",
     "sourceSha": "237d06c610",
-    "deployedSha": "35a3eec",
+    "deployedSha": "d918eda",
     "prodReadAt": "2026-08-02 22:02 CDT",
     "ledgerRows": 2383,
     "failOpen": 177,
@@ -1180,7 +1180,7 @@
     {
       "tier": "3",
       "module": "cash-flow",
-      "build": "3/3",
+      "build": "3/4",
       "cells": [
         "AUDIT",
         "FAIL",
@@ -2123,94 +2123,94 @@
   },
   "recentActivity": [
     {
-      "number": 20759,
-      "title": "FINDING: N/A (CLAIM-RESERVE 10423 for verify-google-reference-miles, Rule 37)",
+      "number": 21199,
+      "title": "FINDING: N/A (OUTBOX DONE — ROUND 16.24 items 11+15, RG guards confirmed green live)",
       "state": "merged",
-      "mergedAtCt": "09/05/2026, 06:02 PM CT",
-      "url": "https://github.com/tioperfumes07/IH35-TMS/pull/20759",
-      "sha": "9d13f78aca",
-      "committedAtIso": "2026-09-05T18:02:50-05:00"
+      "mergedAtCt": "09/06/2026, 09:18 PM CT",
+      "url": "https://github.com/tioperfumes07/IH35-TMS/pull/21199",
+      "sha": "8392e3eceb",
+      "committedAtIso": "2026-09-06T21:18:25-05:00"
     },
     {
-      "number": 20758,
-      "title": "docs(bus+design): OWNER ORDER — load detail tabs built as designed: Cursor LDT-0..7 register, renders for Stops/Driver Pay/Factoring/Pre-Settlement/Settlement/Audit, Load Costs proposal committed as reference",
+      "number": 21198,
+      "title": "FINDING: N/A (SETL-CLOSE-POST-A / ROUND 16.24 item 8 — S-13508 dry-run, awaiting owner ✔)",
       "state": "merged",
-      "mergedAtCt": "09/05/2026, 06:00 PM CT",
-      "url": "https://github.com/tioperfumes07/IH35-TMS/pull/20758",
-      "sha": "c8fd72d0fe",
-      "committedAtIso": "2026-09-05T18:00:16-05:00"
+      "mergedAtCt": "09/06/2026, 09:16 PM CT",
+      "url": "https://github.com/tioperfumes07/IH35-TMS/pull/21198",
+      "sha": "bb8ba8fede",
+      "committedAtIso": "2026-09-06T21:16:24-05:00"
     },
     {
-      "number": 20757,
-      "title": "FINDING: Samsara driver mirror omitted deactivated drivers",
+      "number": 21197,
+      "title": "FINDING: N/A (OUTBOX ACK — ROUND 16.24 item 16 confirmed already done, working order posted)",
       "state": "merged",
-      "mergedAtCt": "09/05/2026, 05:57 PM CT",
-      "url": "https://github.com/tioperfumes07/IH35-TMS/pull/20757",
-      "sha": "35a3eec78c",
-      "committedAtIso": "2026-09-05T17:57:58-05:00"
+      "mergedAtCt": "09/06/2026, 09:14 PM CT",
+      "url": "https://github.com/tioperfumes07/IH35-TMS/pull/21197",
+      "sha": "a40528f25f",
+      "committedAtIso": "2026-09-06T21:14:45-05:00"
     },
     {
-      "number": 0,
-      "title": "docs: Cascade LST-DUP DONE — 89 driver groups on live USMCA",
+      "number": 21196,
+      "title": "FINDING: N/A (CLAIM-RESERVE 10801 -- reservation-only commit, no code fix)",
       "state": "merged",
-      "mergedAtCt": "09/05/2026, 05:55 PM CT",
-      "url": "",
-      "sha": "9a1f9af830",
-      "committedAtIso": "2026-09-05T17:55:15-05:00"
+      "mergedAtCt": "09/06/2026, 09:13 PM CT",
+      "url": "https://github.com/tioperfumes07/IH35-TMS/pull/21196",
+      "sha": "5c2a3acac6",
+      "committedAtIso": "2026-09-06T21:13:46-05:00"
     },
     {
-      "number": 20756,
-      "title": "FINDING: LST-DUP duplicate master-records report (drivers/customers/vendors)",
+      "number": 21195,
+      "title": "CC-2-docs: ROUND 16.23 status line (16.21 already done, count clarified)",
       "state": "merged",
-      "mergedAtCt": "09/05/2026, 05:53 PM CT",
-      "url": "https://github.com/tioperfumes07/IH35-TMS/pull/20756",
-      "sha": "a4c2c833cd",
-      "committedAtIso": "2026-09-05T17:53:27-05:00"
+      "mergedAtCt": "09/06/2026, 09:10 PM CT",
+      "url": "https://github.com/tioperfumes07/IH35-TMS/pull/21195",
+      "sha": "102efea157",
+      "committedAtIso": "2026-09-06T21:10:01-05:00"
     },
     {
-      "number": 20755,
-      "title": "FINDING: N/A (URGENT migration handoff to CC-1 for DSP-48, deadline 01:00Z)",
+      "number": 21194,
+      "title": "FINDING: N/A (OUTBOX DONE — ESCROW-ALIAS-RETYPE, PR #21191/88a794ebf3 already merged, 100% linkage reached)",
       "state": "merged",
-      "mergedAtCt": "09/05/2026, 05:51 PM CT",
-      "url": "https://github.com/tioperfumes07/IH35-TMS/pull/20755",
-      "sha": "81535587f1",
-      "committedAtIso": "2026-09-05T17:51:01-05:00"
+      "mergedAtCt": "09/06/2026, 09:08 PM CT",
+      "url": "https://github.com/tioperfumes07/IH35-TMS/pull/21194",
+      "sha": "e01ea1586f",
+      "committedAtIso": "2026-09-06T21:08:19-05:00"
     },
     {
-      "number": 20754,
-      "title": "docs(law+bus): OWNER — Claude Lead is lead again (registrar+auditor+deployer); ONE-ITEM instructions for all six seats; LAW §0d amended",
+      "number": 21193,
+      "title": "FINDING: PLANNER-OUTSIDE-RANGE-CONTROL-DEAD",
       "state": "merged",
-      "mergedAtCt": "09/05/2026, 05:43 PM CT",
-      "url": "https://github.com/tioperfumes07/IH35-TMS/pull/20754",
-      "sha": "aba823bacc",
-      "committedAtIso": "2026-09-05T17:43:24-05:00"
+      "mergedAtCt": "09/06/2026, 09:07 PM CT",
+      "url": "https://github.com/tioperfumes07/IH35-TMS/pull/21193",
+      "sha": "cde06cc131",
+      "committedAtIso": "2026-09-06T21:07:44-05:00"
     },
     {
-      "number": 20753,
-      "title": "docs(bus): AUDIT round 2 — CC-3 backfill ✔ (94/3 measured), Cascade K.4-K.7 code ✔ not live, row 47 cause corrected (Cascade not the cause), deploy stale 3h",
+      "number": 21192,
+      "title": "CC-2-docs: ROUND 16.21 DONE + ROUND 16.22 (partial) note",
       "state": "merged",
-      "mergedAtCt": "09/05/2026, 05:39 PM CT",
-      "url": "https://github.com/tioperfumes07/IH35-TMS/pull/20753",
-      "sha": "aa69701c30",
-      "committedAtIso": "2026-09-05T17:39:07-05:00"
+      "mergedAtCt": "09/06/2026, 09:07 PM CT",
+      "url": "https://github.com/tioperfumes07/IH35-TMS/pull/21192",
+      "sha": "971bce220e",
+      "committedAtIso": "2026-09-06T21:07:21-05:00"
     },
     {
-      "number": 20752,
-      "title": "FINDING: N/A (D5 fully-closed DONE line + FleetTable finding routed to Codex)",
+      "number": 21191,
+      "title": "FINDING: ESCROW-ALIAS-RETYPE — deduction_type='escrow' retyped to 'escrow_contribution' (46 rows), 100% posting_account_id linkage reached",
       "state": "merged",
-      "mergedAtCt": "09/05/2026, 05:37 PM CT",
-      "url": "https://github.com/tioperfumes07/IH35-TMS/pull/20752",
-      "sha": "428c642a82",
-      "committedAtIso": "2026-09-05T17:37:49-05:00"
+      "mergedAtCt": "09/06/2026, 09:07 PM CT",
+      "url": "https://github.com/tioperfumes07/IH35-TMS/pull/21191",
+      "sha": "88a794ebf3",
+      "committedAtIso": "2026-09-06T21:07:13-05:00"
     },
     {
-      "number": 20751,
-      "title": "FINDING: N/A (SELF-CORRECTION — my own PR #20747 just regressed verify-ui-design-system-ratchet.mjs, raw_font_sizes +1)",
+      "number": 21190,
+      "title": "FINDING: N/A (CLAIM-RESERVE 10797 -- reservation-only commit, no code fix)",
       "state": "merged",
-      "mergedAtCt": "09/05/2026, 05:36 PM CT",
-      "url": "https://github.com/tioperfumes07/IH35-TMS/pull/20751",
-      "sha": "94092d190b",
-      "committedAtIso": "2026-09-05T17:36:07-05:00"
+      "mergedAtCt": "09/06/2026, 09:06 PM CT",
+      "url": "https://github.com/tioperfumes07/IH35-TMS/pull/21190",
+      "sha": "119c91455a",
+      "committedAtIso": "2026-09-06T21:06:05-05:00"
     }
   ]
 }

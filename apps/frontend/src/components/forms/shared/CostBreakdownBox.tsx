@@ -141,7 +141,7 @@ export function CostBreakdownBox({
 
   return (
     <div className="cost-box overflow-hidden rounded-sm border border-gray-300 bg-white">
-      <div className="cost-box-header bg-[#1b2333] px-4 py-[9px] text-[11px] font-bold uppercase tracking-wide text-white">Cost Breakdown</div>
+      <div className="cost-box-header bg-[#14314F] px-4 py-[9px] text-[11px] font-bold uppercase tracking-wide text-white">Cost Breakdown</div>
       <div className="cost-box-body">
         <div className="cost-sub border-b border-gray-200">
           <div className="cost-sub-header bg-gray-50 px-[14px] py-[7px] text-[11px] font-bold uppercase tracking-wide text-slate-700">

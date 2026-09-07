@@ -3,18 +3,21 @@ import { DatePicker } from "../components/forms/DatePicker";
 import { ParityTable, type ParityColumn } from "../components/parity/ParityTable";
 import { ListErrorState } from "../components/ListErrorState";
 import { EntityLinkOrTombstone } from "../components/shared/EntityLinkOrTombstone";
+import { EntityLink } from "../components/shared/EntityLink";
 import { customerQualityKind, customerQualityClass } from "../lib/quality-badge";
 import { formatUsdCents } from "../lib/money";
 import { customerIsSelectable } from "../lib/customer-selectable";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { listAllInvoices, listAllPayments, type Invoice, type Payment } from "../api/accounting";
+import { listAllInvoices, type Invoice } from "../api/accounting";
+import { getCustomerActivity, type CustomerActivityRow } from "../api/customers";
+import { CounterpartyStatementView } from "./reports/CounterpartyStatementPage";
 import { listAllDispatchLoads, type DispatchLoad } from "../api/dispatch";
 import { listAllAccountingRecurringTemplates } from "../api/accountingRecurringTemplate";
 import { companyToday, addDaysIso } from "../lib/businessDate";
 import { ApiError } from "../api/client";
 import { invoiceOpenCentsForDisplay, isVoidInvoice } from "./accounting/InvoicesListPage";
-import { createCustomer, getCustomerBillingSummary, listAllCustomers, listPaymentTermOptions, type Customer, type CustomerBillingSummary } from "../api/mdata";
+import { createCustomer, getCustomerBillingSummary, listAllCustomers, listPaymentTermOptions, getCustomerFinanceRollup, type Customer, type CustomerBillingSummary, type CustomerFinanceRollup } from "../api/mdata";
 import {
   CustomerProfileForm,
   emptyCustomerProfileValues,
@@ -34,11 +37,13 @@ import { useToast } from "../components/Toast";
 import { useCompanyContext } from "../contexts/CompanyContext";
 import { displayEntityNotes } from "../lib/qboArchiveNotes";
 import { CustomerCOITab } from "./customers/CustomerCOITab";
+import { CustomerEditDrawer } from "../components/customers/CustomerEditDrawer";
 import { CustomerListSidebar } from "./customers/CustomerListSidebar";
 import { CustomersListView } from "./customers/CustomersListView";
 import { CustomersSyncPanel } from "./customers/CustomersSyncPanel";
 import { TasksTab } from "../components/tasks/TasksTab";
 import { useViewModePref } from "../hooks/useViewModePref";
+import { useListPageSizePref } from "../hooks/useListPageSizePref";
 import { useUrlSort } from "../hooks/useUrlSort";
 import { formatDateTimeUS, formatDateUS, mmmDd } from "../lib/formatDate";
 import { customerStatusLabel, customerTypeLabel } from "../lib/customerStatusLabel";
@@ -62,7 +67,7 @@ type CustomerTabId =
 
 const CUSTOMER_TABS: Array<{ id: CustomerTabId; label: string }> = [
   { id: "transaction_list", label: "Transaction List" },
-  { id: "activity_feed", label: "Activity Feed" },
+  { id: "activity_feed", label: "Activity" },
   { id: "statements", label: "Statements" },
   { id: "recurring_transactions", label: "Recurring Transactions" },
   { id: "projects", label: "Projects" },
@@ -211,7 +216,10 @@ function humanizeCustomerEvent(value: string) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function CustomerActivityFeed({
+// Preserved (Rule 07 — never delete): the original audit-events feed. The "Activity" tab now
+// renders PoisonedActivityTab (the money-event union); this component is exported so it
+// remains available for re-use without breaking the no-unused-locals typecheck.
+export function CustomerActivityFeed({
   operatingCompanyId,
   customerId,
 }: {
@@ -328,6 +336,115 @@ function CustomerActivityFeed({
           </Button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// LST-CUST-ACT: financial activity feed — the UNION of every customer money event (invoices,
+// payments, credit memos, broker advances, factoring advances) from the new read-only backend
+// route. Mirrors the vendor "Activity" read model (CC-1 ACC-45): same ParityTable shape, same
+// text-xs / slate-gray tokens, row click drills into the source record.
+function CustomerFinancialActivityTab({
+  operatingCompanyId,
+  customerId,
+}: {
+  operatingCompanyId: string;
+  customerId: string;
+}) {
+  const navigate = useNavigate();
+  const query = useQuery({
+    queryKey: ["customers", "financial-activity", operatingCompanyId, customerId],
+    queryFn: () => getCustomerActivity({ operating_company_id: operatingCompanyId, customer_id: customerId }),
+    enabled: Boolean(operatingCompanyId && customerId),
+    retry: false,
+  });
+
+  const columns = useMemo<ParityColumn<CustomerActivityRow>[]>(
+    () => [
+      { key: "date", label: "Date", sortable: true, render: (r) => formatDateUS(r.date) },
+      {
+        key: "type",
+        label: "Type",
+        sortable: true,
+        render: (r) => {
+          switch (r.type) {
+            case "invoice":
+              return "Invoice";
+            case "payment":
+              return "Payment";
+            case "credit_memo":
+              return "Credit memo";
+            case "broker_advance":
+              return "Broker advance";
+            case "factoring_advance":
+              return "Factoring advance";
+            default:
+              return r.type;
+          }
+        },
+      },
+      { key: "reference", label: "Reference", render: (r) => r.reference || "—" },
+      { key: "load_number", label: "Load", render: (r) => r.load_number ?? "—" },
+      {
+        key: "amount_cents",
+        label: "Amount",
+        sortable: true,
+        sortValue: (r) => r.amount_cents,
+        render: (r) => fmtMoney(r.amount_cents),
+      },
+      {
+        key: "balance_after_cents",
+        label: "Balance After",
+        sortable: true,
+        sortValue: (r) => r.balance_after_cents,
+        render: (r) => fmtMoney(r.balance_after_cents),
+      },
+      { key: "status", label: "Status", sortable: true, render: (r) => r.status },
+    ],
+    [],
+  );
+
+  if (query.isError) {
+    return (
+      <ListErrorState
+        title="Couldn't load customer financial activity"
+        status={0}
+        message={(query.error as Error)?.message}
+        onRetry={() => void query.refetch()}
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <ParityTable
+        rows={query.data?.rows ?? []}
+        columns={columns}
+        rowKey={(r) => `${r.type}-${r.id}`}
+        loading={query.isPending || (query.isFetching && !query.data)}
+        emptyText="No financial activity for this customer."
+        storageKey="customer-financial-activity"
+        exportFilename="customer-financial-activity"
+        onRowClick={(r) => {
+          switch (r.type) {
+            case "invoice":
+              navigate(`/accounting/invoices/${r.id}`);
+              break;
+            case "payment":
+              navigate(`/accounting/payments/${r.id}`);
+              break;
+            case "credit_memo":
+              navigate(`/accounting/credit-memos/${r.id}`);
+              break;
+            case "broker_advance":
+              navigate(`/accounting/broker-advances/${r.id}`);
+              break;
+            case "factoring_advance":
+              navigate(`/accounting/factoring-advances/${r.id}`);
+              break;
+          }
+        }}
+      />
     </div>
   );
 }
@@ -458,7 +575,8 @@ export function CustomersPage() {
     },
   });
   const [sidebarPage, setSidebarPage] = useState(1);
-  const [sidebarPageSize, setSidebarPageSize] = useState(50);
+  // VC-10 / VC-LIST-02 — persisted page size (survives reload); "All" is a valid stored value.
+  const [sidebarPageSize, setSidebarPageSize] = useListPageSizePref("customers", 50);
   // CUSTOMER-CREATE-DEAD-CLICK: drawer open must be URL-only. Dual useState + setSearchParams lost
   // the first click when the page remounted (15 parallel list queries) before ?create=1 flushed —
   // setCreateOpen(true) landed on an unmounted instance and the new instance still read create !== 1.
@@ -476,6 +594,8 @@ export function CustomersPage() {
     setSearchParams(next, { replace: true });
   };
   const [createValues, setCreateValues] = useState<CustomerProfileFormValues>(emptyCustomerProfileValues);
+  // CUR-2: Edit opens the profile form in the right-side ParityDrawer (QBO-style), not the full page.
+  const [editDrawerCustomer, setEditDrawerCustomer] = useState<Customer | null>(null);
   const [createFormError, setCreateFormError] = useState("");
   const [createFieldErrors, setCreateFieldErrors] = useState<{ legal_name?: string; mc_number?: string; customer_type?: string; email?: string }>({});
   // CLOSURE-31: default to the prior "master-detail" design; "list" is opt-in only.
@@ -720,8 +840,32 @@ export function CustomersPage() {
     enabled: Boolean(companyId),
     retry: false,
   });
+  // VC-LIST-01 (owner ROUND 11): Revenue (MTD) reuses the SAME customer-profitability endpoint
+  // scoped to the current calendar month — no new backend, identical basis to Revenue (YTD).
+  const profitabilityMonthStart = `${companyToday().slice(0, 7)}-01`;
+  const profitabilityMtdQuery = useQuery({
+    queryKey: ["customers", "profitability-mtd", companyId, profitabilityMonthStart, companyToday()],
+    queryFn: () =>
+      getCustomerProfitability({
+        operating_company_id: companyId,
+        period_start: profitabilityMonthStart,
+        period_end: companyToday(),
+      }),
+    enabled: Boolean(companyId),
+    retry: false,
+  });
+  const revenueMtdByCustomerId = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const row of profitabilityMtdQuery.data?.by_customer ?? []) {
+      map.set(row.customer_id, row.revenue_cents);
+    }
+    return map;
+  }, [profitabilityMtdQuery.data?.by_customer]);
   const profitabilityByCustomerId = useMemo(() => {
-    const map = new Map<string, { load_count: number; revenue_cents: number; last_load_iso: string | null }>();
+    const map = new Map<
+      string,
+      { load_count: number; revenue_cents: number; revenue_mtd_cents: number; ar_open_cents: number; past_due: boolean; last_load_iso: string | null }
+    >();
     const today = companyToday();
     for (const row of profitabilityQuery.data?.by_customer ?? []) {
       const lastLoadIso =
@@ -729,11 +873,31 @@ export function CustomersPage() {
       map.set(row.customer_id, {
         load_count: row.load_count,
         revenue_cents: row.revenue_cents,
+        revenue_mtd_cents: revenueMtdByCustomerId.get(row.customer_id) ?? 0,
+        // ar_aging_balance_cents is invoice-based A/R (accounting.invoices status IN ('sent','partial'),
+        // non-void, open > 0) — EXCLUDES pro forma + void per the owner rule. USMCA today: 47 pro forma
+        // + 29 void, 0 finalized → Open A/R legitimately $0.
+        ar_open_cents: row.ar_aging_balance_cents ?? 0,
+        past_due: (row.flags ?? []).includes("past_due"),
         last_load_iso: lastLoadIso,
       });
     }
     return map;
-  }, [profitabilityQuery.data?.by_customer]);
+  }, [profitabilityQuery.data?.by_customer, revenueMtdByCustomerId]);
+
+  // ROUND 16.10 (owner 2026-09-06 21:59Z): per-customer days-to-pay + cost-of-finance, one read
+  // model shared by the list AND the detail "Cost of finance" card (never re-derived).
+  const financeRollupQuery = useQuery({
+    queryKey: ["customers", "finance-rollup", companyId],
+    queryFn: () => getCustomerFinanceRollup(companyId),
+    enabled: Boolean(companyId),
+    retry: false,
+  });
+  const financeByCustomerId = useMemo(() => {
+    const map = new Map<string, CustomerFinanceRollup>();
+    for (const row of financeRollupQuery.data ?? []) map.set(row.customer_id, row);
+    return map;
+  }, [financeRollupQuery.data]);
 
   const summaryQuery = useQuery({
     queryKey: ["customers", "billing-summary", companyId, selectedCustomer?.id ?? ""],
@@ -750,6 +914,17 @@ export function CustomersPage() {
         to_date: dateTo || undefined,
       }),
     enabled: Boolean(companyId && selectedCustomer?.id),
+  });
+  // VC-DETAIL-01 (owner ROUND 14, 2026-09-06): the Transactions tab is ONE ParityTable of the
+  // customer's invoices + payments (Date · Type · Ref no. · Description · Amount · Balance),
+  // sortable, exportable. Reuses the SAME read-only union read model the Activity tab already uses
+  // (GET /accounting/customers/:id/activity — invoices, payments, credit memos, advances with a
+  // running A/R balance) — no new backend. AB Global proof: 3 sent invoices → ≥3 invoice rows.
+  const customerTxnActivityQuery = useQuery({
+    queryKey: ["customers", "txn-activity", companyId, selectedCustomer?.id ?? ""],
+    queryFn: () => getCustomerActivity({ operating_company_id: companyId, customer_id: selectedCustomer!.id }),
+    enabled: Boolean(companyId && selectedCustomer?.id && activeTab === "transaction_list"),
+    retry: false,
   });
   const loadsQuery = useQuery({
     queryKey: ["customers", "loads", companyId, selectedCustomer?.id ?? ""],
@@ -769,18 +944,7 @@ export function CustomersPage() {
         from_date: dateFrom || undefined,
         to_date: dateTo || undefined,
       }),
-    enabled: Boolean(companyId && selectedCustomer?.id && (activeTab === "statements" || activeTab === "late_fees")),
-  });
-  const statementPaymentsQuery = useQuery({
-    queryKey: ["customers", "statement-payments", companyId, selectedCustomer?.id ?? "", dateFrom, dateTo],
-    queryFn: () =>
-      listAllPayments(companyId, {
-        customer_id: selectedCustomer!.id,
-        status: "all",
-        date_from: dateFrom || undefined,
-        date_to: dateTo || undefined,
-      }),
-    enabled: Boolean(companyId && selectedCustomer?.id && activeTab === "statements"),
+    enabled: Boolean(companyId && selectedCustomer?.id && activeTab === "late_fees"),
   });
   const recurringQuery = useQuery({
     queryKey: ["customers", "recurring-templates", companyId, selectedCustomer?.id ?? ""],
@@ -835,11 +999,46 @@ export function CustomersPage() {
             "—"
           ),
       },
-      { key: "settlement_no", label: "Settlement #", defaultHidden: true, render: () => "—" },
-      { key: "truck_no", label: "Truck #", defaultHidden: true, render: () => "—" },
-      { key: "pickup_date", label: "Pick-up date", defaultHidden: true, render: () => "—" },
-      { key: "delivery_date", label: "Delivery date", defaultHidden: true, render: () => "—" },
-      { key: "loaded_miles", label: "Loaded miles", defaultHidden: true, render: () => "—" },
+      { key: "settlement_no", label: "Settlement #", defaultHidden: true, sortable: true, sortValue: (r) => r.linked_settlement_display_id ?? "", render: (r) => r.linked_settlement_id ? <EntityLink kind="settlement" id={r.linked_settlement_id} label={r.linked_settlement_display_id ?? "—"} /> : "—" },
+      { key: "truck_no", label: "Truck #", defaultHidden: true, sortable: true, sortValue: (r) => r.linked_unit_number ?? "", render: (r) => r.linked_unit_number ?? "—" },
+      { key: "pickup_date", label: "Pick-up date", defaultHidden: true, sortable: true, sortValue: (r) => r.linked_pickup_date ?? "", render: (r) => mmmDd(r.linked_pickup_date) || "—" },
+      { key: "delivery_date", label: "Delivery date", defaultHidden: true, sortable: true, sortValue: (r) => r.linked_delivery_date ?? "", render: (r) => mmmDd(r.linked_delivery_date) || "—" },
+      { key: "loaded_miles", label: "Loaded miles", defaultHidden: true, sortable: true, sortValue: (r) => Number(r.linked_loaded_miles ?? 0), render: (r) => r.linked_loaded_miles != null ? Number(r.linked_loaded_miles).toLocaleString() : "—" },
+    ],
+    [],
+  );
+
+  // VC-DETAIL-01 — unified customer Transactions columns (invoices + payments) matching the vendor
+  // Transactions shape: Date · Type · Ref no. · Description · Amount · Balance.
+  const customerTransactionTypeLabel = (t: CustomerActivityRow["type"]) => {
+    switch (t) {
+      case "invoice": return "Invoice";
+      case "payment": return "Payment";
+      case "credit_memo": return "Credit memo";
+      case "broker_advance": return "Broker advance";
+      case "factoring_advance": return "Factoring advance";
+      default: return t;
+    }
+  };
+  const customerTransactionColumns = useMemo<ParityColumn<CustomerActivityRow>[]>(
+    () => [
+      { key: "date", label: "Date", sortable: true, sortValue: (r) => r.date ?? "", render: (r) => formatDateUS(r.date) || "—" },
+      { key: "type", label: "Type", sortable: true, sortValue: (r) => r.type, render: (r) => customerTransactionTypeLabel(r.type) },
+      {
+        key: "ref",
+        label: "Ref no.",
+        sortable: true,
+        sortValue: (r) => r.reference ?? "",
+        render: (r) =>
+          r.type === "invoice" ? (
+            <EntityLinkOrTombstone kind="invoice" id={r.id} name={r.reference} noun="Invoice" />
+          ) : (
+            r.reference || "—"
+          ),
+      },
+      { key: "description", label: "Description", sortable: true, sortValue: (r) => r.load_number ?? "", render: (r) => (r.load_number ? `Load ${r.load_number}` : "—") },
+      { key: "amount", label: "Amount", sortable: true, sortValue: (r) => r.amount_cents, cellClass: "text-right tabular-nums", render: (r) => fmtMoney(r.amount_cents) },
+      { key: "balance", label: "Balance", sortable: true, sortValue: (r) => r.balance_after_cents, cellClass: "text-right tabular-nums", render: (r) => fmtMoney(r.balance_after_cents) },
     ],
     [],
   );
@@ -876,19 +1075,6 @@ export function CustomersPage() {
       { key: "status", label: "Status", render: (r) => (isVoidInvoice(r) ? "Voided" : r.status) },
       { key: "total", label: "Total", render: (r) => fmtMoney(r.total_cents) },
       { key: "open", label: "Open", render: (r) => fmtMoney(invoiceOpenCentsForDisplay(r)) },
-    ],
-    [],
-  );
-  const statementPaymentColumns = useMemo<ParityColumn<Payment>[]>(
-    () => [
-      {
-        key: "payment",
-        label: "Payment",
-        render: (r) => <EntityLinkOrTombstone kind="payment" id={r.id} name={r.display_id} noun="Payment" />,
-      },
-      { key: "date", label: "Date", render: (r) => formatDateUS(r.payment_date) },
-      { key: "method", label: "Method", render: (r) => (r.voided_at ? "Voided" : r.payment_method) },
-      { key: "amount", label: "Amount", render: (r) => fmtMoney(r.amount_cents) },
     ],
     [],
   );
@@ -1064,6 +1250,7 @@ export function CustomersPage() {
               openByCustomerId={openByCustomerId}
               openBalancesAvailable={!allInvoicesQuery.isError}
               profitabilityByCustomerId={profitabilityByCustomerId}
+              financeByCustomerId={financeByCustomerId}
               onSelectCustomer={(customerId) => {
                 setSelectedCustomerId(customerId);
                 setViewMode("master-detail");
@@ -1100,13 +1287,18 @@ export function CustomersPage() {
                     <div>
                       <h2 className="text-page-title font-semibold text-gray-900">{selectedCustomer.name}</h2>
                       <p className="text-xs text-gray-500">{selectedCustomer.customer_code || "Customer"} — {selectedCustomer.customer_type ?? "Type not set"}</p>
-                      <div className="mt-1 flex items-center gap-2">
+                      {/* VC-DETAIL-01 — Status = active/inactive (deactivated_at); the quality chip is
+                          its own separate chip, never the Status value. */}
+                      <div className="mt-1 flex flex-wrap items-center gap-2">
+                        <span className={`inline-flex rounded-sm px-2 py-0.5 text-xs font-semibold ${selectedCustomer.deactivated_at ? "bg-gray-200 text-gray-700" : "bg-slate-100 text-slate-700"}`} data-testid="customer-detail-status">
+                          {selectedCustomer.deactivated_at ? "Inactive" : "Active"}
+                        </span>
                         <span
                           className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${
                             customerQualityRating(selectedCustomer.quality_payment_score, selectedCustomer.quality_overall_flag).className
                           }`}
                         >
-                          {customerQualityRating(selectedCustomer.quality_payment_score, selectedCustomer.quality_overall_flag).label}
+                          Quality: {customerQualityRating(selectedCustomer.quality_payment_score, selectedCustomer.quality_overall_flag).label}
                         </span>
                         <span className="text-xs text-gray-500">
                           FMCSA: {selectedCustomer.fmcsa_authority_status_at_verification ?? "Not verified"}
@@ -1122,7 +1314,7 @@ export function CustomersPage() {
                         type="button"
                         variant="secondary"
                         className="h-8"
-                        onClick={() => navigate(`/customers/${selectedCustomer.id}`)}
+                        onClick={() => setEditDrawerCustomer(selectedCustomer)}
                         data-testid="customer-header-edit"
                       >
                         Edit
@@ -1155,8 +1347,14 @@ export function CustomersPage() {
                     />
                   ) : (
                     <div data-testid="customer-financial-summary-values">
+                      {/* VC-DETAIL-01 — Open balance + Revenue read the SAME rollup the Customers list
+                          reads: Open A/R from the invoice-based openByCustomerId map (excludes void +
+                          pro forma, identical to the list column), Revenue (YTD) from the customer-
+                          profitability rollup (revenue_cents == the list's booked_ytd_cents). */}
                       <p className="text-xs text-gray-600">Open balance</p>
-                      <p className="text-page-title font-semibold text-gray-900">{fmtMoney(summaryQuery.data?.aging_buckets?.total_open ?? 0)}</p>
+                      <p className="text-page-title font-semibold text-gray-900" data-testid="customer-detail-open-balance">{!allInvoicesQuery.isError ? fmtMoney(openByCustomerId.get(selectedCustomer.id) ?? 0) : "Unavailable"}</p>
+                      <p className="mt-2 text-xs text-gray-600">Revenue (YTD)</p>
+                      <p className="text-page-title font-semibold text-gray-900" data-testid="customer-detail-revenue-ytd">{fmtMoney(profitabilityByCustomerId.get(selectedCustomer.id)?.revenue_cents ?? 0)}</p>
                       <p className="mt-2 text-xs text-gray-600">Overdue payment</p>
                       <p className="text-page-title font-semibold text-red-700">{fmtMoney(overdue)}</p>
                     </div>
@@ -1176,6 +1374,26 @@ export function CustomersPage() {
                   <ListErrorState title="Couldn't load customer transactions" status={0} message={(invoicesQuery.error as Error)?.message} onRetry={() => void invoicesQuery.refetch()} />
                 ) : (
                   <>
+                    {/* VC-DETAIL-01 — headline Transactions table: one ParityTable of this customer's
+                        invoices + payments (Date · Type · Ref no. · Description · Amount · Balance),
+                        sortable, exportable. The detailed Invoices / Loads tables below are preserved
+                        (§7, additive). */}
+                    <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Transactions</h4>
+                    {customerTxnActivityQuery.isError ? (
+                      <ListErrorState title="Couldn't load customer transactions" status={0} message={(customerTxnActivityQuery.error as Error)?.message} onRetry={() => void customerTxnActivityQuery.refetch()} />
+                    ) : (
+                      <ParityTable
+                        rows={customerTxnActivityQuery.data?.rows ?? []}
+                        columns={customerTransactionColumns}
+                        rowKey={(r) => `${r.type}-${r.id}`}
+                        loading={customerTxnActivityQuery.isPending || (customerTxnActivityQuery.isFetching && !customerTxnActivityQuery.data)}
+                        storageKey="customer-transactions-unified"
+                        emptyText="No invoices or payments for this customer."
+                        exportFilename="customer-transactions-all"
+                        allowAllPageSize
+                      />
+                    )}
+                    <h4 className="mb-2 mt-4 text-xs font-semibold uppercase tracking-wide text-gray-500">Invoices</h4>
                     <ParityTable
                   rows={txRows}
                   columns={txColumns}
@@ -1295,17 +1513,17 @@ export function CustomersPage() {
                 <CustomerDetailsTab
                   customer={selectedCustomer}
                   summary={summaryQuery.data}
-                  onEdit={() => navigate(`/customers/${selectedCustomer.id}`)}
+                  onEdit={() => setEditDrawerCustomer(selectedCustomer)}
                 />
               ) : activeTab === "activity_feed" ? (
-                <CustomerActivityFeed
+                <CustomerFinancialActivityTab
                   operatingCompanyId={companyId}
                   customerId={selectedCustomer.id}
                 />
               ) : activeTab === "notes" ? (
                 <CustomerNotesTab
                   customer={selectedCustomer}
-                  onEdit={() => navigate(`/customers/${selectedCustomer.id}`)}
+                  onEdit={() => setEditDrawerCustomer(selectedCustomer)}
                 />
               ) : activeTab === "tasks" ? (
                 <TasksTab
@@ -1315,44 +1533,7 @@ export function CustomersPage() {
                   targetLabel={selectedCustomer.name}
                 />
               ) : activeTab === "statements" ? (
-                <div className="space-y-4">
-                  <p className="text-xs text-gray-600">
-                    Statement is invoices and payments already on this customer for the selected date range.
-                    Totals come from those rows only — this tab does not invent a customer ledger.
-                  </p>
-                  {statementInvoicesQuery.isError || statementPaymentsQuery.isError ? (
-                    <ListErrorState
-                      title="Couldn't load statement rows"
-                      status={0}
-                      message={
-                        (statementInvoicesQuery.error as Error | undefined)?.message ??
-                        (statementPaymentsQuery.error as Error | undefined)?.message
-                      }
-                      onRetry={() =>
-                        void Promise.all([statementInvoicesQuery.refetch(), statementPaymentsQuery.refetch()])
-                      }
-                    />
-                  ) : (
-                    <>
-                      <ParityTable
-                        rows={statementInvoicesQuery.data?.invoices ?? []}
-                        columns={statementInvoiceColumns}
-                        rowKey={(r) => r.id}
-                        loading={statementInvoicesQuery.isLoading}
-                        emptyText="No invoices for this customer in the selected date range."
-                        storageKey="customer-statements-invoices"
-                      />
-                      <ParityTable
-                        rows={statementPaymentsQuery.data?.rows ?? []}
-                        columns={statementPaymentColumns}
-                        rowKey={(r) => r.id}
-                        loading={statementPaymentsQuery.isLoading}
-                        emptyText="No payments for this customer in the selected date range."
-                        storageKey="customer-statements-payments"
-                      />
-                    </>
-                  )}
-                </div>
+                <CounterpartyStatementView kind="customer" counterpartyId={selectedCustomer.id} embedded />
               ) : activeTab === "recurring_transactions" ? (
                 <div className="space-y-3">
                   <p className="text-xs text-gray-600">
@@ -1482,6 +1663,14 @@ export function CustomersPage() {
           </div>
         </form>
       </Modal>
+      {/* CUR-2: Edit-in-side-drawer (QBO style). Full-page /customers/:id stays reachable by URL. */}
+      <CustomerEditDrawer
+        open={Boolean(editDrawerCustomer)}
+        customer={editDrawerCustomer}
+        operatingCompanyId={companyId || undefined}
+        onClose={() => setEditDrawerCustomer(null)}
+        onSaved={() => void customersQuery.refetch()}
+      />
     </div>
   );
 }

@@ -2,17 +2,35 @@
 /**
  * verify-settlement-lines-driver-bill-miles-rate-join.mjs
  *
- * CODER-SEQUENCE-NUMBERED-2026-09-05.md §CC-1 item 1 (S.1): "settlement lines read model joins
- * driver_bills on source_driver_bill_id and returns miles, rate_cents, pay_cents for earnings
- * (miles_basis, rate_per_mile_cents, loaded_pay_cents) and deadhead (miles_deadhead,
+ * ORIGINAL spec, CODER-SEQUENCE-NUMBERED-2026-09-05.md §CC-1 item 1 (S.1): "settlement lines read
+ * model joins driver_bills on source_driver_bill_id and returns miles, rate_cents, pay_cents for
+ * earnings (miles_basis, rate_per_mile_cents, loaded_pay_cents) and deadhead (miles_deadhead,
  * rate_empty_per_mile_cents, deadhead_pay_cents); FE shows 1,319.7 / $0.4800."
  *
  * driver_finance.settlement_lines has NO miles/rate column (confirmed across every migration that
  * ever touched the table) — the real values live on driver_finance.driver_bills, reachable through
- * settlement_lines.source_driver_bill_id. Before this fix, GET /api/v1/driver-finance/settlements/:id
- * already LEFT JOINed driver_bills (for bill_number/load_id) but never selected its miles/rate/pay
- * columns, so the frontend's Number(line.miles ?? 0) / Number(line.rate ?? 0) always evaluated to 0
- * — every earnings/deadhead line on every settlement showed blank/zero miles and rate.
+ * settlement_lines.source_driver_bill_id. S.1 (this guard, PR that shipped it) selected miles/pay
+ * directly off driver_bills and rate_cents as a bare db.rate_per_mile_cents/rate_empty_per_mile_cents
+ * passthrough — matching the spec above.
+ *
+ * ACCT-F25103 (2026-09-06): that bare rate_cents passthrough was superseded the SAME DAY by the
+ * owner-ordered SET-RATE item (docs/bus/ONE-ITEM-INSTRUCTIONS-ALL-SEATS-2026-09-05.md,
+ * docs/bus/OUTBOX-CC-3.md "SET-RATE DONE" PR #20760), measured live: load 13526's earnings row
+ * showed "1,610.0 mi · $0.6000 · $724.50" — 724.50/1610 = $0.4500, not $0.6000. ROOT CAUSE:
+ * driver_bills.rate_per_mile_cents/rate_empty_per_mile_cents are minted upstream (book-load.service.ts,
+ * filed to CC-2, not fixed here) as a blended loaded+deadhead-over-loaded-only-miles figure — reading
+ * either column directly, as S.1 originally specified, is EXACTLY the defect SET-RATE fixed. The fix:
+ * settlements.routes.ts now derives rate_cents from THE SAME sl.amount the Amount column renders,
+ * divided by the resolved miles (ROUND((sl.amount * 100) / rate_basis.miles)), making
+ * amount == miles * rate a mathematical identity regardless of whether the upstream bill column is
+ * ever fixed; a sibling guard (verify-settlement-line-rate-consistency.mjs) already locks this
+ * server-side. SET-RATE (LAW §8 "zero is a claim") also retired this guard's original FE `?? 0`
+ * miles/rate coercion -- an unknown leg (no telematics/dispatch miles) must render undefined -> "—",
+ * never a fabricated 0.0/$0.0000. THIS guard was never updated after SET-RATE landed and kept
+ * demanding the pre-SET-RATE shape on code that had already been correctly fixed. No source file
+ * under test changed here -- only this guard's rate_cents/miles/rate assertions were corrected to
+ * match the current, live-verified, owner-ordered design (miles/pay_cents straight off driver_bills
+ * is untouched -- S.1's original spec for those two was never wrong).
  */
 import { readFileSync } from "node:fs";
 
@@ -39,21 +57,33 @@ export function collectFailures({
   if (!/CASE\s+WHEN\s+sl\.line_type\s*=\s*'deadhead_pay'\s+THEN\s+db\.miles_deadhead\s+ELSE\s+db\.miles_basis\s+END\s+AS\s+miles/.test(routes)) {
     failures.push(`${ROUTES_PATH} settlement-detail lines query does not select miles from driver_bills (miles_basis/miles_deadhead) keyed by line_type`);
   }
-  if (!/CASE\s+WHEN\s+sl\.line_type\s*=\s*'deadhead_pay'\s+THEN\s+db\.rate_empty_per_mile_cents\s+ELSE\s+db\.rate_per_mile_cents\s+END\s+AS\s+rate_cents/.test(routes)) {
-    failures.push(`${ROUTES_PATH} settlement-detail lines query does not select rate_cents from driver_bills (rate_per_mile_cents/rate_empty_per_mile_cents) keyed by line_type`);
+  // SET-RATE (owner order 2026-09-05, superseding this guard's original spec): rate_cents must be
+  // derived from sl.amount / resolved miles -- the SAME identity verify-settlement-line-rate-
+  // consistency.mjs locks -- never a bare driver_bills rate column passthrough (that IS the blended-
+  // rate defect SET-RATE fixed).
+  if (!/ROUND\(\(sl\.amount \* 100\) \/ rate_basis\.miles\)::int\s+ELSE\s+NULL\s+END\s+AS\s+rate_cents/.test(routes)) {
+    failures.push(`${ROUTES_PATH} settlement-detail lines query does not derive rate_cents from sl.amount / rate_basis.miles (SET-RATE identity) -- a bare driver_bills rate column passthrough reintroduces the blended-rate defect`);
   }
   if (!/CASE\s+WHEN\s+sl\.line_type\s*=\s*'deadhead_pay'\s+THEN\s+db\.deadhead_pay_cents\s+ELSE\s+db\.loaded_pay_cents\s+END\s+AS\s+pay_cents/.test(routes)) {
     failures.push(`${ROUTES_PATH} settlement-detail lines query does not select pay_cents from driver_bills (loaded_pay_cents/deadhead_pay_cents) keyed by line_type`);
   }
 
   // Frontend: rate must be derived from rate_cents (the backend never sends a bare "rate" dollar
-  // field), miles is read straight through.
-  if (!/rate:\s*Number\(line\.rate_cents\s*\?\?\s*0\)\s*\/\s*100/.test(page)) {
-    failures.push(`${PAGE_PATH} does not derive earnings/deadhead rate from line.rate_cents / 100`);
+  // field). SET-RATE (LAW §8 "zero is a claim") retired the `?? 0` coercion on both miles and
+  // rate_cents -- an unknown leg must map to undefined (renders "—"), never a fabricated 0.
+  const rateReadCount = (page.match(/rate:\s*line\.rate_cents\s*==\s*null\s*\?\s*undefined\s*:\s*Number\(line\.rate_cents\)\s*\/\s*100/g) ?? []).length;
+  if (rateReadCount < 2) {
+    failures.push(`${PAGE_PATH} does not derive earnings/deadhead rate from line.rate_cents / 100 without a fake-zero fallback (found ${rateReadCount}, need 2)`);
   }
-  const milesReadCount = (page.match(/miles:\s*Number\(line\.miles\s*\?\?\s*0\)/g) ?? []).length;
+  if (/Number\(line\.rate_cents\s*\?\?\s*0\)/.test(page)) {
+    failures.push(`${PAGE_PATH} coerces an unknown rate_cents to a fake 0 via \`?? 0\` -- SET-RATE (LAW §8) requires undefined -> "—" instead`);
+  }
+  const milesReadCount = (page.match(/miles:\s*line\.miles\s*==\s*null\s*\?\s*undefined\s*:\s*Number\(line\.miles\)/g) ?? []).length;
   if (milesReadCount < 2) {
-    failures.push(`${PAGE_PATH} does not read line.miles into both the earnings and deadhead line maps (found ${milesReadCount}, need 2)`);
+    failures.push(`${PAGE_PATH} does not read line.miles into both the earnings and deadhead line maps without a fake-zero fallback (found ${milesReadCount}, need 2)`);
+  }
+  if (/Number\(line\.miles\s*\?\?\s*0\)/.test(page)) {
+    failures.push(`${PAGE_PATH} coerces an unknown miles to a fake 0 via \`?? 0\` -- SET-RATE (LAW §8) requires undefined -> "—" instead`);
   }
 
   // Rendering: miles 1-decimal + thousands separator, rate 4-decimal dollars-per-mile, per the
@@ -88,20 +118,39 @@ if (process.argv.includes("--selftest")) {
       { routes: routes.replace("CASE WHEN sl.line_type = 'deadhead_pay' THEN db.miles_deadhead ELSE db.miles_basis END AS miles,\n            ", "") },
     ],
     [
-      "rate_cents CASE removed from SQL",
-      { routes: routes.replace("CASE WHEN sl.line_type = 'deadhead_pay' THEN db.rate_empty_per_mile_cents ELSE db.rate_per_mile_cents END AS rate_cents,\n            ", "") },
+      "rate_cents reverts to a bare driver_bills passthrough (the SET-RATE blended-rate defect)",
+      {
+        routes: routes.replace(
+          "CASE WHEN rate_basis.miles > 0 THEN ROUND((sl.amount * 100) / rate_basis.miles)::int ELSE NULL END AS rate_cents,",
+          "rate_basis.card_rate_cents AS rate_cents,"
+        ),
+      },
     ],
     [
       "pay_cents CASE removed from SQL",
       { routes: routes.replace("CASE WHEN sl.line_type = 'deadhead_pay' THEN db.deadhead_pay_cents ELSE db.loaded_pay_cents END AS pay_cents,\n            ", "") },
     ],
     [
-      "frontend reverts to reading line.rate directly (the always-0 bug)",
-      { page: page.replaceAll("rate: Number(line.rate_cents ?? 0) / 100,", "rate: Number(line.rate ?? 0),") },
+      "frontend reintroduces the fake-zero rate coercion (SET-RATE LAW §8 regression)",
+      {
+        page: page.replaceAll(
+          "rate: line.rate_cents == null ? undefined : Number(line.rate_cents) / 100,",
+          "rate: Number(line.rate_cents ?? 0) / 100,"
+        ),
+      },
+    ],
+    [
+      "frontend reintroduces the fake-zero miles coercion (SET-RATE LAW §8 regression)",
+      {
+        page: page.replaceAll(
+          "miles: line.miles == null ? undefined : Number(line.miles),",
+          "miles: Number(line.miles ?? 0),"
+        ),
+      },
     ],
     [
       "EarningsSection drops the 4-decimal rate formatter",
-      { earnings: earnings.replace('render: (line) => <>{line.rate != null ? `$${line.rate.toFixed(4)}` : "—"}</>,', 'render: (line) => <>{line.rate ?? "—"}</>,') },
+      { earnings: earnings.replace("<>${line.rate.toFixed(4)}</>", "<>{line.rate}</>") },
     ],
   ];
   const escaped = [];

@@ -1,5 +1,16 @@
 # ★ DEVIN (non-A)
 
+**23:45Z — LEAD · ROUND 3 — YOUR ONE ITEM:**
+
+## CASCADE / DEVIN — item RPT-06 · report landing filter bars (your own REMAINING from #20602) — deadline 2026-09-06 02:30Z
+- **Measured:** #20602 (Devin) gave 23 data-bearing pages under `pages/reports/**` CSV + Print and listed "STEP 6 report landing filter bar" as REMAINING. K.9 guard pattern exists for Customers/Vendors (≥5 inline controls, 0 clicks).
+- **Required:** every one of the 23 report pages has an INLINE filter bar visible on first load: Date range (From/To + presets This week · This month · Last month · YTD) · Entity-appropriate second filter (driver / unit / customer / vendor as the report warrants) · Status where the report has one · Search. Filters drive the query (URL-synced), CSV export respects them. No CollapsedListFilters-only pattern. Same component for all 23 (one shared `ReportFilterBar`).
+- **Guard:** `scripts/verify-report-landing-filter-bar.mjs` — all 23 pages mount ReportFilterBar with a date range; `--selftest` removes it from one page → FAIL.
+- **Linkage:** reports read models only. **One PR between you.** **Surrender:** Codex.
+DONE LINE: CASCADE | RPT-06 DONE | <sha> | verify-report-landing-filter-bar --selftest N/N | 23/23 pages · date range + <n> filters | NEXT await lead
+
+---
+
 **23:15Z — LEAD · TEL-39 / LST-DUP audited ✔. YOUR NEXT ONE ITEM:**
 
 ## CASCADE / DEVIN — item LST-LOC · Locations list (Lists module) — deadline 2026-09-06 02:30Z
@@ -27,3 +38,15 @@ Lead audits each DONE line on Neon + tip + live within 30 minutes; ✔/✗ poste
 ---
 
 Redirect → **INBOX-DEVIN-A.md**. Retired. NEVER POST Book Load.
+
+
+## 2026-09-06 00:10Z — LEAD → this seat (round 5 audit + round 4 item). Full text: docs/bus/ONE-ITEM-INSTRUCTIONS-ALL-SEATS-2026-09-05.md § AUDIT round 5 / ROUND 4.
+- Same as INBOX-CASCADE: RPT-06 ✗ → RPT-06b, deadline 02:30Z.
+
+
+## 2026-09-06 01:05Z — LEAD → ROUND 5 item for this seat. Full text: docs/bus/ONE-ITEM-INSTRUCTIONS-ALL-SEATS-2026-09-05.md § ROUND 5.
+- Same as INBOX-CASCADE: **LST-CUST-ACT**, 04:00Z.
+
+
+## 2026-09-06 01:45Z — LEAD (ROUND 6): see ONE-ITEM-INSTRUCTIONS § ROUND 6.
+- Same as INBOX-CASCADE.

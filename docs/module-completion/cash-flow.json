@@ -60,12 +60,27 @@
       "live_verified_sha": "0dd70bf",
       "prod_verified": true,
       "unverified_reason": "UNBOUND_PROSE_EVIDENCE_2026-08-29"
+    },
+    {
+      "id": "CASH-T03",
+      "title": "Tab \"Rolling Ledger\" opens and renders real entity-scoped open A/R+A/P obligations with carry-forward",
+      "layers": [
+        "DOD-A",
+        "DOD-B",
+        "DOD-C"
+      ],
+      "spec": "CASH-FLOW-02 (owner order 2026-09-06 20:1xZ): rolling ledger with real dates, carry-forward, day grid. M GROWN 3 -> 4 (Rule 21) -- new surface added, not previously counted.",
+      "status": "UNVERIFIED",
+      "evidence": "Read model getRollingLedger live-queried directly against Neon (USMCA 5c854333-6ea5-4faa-af31-67cb272fef80, bypass-RLS read, not through the HTTP route/browser): 318 open rows across Bill/Driver pay/Driver bill/Expense-unmatched/Invoice/Factor advance sources, opening cash $2,493.68, day grid 2026-09-01..13 with real income/expense/carry-over/running-cash figures per day. Part (b) added: date-range presets (7d/14d/30d/This month/Next month/Custom), a type multi-select filter, search, a column-visibility gear, CSV export, URL-persisted controls, and an overdue-3-days notification cron (cash-flow-rolling-ledger-notify.cron.ts) -- live-verified the notify+dedup path directly (rolled-back transaction): first call creates 4 real notifications (one per notify-eligible USMCA user), a second call for the same row correctly no-ops. NOT yet independently confirmed through a live Chrome pass against the deployed page -- status stays UNVERIFIED (never fake-green) until that happens on the next live-verification pass.",
+      "pr": null,
+      "prod_verified": false,
+      "unverified_reason": "NOT_YET_LIVE_BROWSER_VERIFIED_2026-09-06"
     }
   ],
-  "M": 3,
+  "M": 4,
   "pass_count": 3,
-  "total_count": 3,
-  "progress": "3 of 3",
+  "total_count": 4,
+  "progress": "3 of 4",
   "bar_version": 1,
   "bar_2_queued": true,
   "bar_2_after": "Urgent-6 close"

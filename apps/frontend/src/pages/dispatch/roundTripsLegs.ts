@@ -52,19 +52,40 @@ export function pairOutboundReturn(unitLoads: DispatchLoadRow[]): {
   return { outbound, returnLoad };
 }
 
-export function loadSpanStartMs(load: DispatchLoadRow): number {
-  return Date.parse(load.created_at);
+/**
+ * RT-FIX (owner 2026-09-05 02:15Z): a Round Trips bar spans the actual work window —
+ * first pickup appointment → last delivery appointment. `created_at` (when the row was keyed)
+ * NEVER positions a bar; that is what stacked every bar on "today", one day wide. A load with no
+ * pickup date returns null (the timeline draws an honest "no dates" marker, not a bar on today).
+ *
+ * On the list row, `pickup_appointment_start_at` is the seq-1 stop's appointment_start_at /
+ * scheduled_arrival_at surfaced by the API; `pickup_scheduled_at` is the fallback pickup date.
+ */
+export function loadSpanStartMs(load: DispatchLoadRow): number | null {
+  const raw = load.pickup_appointment_start_at || load.pickup_scheduled_at || null;
+  if (!raw) return null;
+  const t = Date.parse(raw);
+  return Number.isNaN(t) ? null : t;
 }
 
-export function loadSpanEndMs(load: DispatchLoadRow): number {
+export function loadSpanEndMs(load: DispatchLoadRow): number | null {
   const raw =
+    load.delivery_appointment_start_at ||
     load.effective_delivery_date ||
     load.scheduled_delivery_date ||
     load.delivery_scheduled_at ||
-    load.updated_at ||
-    load.created_at;
+    null;
+  if (!raw) return null;
   const t = Date.parse(raw);
+  if (Number.isNaN(t)) return null;
   const start = loadSpanStartMs(load);
-  if (Number.isNaN(t) || t < start) return start + 24 * 60 * 60 * 1000;
+  // A delivery that parses before the pickup is bad data, not a reason to fall back to the row's key
+  // date — clamp the end to the pickup so the bar is a minimum-width mark on the pickup day.
+  if (start != null && t < start) return start;
   return t;
+}
+
+/** A load can be positioned on the timeline only when it has both a pickup and a delivery date. */
+export function hasSpanDates(load: DispatchLoadRow): boolean {
+  return loadSpanStartMs(load) != null && loadSpanEndMs(load) != null;
 }

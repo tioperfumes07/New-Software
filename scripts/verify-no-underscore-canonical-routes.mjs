@@ -23,6 +23,10 @@ function listPageFiles(dir, out = []) {
       listPageFiles(abs, out);
       continue;
     }
+    // 2026-09-06 (lead): the guard already skips __tests__/ — colocated *.test.* files are the same thing. A test
+    // fixture's validator field paths (`path: "stops.1.scheduled_arrival_at"`, invalidSubmitDetails.test.ts, #20313)
+    // are not route registrations; they reddened build-typecheck-heavy on main for every PR.
+    if (/\.(test|spec)\.(tsx|ts|jsx|js)$/.test(entry.name)) continue;
     if (/\.(tsx|ts|jsx|js)$/.test(entry.name)) {
       out.push(abs);
     }

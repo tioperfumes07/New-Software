@@ -32,10 +32,17 @@ function mockCustomerRosters(activeCustomers: Customer[], inactiveCustomers: Cus
 
 vi.mock("../../../api/mdata", () => ({
   listCustomers: (...args: unknown[]) => listCustomersMock(...args),
+  listAllCustomers: (...args: unknown[]) => listCustomersMock(...args),
+  getCustomerBillingSummary: vi.fn().mockResolvedValue({ aging_buckets: {} }),
+  listAllAtRiskCustomerRelationshipScores: vi.fn().mockResolvedValue({ customers: [] }),
   listPaymentTermOptions: vi.fn().mockResolvedValue({ payment_terms: [] }),
   listVendors: vi.fn().mockResolvedValue({ vendors: [] }),
   createCustomer: vi.fn(),
   updateCustomer: vi.fn(),
+}));
+
+vi.mock("../../../api/reports", () => ({
+  getCustomerProfitability: vi.fn().mockResolvedValue({ period: { start: "", end: "" }, totals: { revenue_cents: 0, direct_cost_cents: 0, gross_margin_cents: 0, gross_margin_pct: 0, customer_count: 0 }, by_customer: [] }),
 }));
 
 vi.mock("../../../api/catalogs", () => ({
@@ -153,7 +160,9 @@ describe("CustomersPage list tabs", () => {
     await waitFor(() => expect(listCustomersMock).toHaveBeenCalled());
     expect(await screen.findByRole("button", { name: /preferred \(1\)/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /watch \(1\)/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /active \(2\)/i })).toHaveClass("border-[#1f2a44]");
+    // The active segment is marked by NavyPageSubNav with aria-current="page" + a white bottom
+    // border (was the stale border-[#1f2a44] before the navy sub-nav restyle).
+    expect(screen.getByRole("button", { name: /active \(2\)/i })).toHaveAttribute("aria-current", "page");
     expect(router.state.location.search).toBe("");
     expect(screen.getAllByText("Preferred Co")).toHaveLength(1);
   });

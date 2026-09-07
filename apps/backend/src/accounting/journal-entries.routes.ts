@@ -6,6 +6,7 @@ import { assertCompanyMembership } from "../_helpers/company-membership-guard.js
 import {
   createJournalEntry,
   getJournalEntryDetail,
+  getJournalEntryPostingsBySource,
   getJournalEntrySourceLinks,
   listJournalEntries,
   voidJournalEntry,
@@ -65,6 +66,30 @@ const listQuerySchema = companyQuerySchema.extend({
 });
 
 const idParamSchema = z.object({ id: z.string().uuid() });
+
+// ACC-49 — the Journal tab on Expense/Bill/Invoice detail resolves postings the OTHER direction:
+// by (source_transaction_type, source_transaction_id) rather than by journal_entry id. Enumerated
+// against the live DISTINCT values in accounting.journal_entry_postings (verified 2026-09-05) so a
+// typo'd source type gets a named 400 instead of a silent empty result.
+const sourceTransactionTypeSchema = z.enum([
+  "bank_categorization",
+  "bill",
+  "bill_payment",
+  "customer_payment",
+  "expense",
+  "fixed_asset_depreciation",
+  "fuel_event",
+  "invoice",
+  "journal_entry",
+  "loan_payment",
+  "prepaid_purchase",
+  "transfer",
+]);
+
+const postingsBySourceQuerySchema = companyQuerySchema.extend({
+  source_transaction_type: sourceTransactionTypeSchema,
+  source_transaction_id: z.string().trim().min(1).max(200),
+});
 
 const voidBodySchema = z.object({
   operating_company_id: z.string().uuid(),
@@ -189,6 +214,30 @@ export async function registerJournalEntryRoutes(app: FastifyInstance) {
       throw error;
     }
   });
+
+  // ACC-49 — postings by source document. Powers the Journal tab mounted on Expense/Bill/Invoice
+  // detail: each of those pages calls this with its own source_transaction_type + id and renders
+  // PostingGrid.tsx per journal entry returned (usually one, occasionally more — e.g. an invoice with
+  // both an origination JE and a later write-off JE).
+  app.get(
+    "/api/v1/accounting/journal-entry-postings/by-source",
+    { config: { rateLimit: { max: 120, timeWindow: "1 minute" } } },
+    async (req, reply) => {
+      const user = currentAuthUser(req, reply);
+      if (!user) return;
+      if (!canAccessAccounting(user.role)) return reply.code(403).send({ error: "forbidden" });
+      const query = postingsBySourceQuerySchema.safeParse(req.query ?? {});
+      if (!query.success) return validationError(reply, query.error);
+      await assertCompanyMembership(user.uuid, query.data.operating_company_id);
+      const groups = await getJournalEntryPostingsBySource(
+        user.uuid,
+        query.data.operating_company_id,
+        query.data.source_transaction_type,
+        query.data.source_transaction_id
+      );
+      return { journal_entries: groups };
+    }
+  );
 
   app.post("/api/v1/accounting/journal-entries/:id/void", { config: { rateLimit: { max: 60, timeWindow: "1 minute" } } }, async (req, reply) => {
     const user = currentAuthUser(req, reply);

@@ -16,10 +16,15 @@
  * reopened_correction event is appended instead). Migration 202612740000 widens the
  * settlement_payment_events.event_type CHECK constraint to allow the new value.
  *
- * Static check (always runs): both call sites of markSettlementPaidManually in
- * SettlementDetailPage.tsx are preceded by a window.confirm() guard; a "Reopen (correction)" action
- * calling reopenSettlementManualPaid exists; the backend exports reopenManualPaid and registers the
- * reopen-manual-paid route; the migration's CHECK constraint includes 'reopened_correction'.
+ * Static check (always runs): both "Mark Paid Manually" button click sites in
+ * SettlementDetailPage.tsx route through a pendingConfirm gate (setPendingConfirm("mark_paid")) —
+ * window.confirm() itself was later replaced with an in-app <ConfirmModal> (native JS confirm()
+ * dialogs freeze Live Chrome / Claude-in-Chrome automation, per the ACCT-F5401 follow-up comment in
+ * the source) whose onConfirm calls markSettlementPaidManually exactly once, shared by both
+ * buttons — the confirmation guard is still present, just no longer a native browser dialog. A
+ * "Reopen (correction)" action calling reopenSettlementManualPaid exists; the backend exports
+ * reopenManualPaid and registers the reopen-manual-paid route; the migration's CHECK constraint
+ * includes 'reopened_correction'.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -40,17 +45,20 @@ function read(rel) {
 export function assertReopenConfirmed(feSource, svcSource, routesSource, migrationSource) {
   const errors = [];
 
-  // Every "Mark Paid Manually" mutation call must be preceded within a short window by a
-  // window.confirm( guard — split on the call site and look backward for the nearest confirm.
-  const callSites = [...feSource.matchAll(/void markSettlementPaidManually\(/g)];
-  if (callSites.length < 2) {
-    errors.push(`only ${callSites.length} of 2 expected markSettlementPaidManually call sites found`);
+  // Every "Mark Paid Manually" BUTTON must route through the pendingConfirm gate, not call the
+  // mutation directly — window.confirm() was later replaced with an in-app <ConfirmModal> (native
+  // JS dialogs freeze Live Chrome / Claude-in-Chrome automation), so both buttons now set
+  // pendingConfirm("mark_paid") and a SINGLE shared ConfirmModal's onConfirm fires the mutation.
+  const buttonGateSites = [...feSource.matchAll(/setPendingConfirm\("mark_paid"\)/g)];
+  if (buttonGateSites.length < 2) {
+    errors.push(`only ${buttonGateSites.length} of 2 expected "Mark Paid Manually" button confirm-gates found`);
   }
-  for (const call of callSites) {
-    const before = feSource.slice(Math.max(0, call.index - 600), call.index);
-    if (!/window\.confirm\(/.test(before)) {
-      errors.push(`markSettlementPaidManually call at offset ${call.index} has no window.confirm( guard within 600 chars before it`);
-    }
+
+  const modalMatch = /open=\{pendingConfirm === "mark_paid"\}[\s\S]{0,700}?onConfirm=\{async \(\) => \{[\s\S]{0,700}?markSettlementPaidManually\(/.exec(
+    feSource
+  );
+  if (!modalMatch) {
+    errors.push('no ConfirmModal gated on pendingConfirm === "mark_paid" whose onConfirm calls markSettlementPaidManually was found');
   }
 
   if (!/reopenSettlementManualPaid\(/.test(feSource)) {
@@ -84,10 +92,21 @@ function selftest() {
 
   const cases = [
     [
-      "confirm guard removed from both call sites",
-      [fe.replace(/window\.confirm\(\s*\n?\s*`Mark [^`]*`\s*\n?\s*\)/g, "true")],
+      "one Mark Paid Manually button bypasses the confirm gate and calls the mutation directly",
+      [fe.replace('setPendingConfirm("mark_paid");', "void markSettlementPaidManually(settlementId, companyId, {});")],
       [svc, routes, migration],
-      "no window.confirm(",
+      "confirm-gates found",
+    ],
+    [
+      "ConfirmModal's onConfirm no longer calls markSettlementPaidManually",
+      [
+        fe.replace(
+          /(open=\{pendingConfirm === "mark_paid"\}[\s\S]{0,700}?onConfirm=\{async \(\) => \{[\s\S]{0,700}?)markSettlementPaidManually\(/,
+          "$1strippedNoMutationCall("
+        ),
+      ],
+      [svc, routes, migration],
+      "no ConfirmModal gated on",
     ],
     [
       "reopen route deleted",

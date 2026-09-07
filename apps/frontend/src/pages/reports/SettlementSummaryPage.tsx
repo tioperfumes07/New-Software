@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { DatePicker } from "../../components/forms/DatePicker";
+import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
@@ -7,14 +7,13 @@ import {
   getSettlementSummary,
   type SettlementDeductionBreakdown,
   type SettlementSummaryDriverRow,
-  type SettlementSummaryResponse,
 } from "../../api/reports";
 import { PageHeader } from "../../components/layout/PageHeader";
 import { Button } from "../../components/Button";
 import { useCompanyContext } from "../../contexts/CompanyContext";
 import { ReportBlockTPendingBanner } from "./ReportBlockTPendingBanner";
 import { ReportsSubNav } from "./ReportsSubNav";
-import { CollapsedListFilters, useStagedListFilters } from "../../components/table";
+import { ReportFilterBar } from "../../components/reports/ReportFilterBar";
 import { ParityTable, type ParityColumn } from "../../components/parity/ParityTable";
 import { entityLabel } from "../../lib/entity-label";
 import { EntityLink } from "../../components/shared/EntityLink";
@@ -55,13 +54,10 @@ export function SettlementSummaryPage() {
   const navigate = useNavigate();
   const { selectedCompanyId } = useCompanyContext();
   const companyId = selectedCompanyId ?? "";
+  const [searchParams, setSearchParams] = useSearchParams();
   const emptyRange = defaultRange();
   const [applied, setApplied] = useState({ ...emptyRange, driverFilter: "" });
-  const staged = useStagedListFilters({
-    applied,
-    empty: { ...emptyRange, driverFilter: "" },
-    onApply: setApplied,
-  });
+  const [reportSearch, setReportSearch] = useState("");
 
   const query = useQuery({
     queryKey: ["reports", "settlement-summary", companyId, applied.start, applied.end],
@@ -82,7 +78,12 @@ export function SettlementSummaryPage() {
       .filter((r) => r.value > 0);
   }, [query.data]);
 
-  const sortedDrivers = query.data?.by_driver ?? [];
+  const filteredDrivers = useMemo(() => {
+    const rows = query.data?.by_driver ?? [];
+    const q = reportSearch.toLowerCase();
+    if (!q) return rows;
+    return rows.filter((r) => String(r.driver_name ?? "").toLowerCase().includes(q));
+  }, [query.data?.by_driver, reportSearch]);
 
   const driverColumns = useMemo<ParityColumn<SettlementSummaryDriverRow>[]>(
     () => [
@@ -111,9 +112,9 @@ export function SettlementSummaryPage() {
     [],
   );
 
-  function exportCsv(data: SettlementSummaryResponse) {
+  function exportCsv() {
     const header = ["Driver", "Loads", "Settlements", "Gross", "Deductions", "Chargebacks", "Net", "Avg/Load"];
-    const lines = (data.by_driver ?? []).map((r) =>
+    const lines = filteredDrivers.map((r) =>
       [r.driver_name, r.load_count, r.settlement_count, r.gross_pay_cents, r.deduction_cents, r.chargeback_cents, r.net_pay_cents, r.avg_per_load_cents].join(
         ",",
       )
@@ -141,7 +142,7 @@ export function SettlementSummaryPage() {
       .filter(([, cents]) => Number(cents) > 0)
       .map(([name, cents]) => `<tr><td>${esc(name)}</td><td style="text-align:right">${esc(money(Number(cents)))}</td></tr>`)
       .join("");
-    const rowsHtml = sortedDrivers
+    const rowsHtml = filteredDrivers
       .map(
         (r) => `<tr>
           <td>${esc(r.driver_name)}</td>
@@ -213,7 +214,7 @@ export function SettlementSummaryPage() {
             <Button size="sm" variant="secondary" onClick={printLetter} disabled={!query.data}>
               Print this page
             </Button>
-            <Button size="sm" variant="secondary" disabled={!query.data} onClick={() => query.data && exportCsv(query.data)}>
+            <Button size="sm" variant="secondary" disabled={!query.data} onClick={() => exportCsv()}>
               Export CSV
             </Button>
           </div>
@@ -223,47 +224,32 @@ export function SettlementSummaryPage() {
       {!companyId ? <p className="text-xs text-red-600">Select an operating company.</p> : null}
       {query.isError ? <ReportBlockTPendingBanner error={query.error} onRetry={() => void query.refetch()} /> : null}
 
-      <CollapsedListFilters
-        activeFilterCount={JSON.stringify(applied) !== JSON.stringify({ ...emptyRange, driverFilter: "" }) ? 1 : 0}
-        defaultOpen={true}
-        onApply={staged.apply}
-        onReset={staged.reset}
-        onCancel={staged.cancel}
-        applyDisabled={!staged.dirty}
+      <ReportFilterBar
         testIdPrefix="reports-settlement-summary"
-        className="no-print rounded-sm border border-gray-200 bg-white p-3"
+        fromDate={applied.start}
+        toDate={applied.end}
+        onFromDateChange={(d) => setApplied((p) => ({ ...p, start: d ?? "" }))}
+        onToDateChange={(d) => setApplied((p) => ({ ...p, end: d ?? "" }))}
+        onPresetSelect={(preset) => {
+          const next = new URLSearchParams(searchParams);
+          next.set("preset", preset);
+          setSearchParams(next, { replace: true });
+        }}
+        search={reportSearch}
+        onSearchChange={setReportSearch}
       >
-        <div className="flex flex-wrap items-end gap-3">
-          <label className="text-xs text-gray-600">
-            From
-            <DatePicker
-              className="mt-1 block h-9"
-              value={staged.draft.start}
-              onChange={(next) => staged.setDraft((p) => ({ ...p, start: next }))}
-            />
-          </label>
-          <label className="text-xs text-gray-600">
-            To
-            <DatePicker
-              className="mt-1 block h-9"
-              value={staged.draft.end}
-              onChange={(next) => staged.setDraft((p) => ({ ...p, end: next }))}
-            />
-          </label>
-          <label className="text-xs text-gray-600">
-            Driver
-            <input
-              type="text"
-              className="mt-1 block h-9 w-40 rounded-sm border border-gray-300 px-2 text-xs"
-              value={staged.draft.driverFilter}
-              onChange={(e) => staged.setDraft((p) => ({ ...p, driverFilter: e.target.value }))}
-              placeholder="All drivers"
-              data-testid="reports-settlement-summary-driver"
-              // TODO: wire to backend filter
-            />
-          </label>
-        </div>
-      </CollapsedListFilters>
+        <label className="flex items-center gap-1 text-xs text-slate-600">
+          <span className="font-semibold text-slate-600">Driver</span>
+          <input
+            type="text"
+            className="h-7 w-32 rounded-sm border border-slate-300 px-2 text-xs"
+            value={applied.driverFilter}
+            onChange={(e) => setApplied((p) => ({ ...p, driverFilter: e.target.value }))}
+            placeholder="All drivers"
+            data-testid="reports-settlement-summary-driver"
+          />
+        </label>
+      </ReportFilterBar>
 
       {query.isLoading ? <p className="text-xs text-gray-500">Loading…</p> : null}
 
@@ -290,10 +276,10 @@ export function SettlementSummaryPage() {
 
           <div className="grid gap-3 lg:grid-cols-[1.4fr_1fr]">
             <ParityTable
-              rows={sortedDrivers}
+              rows={filteredDrivers}
               columns={driverColumns}
               rowKey={(r) => r.driver_id}
-              loading={query.isPending || (query.isFetching && sortedDrivers.length === 0)}
+              loading={query.isPending || (query.isFetching && filteredDrivers.length === 0)}
               storageKey="settlement-summary"
               emptyText="No driver settlements for this period."
               onRowClick={(r) => navigate(`/drivers/${r.driver_id}?tab=settlements`)}

@@ -8,7 +8,7 @@ const ACTIVE_LOAD_STATUSES = ["assigned", "assigned_not_dispatched", "dispatched
 
 export type TripLeg = {
   load_id: string;
-  trip_type: "NB" | "TR" | "SB";
+  trip_type: "NB" | "TR" | "SB" | "LOCAL";
   status: string;
   delivery_city: string | null;
   delivery_state: string | null;
@@ -104,7 +104,7 @@ export async function getTripPairingBoard(client: DbClient, operatingCompanyId: 
 
   // Active trip-classified loads + their delivery stop (city/date) for the open-return display.
   const loadsRes = await client.query<{
-    load_id: string; unit_id: string; tour_id: string | null; trip_type: "NB" | "TR" | "SB"; status: string;
+    load_id: string; unit_id: string; tour_id: string | null; trip_type: "NB" | "TR" | "SB" | "LOCAL"; status: string;
     pickup_date: string | null; delivery_city: string | null; delivery_state: string | null; delivery_date: string | null;
     load_driver_id: string | null; load_driver_name: string | null;
   }>(

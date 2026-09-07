@@ -40,12 +40,15 @@ export function suggestionFromRules(
   rules: BankingRuleRow[],
   ctx: {
     description_normalized: string | null;
+    /** Raw bank text. BANK-RULES-USMCA (lead 2026-09-06): description_normalized was NULL on all 364 live
+     *  USMCA lines, so every rule silently missed — the raw description is the fallback, never "". */
+    description?: string | null;
     amount_cents: number;
     bank_account_id: string;
   }
 ): SuggestionResult | null {
   const sorted = [...rules].sort((a, b) => b.priority - a.priority);
-  const desc = (ctx.description_normalized ?? "").toLowerCase();
+  const desc = (ctx.description_normalized ?? ctx.description ?? "").toLowerCase();
   for (const r of sorted) {
     if (r.bank_account_filter_id && r.bank_account_filter_id !== ctx.bank_account_id) continue;
     if (r.amount_min_cents !== null && ctx.amount_cents < r.amount_min_cents) continue;

@@ -1,15 +1,15 @@
 import { useMemo, useState } from "react";
-import { DatePicker } from "../../components/forms/DatePicker";
+import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { getProfitPerTruck, type ProfitPerTruckResponse, type ProfitPerTruckRow, type ProfitPerTruckFlag } from "../../api/reports";
+import { getProfitPerTruck, type ProfitPerTruckRow, type ProfitPerTruckFlag } from "../../api/reports";
 import { PageHeader } from "../../components/layout/PageHeader";
 import { Button } from "../../components/Button";
 import { useCompanyContext } from "../../contexts/CompanyContext";
 import { ReportBlockTPendingBanner } from "./ReportBlockTPendingBanner";
 import { ReportsSubNav } from "./ReportsSubNav";
-import { CollapsedListFilters, useStagedListFilters } from "../../components/table";
+import { ReportFilterBar } from "../../components/reports/ReportFilterBar";
 import { useListState } from "../../components/list-state";
 import { ParityTable, type ParityColumn } from "../../components/parity/ParityTable";
 import { entityLabel } from "../../lib/entity-label";
@@ -76,13 +76,10 @@ export function ProfitPerTruckPage() {
   const navigate = useNavigate();
   const { selectedCompanyId } = useCompanyContext();
   const companyId = selectedCompanyId ?? "";
+  const [searchParams, setSearchParams] = useSearchParams();
   const emptyFilters = { ...currentQuarterRange(), flagFilter: "all" as FlagFilter };
   const [applied, setApplied] = useState(emptyFilters);
-  const staged = useStagedListFilters({
-    applied,
-    empty: emptyFilters,
-    onApply: setApplied,
-  });
+  const [reportSearch, setReportSearch] = useState("");
 
   const query = useQuery({
     queryKey: ["reports", "profit-per-truck", companyId, applied.start, applied.end],
@@ -96,11 +93,16 @@ export function ProfitPerTruckPage() {
     retry: false,
   });
 
-  // Free-text search: ParityTable toolbar owns it (RPT-F3488) — flag filter stays page-local.
+  // Free-text search: ReportFilterBar search + flag filter stays page-local.
   const filteredRows = useMemo(() => {
     const rows = query.data?.by_truck ?? [];
-    return rows.filter((row) => applied.flagFilter === "all" || row.flags.includes(applied.flagFilter));
-  }, [applied.flagFilter, query.data?.by_truck]);
+    const q = reportSearch.toLowerCase();
+    return rows.filter((row) => {
+      if (applied.flagFilter !== "all" && !row.flags.includes(applied.flagFilter)) return false;
+      if (q && !String(row.unit_number ?? "").toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [applied.flagFilter, query.data?.by_truck, reportSearch]);
 
   const sorted = filteredRows;
 
@@ -178,7 +180,7 @@ export function ProfitPerTruckPage() {
     });
   }, [filteredRows]);
 
-  function exportCsv(data: ProfitPerTruckResponse) {
+  function exportCsv() {
     const header = [
       "Unit",
       "Type",
@@ -194,7 +196,7 @@ export function ProfitPerTruckPage() {
       "PerMile",
       "Flags",
     ];
-    const lines = (data.by_truck ?? []).map((r) =>
+    const lines = sorted.map((r) =>
       [
         r.unit_number,
         r.truck_type,
@@ -307,7 +309,7 @@ export function ProfitPerTruckPage() {
             <Button size="sm" variant="secondary" onClick={printLetter} disabled={!query.data}>
               Print this page
             </Button>
-            <Button size="sm" variant="secondary" disabled={!query.data} onClick={() => query.data && exportCsv(query.data)}>
+            <Button size="sm" variant="secondary" disabled={!query.data} onClick={() => exportCsv()}>
               Export CSV
             </Button>
           </div>
@@ -317,49 +319,35 @@ export function ProfitPerTruckPage() {
       {!companyId ? <p className="text-xs text-red-600">Select an operating company.</p> : null}
       {query.isError ? <ReportBlockTPendingBanner error={query.error} onRetry={() => void query.refetch()} /> : null}
 
-      <CollapsedListFilters
-        activeFilterCount={JSON.stringify(applied) !== JSON.stringify(emptyFilters) ? 1 : 0}
-        onApply={staged.apply}
-        onReset={staged.reset}
-        onCancel={staged.cancel}
-        applyDisabled={!staged.dirty}
-        defaultOpen={true}
+      <ReportFilterBar
         testIdPrefix="reports-profit-per-truck"
-        className="no-print rounded-sm border border-gray-200 bg-white p-3"
+        fromDate={applied.start}
+        toDate={applied.end}
+        onFromDateChange={(d) => setApplied((p) => ({ ...p, start: d ?? "" }))}
+        onToDateChange={(d) => setApplied((p) => ({ ...p, end: d ?? "" }))}
+        onPresetSelect={(preset) => {
+          const next = new URLSearchParams(searchParams);
+          next.set("preset", preset);
+          setSearchParams(next, { replace: true });
+        }}
+        search={reportSearch}
+        onSearchChange={setReportSearch}
       >
-        <div className="flex flex-wrap items-end gap-3">
-          <label className="text-xs text-gray-600">
-            From
-            <DatePicker
-              className="mt-1 block h-9"
-              value={staged.draft.start}
-              onChange={(next) => staged.setDraft((p) => ({ ...p, start: next }))}
-            />
-          </label>
-          <label className="text-xs text-gray-600">
-            To
-            <DatePicker
-              className="mt-1 block h-9"
-              value={staged.draft.end}
-              onChange={(next) => staged.setDraft((p) => ({ ...p, end: next }))}
-            />
-          </label>
-          <label className="text-xs text-gray-600">
-            Flag
-            <SelectCombobox
-              className="mt-1 block h-9 rounded-sm border border-gray-300 px-2"
-              value={staged.draft.flagFilter}
-              onChange={(event) => staged.setDraft((p) => ({ ...p, flagFilter: event.target.value as FlagFilter }))}
-            >
-              <option value="all">All</option>
-              <option value="most_profitable">{PROFIT_PER_TRUCK_FLAG_LABELS.most_profitable}</option>
-              <option value="least_profitable">{PROFIT_PER_TRUCK_FLAG_LABELS.least_profitable}</option>
-              <option value="high_maintenance">{PROFIT_PER_TRUCK_FLAG_LABELS.high_maintenance}</option>
-              <option value="underutilized">{PROFIT_PER_TRUCK_FLAG_LABELS.underutilized}</option>
-            </SelectCombobox>
-          </label>
-        </div>
-      </CollapsedListFilters>
+        <label className="flex items-center gap-1 text-xs text-slate-600">
+          <span className="font-semibold text-slate-600">Flag</span>
+          <SelectCombobox
+            className="h-7 rounded-sm border border-slate-300 px-2 text-xs"
+            value={applied.flagFilter}
+            onChange={(event) => setApplied((p) => ({ ...p, flagFilter: event.target.value as FlagFilter }))}
+          >
+            <option value="all">All</option>
+            <option value="most_profitable">{PROFIT_PER_TRUCK_FLAG_LABELS.most_profitable}</option>
+            <option value="least_profitable">{PROFIT_PER_TRUCK_FLAG_LABELS.least_profitable}</option>
+            <option value="high_maintenance">{PROFIT_PER_TRUCK_FLAG_LABELS.high_maintenance}</option>
+            <option value="underutilized">{PROFIT_PER_TRUCK_FLAG_LABELS.underutilized}</option>
+          </SelectCombobox>
+        </label>
+      </ReportFilterBar>
 
       {query.isLoading ? <p className="text-xs text-gray-500">Loading…</p> : null}
 

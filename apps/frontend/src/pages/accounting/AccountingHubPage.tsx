@@ -7,6 +7,7 @@ import { ManualJEModal } from "./ManualJEModal";
 import {
   listBills,
   listBillPayments,
+  listExpenses,
   listInvoices,
   listPayments,
   type VendorBill,
@@ -183,7 +184,7 @@ export function AccountingHubPage() {
   const monthRange = useMemo(() => monthBoundsIso(companyToday()), []);
   const quarterRange = useMemo(() => currentQuarterRange(), []);
 
-  const [billsQ, billPaymentsQ, paymentsQ, settlementsQ, invoicesQ, qboStatsQ, qboQueueQ, trialBalanceQ, profitLossQ] = useQueries({
+  const [billsQ, billPaymentsQ, paymentsQ, settlementsQ, invoicesQ, qboStatsQ, qboQueueQ, trialBalanceQ, profitLossQ, expensesQ] = useQueries({
     queries: [
       {
         queryKey: ["accounting-proto", "bills", companyId],
@@ -244,6 +245,24 @@ export function AccountingHubPage() {
         enabled: Boolean(companyId),
         retry: false,
       },
+      {
+        // HUB-MTD-EXPENSES (owner 2026-09-06 05:0xZ, Accounting home showed MTD EXPENSES $0.00 · 0 bills while Neon held
+        // 207 direct expenses): the KPI read BILLS only. Direct expenses (accounting.expenses, the whole USMCA cost base
+        // today) are month-to-date expenses too. GET /api/v1/expenses caps limit at 200 → paged by offset.
+        queryKey: ["accounting-proto", "expenses-mtd", companyId, mtdStart],
+        queryFn: async () => {
+          const rows: Awaited<ReturnType<typeof listExpenses>>["rows"] = [];
+          for (let offset = 0; offset < 5000; offset += 200) {
+            const page = await listExpenses(companyId, { limit: 200, offset, date_from: mtdStart });
+            const got = page.rows ?? [];
+            rows.push(...got);
+            if (got.length < 200) break;
+          }
+          return rows;
+        },
+        enabled: Boolean(companyId),
+        retry: false,
+      },
     ],
   });
 
@@ -264,7 +283,13 @@ export function AccountingHubPage() {
 
   const billsMtd = useMemo(() => bills.filter((bill) => isIsoOnOrAfter(bill.bill_date, mtdStart)), [bills, mtdStart]);
   const openBillsAmountCents = openBills.reduce((sum, bill) => sum + amountOrBalanceCents(bill), 0);
-  const expensesMtdCents = billsMtd.reduce((sum, row) => sum + Number(row.amount_cents ?? 0), 0);
+  const directExpensesMtd = useMemo(
+    () => (expensesQ.data ?? []).filter((x) => x.status !== "void" && x.status !== "draft" && isIsoOnOrAfter(x.transaction_date, mtdStart)),
+    [expensesQ.data, mtdStart]
+  );
+  const expensesMtdCents =
+    billsMtd.reduce((sum, row) => sum + Number(row.amount_cents ?? 0), 0) +
+    directExpensesMtd.reduce((sum, x) => sum + Number(x.total_amount_cents ?? 0), 0);
   // ACCT-F200 / LV-AR-OPEN-INCLUDES-VOIDED (ACCT-F5027) — amount_open_cents is a STORED GENERATED
   // column that legitimately stays nonzero on a voided invoice (voiding changes validity, not face
   // value); every open-A/R read path MUST exclude voided rows instead, via the same
@@ -414,7 +439,9 @@ export function AccountingHubPage() {
           : kpiCard("Open Bills", money.format(openBillsAmountCents / 100), `${openBills.length} open`, openBills.length ? "danger" : "neutral")}
         {billsQ.isError
           ? kpiCard("MTD Expenses", "—", "Error loading")
-          : kpiCard("MTD Expenses", money.format(expensesMtdCents / 100), `${billsMtd.length} bills`, "warn")}
+          : expensesQ.isError
+            ? kpiCard("MTD Expenses", "—", "Error loading expenses")
+            : kpiCard("MTD Expenses", money.format(expensesMtdCents / 100), `${billsMtd.length} bills · ${directExpensesMtd.length} expenses`, "warn")}
         {invoicesQ.isError
           ? kpiCard("Open Invoices", "—", "Error loading")
           : kpiCard("Open Invoices", money.format(openInvoicesCents / 100), `${openInvoices.length} open`)}

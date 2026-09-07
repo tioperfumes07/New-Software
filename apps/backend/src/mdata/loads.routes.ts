@@ -84,7 +84,24 @@ const statusFilterSchema = z
   }, z.array(loadStatusSchema).max(20).optional())
   .optional();
 
-/** Terminal load statuses — completed/cancelled cohort routed to Loads History (board_scope=history). */
+/**
+ * Terminal load statuses — completed/cancelled cohort routed to Loads History (board_scope=history).
+ *
+ * DSP-BAND-DUP (owner 2026-09-06 21:2xZ verbatim: "you messed up the vehicles in list view, you
+ * duplicated some vehicles"): `delivered_pending_docs` is TERMINAL for the LIVE Booked band. The truck
+ * has PHYSICALLY DELIVERED the load — it is free; the row is only pending paperwork/invoicing. Measured
+ * live (Neon prod, RLS-bypassed): USMCA has a large delivered-pending-docs backlog (T152 8, T177 8,
+ * T171 7, T175 7, …). The Booked band renders ONE ROW PER LOAD, so treating delivered_pending_docs as
+ * LIVE made each truck repeat once per backlog load — the "duplicated vehicles" the owner saw.
+ *
+ * The truck-centric board is fixed from the AWAITING side instead: a truck whose only open loads are
+ * delivered_pending_docs is DROPPED from the units-without-load active set (dispatch/loads.routes.ts)
+ * and surfaces ONCE in "Awaiting assignment" (available for the next dispatch). So the Booked band shows
+ * only genuinely in-flight loads (assigned_not_dispatched/dispatched/in_transit) — one row per truck —
+ * and every in-service truck still appears exactly once (Booked if in-flight, else Awaiting, else In
+ * shop). History still shows delivered/delivered_pending_docs/completed_docs_received/invoiced/paid/
+ * closed/cancelled/abandoned/walkoff/no-show.
+ */
 const TERMINAL_LOAD_STATUSES = [
   "delivered",
   "delivered_pending_docs",
@@ -212,6 +229,10 @@ const updateLoadBodySchema = z
     team_id: z.string().uuid().nullable().optional(),
     notes: z.string().trim().max(5000).nullable().optional(),
     soft_deleted_at: isoDatetimeSchema.nullable().optional(),
+    // SETL-LINES-GL (2026-09-05): the column has existed since booking, written only at
+    // book-load time — a load booked without its customer W.O. number on file (e.g. a historical
+    // backfill sourced before the number was known) had no way to correct it afterward.
+    customer_wo_number: z.string().trim().max(100).nullable().optional(),
   })
   .refine((v) => Object.keys(v).length > 0, { message: "at least one field is required" });
 
@@ -244,6 +265,17 @@ const updateStopBodySchema = z
     scheduled_departure_at: isoDatetimeSchema.nullable().optional(),
     actual_arrival_at: isoDatetimeSchema.nullable().optional(),
     actual_departure_at: isoDatetimeSchema.nullable().optional(),
+    // STOPS-APPT-FIX (2026-09-06, ROUND 10 lead order) — the real appointment-window fields Round
+    // Trips/tour readout/LoadStopsRecordTab's own appointmentText() read (DSP-49). Before this, the
+    // ONLY route that could write appointment_start_at/appointment_end_at was the destructive
+    // replace-all POST /api/v1/loads/:loadId/stops (dispatch-refinements.service.ts's
+    // replaceLoadStopsRefined, which soft-deletes and re-INSERTs every stop on the load — wiping
+    // actual_arrival_at/actual_departure_at and orphaning any FK'd stop_id, e.g. geofence bindings
+    // or load_stop_legs). This surgical single-column PATCH lets a caller (a human editing one
+    // stop, or a scoped backfill script) set the real appointment window WITHOUT touching anything
+    // else on the row.
+    appointment_start_at: isoDatetimeSchema.nullable().optional(),
+    appointment_end_at: isoDatetimeSchema.nullable().optional(),
     status: stopStatusSchema.optional(),
     notes: z.string().trim().max(5000).nullable().optional(),
   })
@@ -1619,6 +1651,7 @@ export async function registerLoadRoutes(app: FastifyInstance) {
     if ("assigned_secondary_driver_id" in b) add("assigned_secondary_driver_id", b.assigned_secondary_driver_id ?? null);
     if ("team_id" in b) add("team_id", b.team_id ?? null);
     if ("notes" in b) add("notes", b.notes ?? null);
+    if ("customer_wo_number" in b) add("customer_wo_number", b.customer_wo_number ?? null);
     if ("soft_deleted_at" in b) {
       add("soft_deleted_at", b.soft_deleted_at ?? null);
       if (b.soft_deleted_at) {
@@ -1635,12 +1668,21 @@ export async function registerLoadRoutes(app: FastifyInstance) {
 
     try {
       const updated = await withCurrentUser(authUser.uuid, async (client) => {
+        // INV-MISSING-2-RLS-GAP (found live 2026-09-06): this route never set app.operating_company_id,
+        // unlike its siblings (loads.routes.ts:673/2230). mdata.loads' own RLS is role-scoped so the
+        // UPDATE below silently worked anyway — but a rate_total_cents change here triggers
+        // resyncProformaInvoiceFromLoadRate -> buildInvoiceFromLoad, which INSERTs an entity-scoped
+        // accounting.invoices row; that INSERT's own trg_assign_trace_no trigger upserts
+        // lib.trace_counters (FORCE RLS, policy checks app.operating_company_id) and 500s
+        // (42501) with the GUC unset. Setting it here matches every other write route in this file.
+        await client.query(`SELECT set_config('app.operating_company_id', $1::text, true)`, [scopedCompanyId]);
         const oldRes = await client.query(
           `
             SELECT
               id, operating_company_id, load_number, customer_id, status, rate_total_cents, currency_code,
               assigned_unit_id, assigned_primary_driver_id, assigned_secondary_driver_id, team_id,
-              dispatcher_user_id, notes, created_at, updated_at, soft_deleted_at, deleted_by_user_id
+              dispatcher_user_id, notes, created_at, updated_at, soft_deleted_at, deleted_by_user_id,
+              customer_wo_number
             FROM mdata.loads
             WHERE id = $1
               -- Tier-1 entity-scope (money by-id IDOR): same loads_update_office role-only RLS gap.
@@ -2011,6 +2053,8 @@ export async function registerLoadRoutes(app: FastifyInstance) {
       add("actual_departure_at", b.actual_departure_at ?? null);
       add("actual_departure_source", b.actual_departure_at ? "manual" : null);
     }
+    if ("appointment_start_at" in b) add("appointment_start_at", b.appointment_start_at ?? null);
+    if ("appointment_end_at" in b) add("appointment_end_at", b.appointment_end_at ?? null);
     if ("status" in b) add("status", b.status);
     if ("notes" in b) add("notes", b.notes ?? null);
 
@@ -2037,7 +2081,8 @@ export async function registerLoadRoutes(app: FastifyInstance) {
           `
             SELECT
               id, load_id, sequence_number, stop_type, location_id, address_line1, city, state, country,
-              scheduled_arrival_at, scheduled_departure_at, actual_arrival_at, actual_departure_at, status, notes, created_at, updated_at
+              scheduled_arrival_at, scheduled_departure_at, actual_arrival_at, actual_departure_at,
+              appointment_start_at, appointment_end_at, status, notes, created_at, updated_at
             FROM mdata.load_stops
             WHERE load_id = $1
               AND id = $2
@@ -2058,7 +2103,8 @@ export async function registerLoadRoutes(app: FastifyInstance) {
               AND soft_deleted_at IS NULL
             RETURNING
               id, load_id, sequence_number, stop_type, location_id, address_line1, city, state, country,
-              scheduled_arrival_at, scheduled_departure_at, actual_arrival_at, actual_departure_at, status, notes, created_at, updated_at
+              scheduled_arrival_at, scheduled_departure_at, actual_arrival_at, actual_departure_at,
+              appointment_start_at, appointment_end_at, status, notes, created_at, updated_at
           `,
           values
         );

@@ -126,9 +126,14 @@ const CHECKS = [
     pattern: /EntityLinkOrTombstone kind="vendor" id=\{billVendorDrillId\(row\)\} name=\{row\.vendor_name\} noun="Vendor"/,
   },
   {
+    // Windows widened (500->2000, 1800->6500): legitimate list-column growth since this check was
+    // written (LDT-1 load-costs card fields, CV-TRANSACTION-COLUMNS load/settlement linkage,
+    // insurance claim number, attachment count all inserted between the vendor_name SELECT and the
+    // FROM/JOIN, and more WHERE/ORDER BY/pagination logic between the query and the row mapping) —
+    // the vendor resolve join + mapping are both still present, just farther apart in char count.
     name: "ACCOUNTING-BILLS-REVERSE-VENDOR-DRILL: list producer resolves scoped canonical vendor label",
     file: "apps/backend/src/accounting/bills.service.ts",
-    pattern: /SELECT b\.\*, v\.vendor_name,[\s\S]{0,500}\$\{BILL_VENDOR_RESOLVE_JOIN_SQL\}[\s\S]{0,1800}vendor_name: row\.vendor_name \?\?/,
+    pattern: /SELECT b\.\*, v\.vendor_name,[\s\S]{0,2000}\$\{BILL_VENDOR_RESOLVE_JOIN_SQL\}[\s\S]{0,6500}vendor_name: row\.vendor_name \?\?/,
   },
   {
     name: "ACCT-F5049: InvoicesListPage reads source_load_id from the URL",

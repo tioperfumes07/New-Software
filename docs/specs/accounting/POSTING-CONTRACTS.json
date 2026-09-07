@@ -414,6 +414,7 @@
     {
       "flag": "INVOICE_AR_GL_POSTING_ENABLED",
       "source_type": "invoice",
+      "note": "ACCT-F205 interlock (apps/backend/src/accounting/invoice-gl.service.ts, loadHasStandingBillLatch): this shape is SUPPRESSED for a load-sourced invoice when that load already has a standing (unreversed) REVENUE_RECOGNITION_POST_ENABLED_EVENT_2 'bill' latch JE — that event already posted A/R and revenue for the load (DR ar_control / CR unbilled_revenue, itself following the Event 1 DR unbilled_revenue / CR revenue_default earn), so posting this shape too would double-recognize both. This DR ar_control / CR revenue_default shape only actually posts for invoices with no source load, or where the latch is OFF/reversed/voided for that load.",
       "lines": [
         {
           "side": "DR",

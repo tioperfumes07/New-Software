@@ -27,6 +27,10 @@ vi.mock("../../api/loads", () => ({
     isPending: false,
     variables: undefined,
   }),
+  // Added by ACCT-F10164 (#18956): the drawer calls useRemintDriverBill at render; the mock never
+  // declared it, so every test in this file died at first render with a missing-export error on the
+  // clean base. Stubbed here so the suite runs.
+  useRemintDriverBill: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
 vi.mock("../../api/accounting", () => ({

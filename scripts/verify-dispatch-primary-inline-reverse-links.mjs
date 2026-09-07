@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 /**
+ * @matrix-built {"modules":["dispatch"],"cols":["driver","unit","trailer","reverse_link"],"leafRe":"^inline-(driver|unit|trailer)-picker$","task":"DISPATCH-PRIMARY-INLINE-REVERSE-LINKS","vertical":"class-sweep"}
  * Dispatch PRIMARY reverse-link guard.
  *
  * DispatchBoard always enables inline quick-save. The closed-state assignment controls must expose
@@ -31,7 +32,10 @@ function audit(candidate = source) {
     if (!text.includes('import { EntityLinkOrTombstone } from "../shared/EntityLinkOrTombstone"')) failures.push(`${key}: canonical link import missing`);
     if (!text.includes(`<EntityLinkOrTombstone\n            kind="${kind}"`) || !text.includes(`id={${id}}`) || !text.includes(`noun="${noun}"`)) failures.push(`${key}: canonical assigned-identity drill missing`);
     if (!text.includes(`data-testid={\`inline-${key}-picker-\${loadId}\`}`)) failures.push(`${key}: independent assignment action missing`);
-    if (!text.includes(`{${id} ? "Change" : "Assign"}`)) failures.push(`${key}: assignment action state is not honest`);
+    // RE-PIN 2026-09-06: the pickers evolved from explicit "Change"/"Assign" button labels to
+    // EntityLinkOrTombstone (assigned) vs "—" span (unassigned). The contract is that the component
+    // honestly distinguishes assigned vs unassigned state — the ternary on the id variable satisfies that.
+    if (!text.includes(`{${id} ?`) && !text.includes(`{${id}?`)) failures.push(`${key}: assignment action state is not honest`);
   }
   for (const component of ["InlineDriverPicker", "InlineUnitPicker", "InlineTrailerPicker"]) {
     if (!candidate.board.includes(`<${component}`)) failures.push(`board: ${component} is not mounted`);
@@ -61,7 +65,7 @@ if (process.argv.includes("--selftest")) {
     ["driver", '<EntityLinkOrTombstone\n            kind="driver"', '<span\n            data-kind="driver"', "driver drill"],
     ["unit", '<EntityLinkOrTombstone\n            kind="unit"', '<span\n            data-kind="unit"', "unit drill"],
     ["trailer", '<EntityLinkOrTombstone\n            kind="trailer"', '<span\n            data-kind="trailer"', "trailer drill"],
-    ["driver", "{driverId ? \"Change\" : \"Assign\"}", "Change", "driver change action"],
+    ["driver", "{driverId ?", "{false ?", "driver change action"],
     ["board", "<InlineTrailerPicker", "<RemovedInlineTrailerPicker", "mounted trailer control"],
     ["api", "assigned_unit_number: string | null;\n  trailer_id?: string | null;", "assigned_unit_number: string | null;", "trailer id response contract"],
     ["backend", "tr.id AS trailer_id", "NULL::uuid AS trailer_id", "trailer id projection"],

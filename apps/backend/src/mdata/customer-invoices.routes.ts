@@ -82,8 +82,27 @@ export async function registerCustomerInvoicesRoutes(app: FastifyInstance) {
             i.issue_date, i.due_date, i.delivery_date, i.sent_at, i.voided_at,
             i.subtotal_cents, i.tax_cents, i.total_cents, i.amount_paid_cents, i.amount_open_cents,
             i.currency_code, i.invoice_type, i.factoring_status, i.factoring_advance_id,
-            i.created_at, i.updated_at
+            i.created_at, i.updated_at,
+            -- CV-TRANSACTION-COLUMNS (inv #46): load/settlement/unit linkage for customer invoice transactions tab.
+            l.load_number AS source_load_number,
+            l.pickup_date AS linked_pickup_date,
+            l.delivery_date AS linked_delivery_date,
+            l.miles_practical AS linked_loaded_miles,
+            u.unit_number AS linked_unit_number,
+            s.id::text AS linked_settlement_id,
+            s.display_id AS linked_settlement_display_id
           FROM accounting.invoices i
+          LEFT JOIN mdata.loads l ON l.id = i.source_load_id AND l.operating_company_id = i.operating_company_id
+          LEFT JOIN mdata.units u ON u.id = l.assigned_unit_id AND COALESCE(u.currently_leased_to_company_id, u.owner_company_id) = l.operating_company_id
+          LEFT JOIN LATERAL (
+            SELECT ds.id, ds.display_id
+            FROM driver_finance.driver_settlements ds
+            WHERE ds.operating_company_id = i.operating_company_id
+              AND ds.voided_at IS NULL
+              AND (ds.first_load_id = i.source_load_id OR ds.last_load_id = i.source_load_id)
+            ORDER BY ds.created_at DESC
+            LIMIT 1
+          ) s ON true
           WHERE ${where.join(" AND ")}
           ORDER BY i.issue_date DESC, i.created_at DESC
           LIMIT $${values.length - 1} OFFSET $${values.length}

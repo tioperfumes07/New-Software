@@ -12,6 +12,8 @@ import { requireAuth } from "../auth/session-middleware.js";
 import { notifySettlementAvailable } from "../services/push-notification.service.js";
 import { renderSettlementStatementPdf } from "./settlement-pdf-renderer.service.js";
 import { listDriverBillsForSettlementPeriod } from "./settlements.service.js";
+import { loadIdsForSettlement } from "../accounting/tour-open-gate.service.js";
+import { postHeldDocumentsForClosedTour } from "../accounting/tour-close-posting.service.js";
 
 const idParamsSchema = z.object({ id: z.string().uuid() });
 
@@ -303,6 +305,36 @@ export async function registerSettlementsMvpRoutes(app: FastifyInstance) {
 
       const updatedRow = result.row as Record<string, unknown>;
       const pdf = result.pdf;
+
+      // ACC-50 (LAW §2, ROUND 5) — this settlement just left the open statuses (its tour closed).
+      // Every expense/bill held for one of its loads now posts, through the SAME engine the
+      // create/manual-post paths use (postSourceTransaction / postBillGlIfEnabled) — no new posting
+      // code. Runs AFTER the approve transaction above has committed (postSourceTransaction opens
+      // its own transaction and must never nest inside another). A failure here never un-approves
+      // the settlement — the batch is retriable (the held rows are still findable by their own
+      // posting_hold_reason) and is only ever best-effort at this step.
+      try {
+        const loadIds = await withCompany(user.uuid, companyId, (client) => loadIdsForSettlement(client, companyId, params.data.id));
+        const tourClosePosting = await postHeldDocumentsForClosedTour(companyId, loadIds, { userId: user.uuid });
+        if (tourClosePosting.expenses_posted.length || tourClosePosting.bills_posted.length) {
+          await withCompany(user.uuid, companyId, (client) =>
+            appendCrudAudit(
+              client,
+              user.uuid,
+              "driver_finance.settlement_tour_close_posted_held",
+              {
+                resource_type: "driver_finance.driver_settlements",
+                resource_id: params.data.id,
+                ...tourClosePosting,
+              },
+              "info",
+              "ACC-50"
+            )
+          );
+        }
+      } catch (tourCloseErr) {
+        console.error("[ACC-50] postHeldDocumentsForClosedTour failed for settlement approve", tourCloseErr);
+      }
 
       const driverName =
         `${String(updatedRow.first_name ?? "").trim()} ${String(updatedRow.last_name ?? "").trim()}`.trim() || "Driver";

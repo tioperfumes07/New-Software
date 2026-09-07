@@ -33,6 +33,32 @@ describe("suggestion engine tiers", () => {
     expect(hit?.source).toBe("banking_rule");
   });
 
+  it("BANK-RULES-USMCA: a NULL description_normalized falls back to the raw description (live: NULL on all 364 USMCA lines)", () => {
+    const rules = [
+      {
+        priority: 90,
+        description_contains: "love's travel",
+        description_regex: null,
+        amount_min_cents: null,
+        amount_max_cents: null,
+        bank_account_filter_id: null,
+        then_vendor_id: "5a529e97-5af6-4874-89c0-f300715101f2",
+        then_account_id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+        then_class_id: null,
+      },
+    ];
+    const hit = suggestionFromRules(rules, {
+      description_normalized: null,
+      description: "LOVE'S TRAVEL STOP",
+      amount_cents: -98765,
+      bank_account_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+    });
+    expect(hit?.account_id).toBe("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
+    expect(hit?.vendor_id).toBe("5a529e97-5af6-4874-89c0-f300715101f2");
+    const miss = suggestionFromRules(rules, { description_normalized: null, description: null, amount_cents: -1, bank_account_id: "x" });
+    expect(miss).toBeNull();
+  });
+
   it("mergeSuggestionPreferHigher prefers stronger tier", () => {
     const low = {
       vendor_id: null,

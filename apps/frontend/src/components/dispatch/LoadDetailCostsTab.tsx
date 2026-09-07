@@ -11,10 +11,12 @@ import {
   listCoaRoles,
   listExpenses,
   type BrokerAdvanceCategory,
+  type ExpenseListRow,
+  type VendorBill,
 } from "../../api/accounting";
 import { getAllAccounts } from "../../api/banking";
 import { formatBankAccountPickerLabel } from "../../pages/banking/transferAccountPicker";
-import { listCatalogAccounts } from "../../api/catalog-accounts";
+import { listCatalogAccounts, type CatalogAccount } from "../../api/catalog-accounts";
 import { apiRequest, generateIdempotencyKey } from "../../api/client";
 import type { LoadDetail } from "../../api/loads";
 import { listVendors } from "../../api/mdata";
@@ -24,29 +26,29 @@ import { DatePicker } from "../forms/DatePicker";
 import { MoneyInput } from "../forms/MoneyInput";
 import { useToast } from "../Toast";
 import { EntityLink } from "../shared/EntityLink";
+import { ReceiptAttach } from "../documents/ReceiptAttach";
+import { PAID_WITH_KIND_LABEL, paidWithAccounts, paidWithKind } from "../load-costs/paidWith";
 import { formatMoneyCents } from "./constants";
-import { PreSettlementPanel } from "./PreSettlementPanel";
-import { LoadDetailSettlementTab } from "./LoadDetailSettlementTab";
+import { formatDateUS } from "../../lib/formatDate";
 
-// Owner 2026-09-05: the pre-settlement + settlement views must live WITHIN Load Costs, not only as
-// separate drawer tabs. These reuse the existing PreSettlementPanel / LoadDetailSettlementTab — no
-// duplicate settlement math — surfaced as sub-tabs so the operator sees costs → pre-settlement →
-// settlement in one place. The create (+ New) stays inside the Costs sub-view only.
-type CostsView = "costs" | "pre_settlement" | "settlement";
-const COSTS_VIEWS: Array<{ id: CostsView; label: string }> = [
-  { id: "costs", label: "Costs" },
-  { id: "pre_settlement", label: "Pre-Settlement" },
-  { id: "settlement", label: "Settlement" },
-];
-
+// LDT-1 (owner order 2026-09-05 23:00Z, CURSOR-LOAD-DETAIL-TABS-BUILD § LDT-1; built by Claude Lead
+// 2026-09-06 on the owner's "you build all loads and finish all related"): the Costs tab is the
+// 2026-09-02 proposal — ENTRY CARDS, one per cost, number derived (typed value wins), Expense·paid now |
+// Bill·owed toggle, Paid-with = bank / card / fuel-card accounts ONLY, a Receipt control on EVERY card
+// (documents.attachments, the app's real evidence path), a posting hint in English, a FIXED totals
+// footer (owner: "if you rearrange columns … the totals stay stuck") and "What the bank will do with
+// these". One write path: createExpense / createVendorBill / createBrokerAdvance — never a new endpoint.
+// Pre-Settlement and Settlement are the load's own primary tabs since LDT-0 (render 2026-09-05); this tab is
+// the Costs body only. Merged over Cursor's LDT-1C (4336b5cd): its Paid-with matched account_type === "bank"
+// which the live chart (account_type "Asset"/"Liability") never satisfies → 0 options on production.
 type CostChoice = "expense" | "bill" | "advance" | "fuel_advance";
 type Bucket = "late_fee" | "lumper" | "fuel" | "repairs_maintenance" | "other";
 const DASH = "—";
 
 type Draft = {
   id: string;
-  /** QuickBooks register NUMBER — EMPTY and EDITABLE by default. Blank = system assigns load#, -1, -2.
-   *  A typed value wins verbatim (expense_number / bill display_id). */
+  /** QuickBooks register NUMBER — empty by default = system assigns load#, load#-1, load#-2 (derived,
+   *  never collides). A typed value wins verbatim (expense_number / bill display_id). */
   number: string;
   kind: CostChoice;
   date: string;
@@ -56,31 +58,41 @@ type Draft = {
   categoryName: string;
   paymentAccountId: string;
   invoiceNo: string;
+  vendorDocNo: string;
   amount: string;
   error: string | null;
   advanceCategory: BrokerAdvanceCategory | "";
   instrumentType: string;
   instrumentReference: string;
+  /** documents.attachments draft entity id — the create payload carries it as attachment_draft_id. */
+  attachmentDraftId: string;
+  receiptCount: number;
 };
-type DriverBillRow = { gross_amount_cents: number; status: string };
+type DriverBillRow = {
+  id?: string;
+  gross_amount_cents: number | string;
+  status: string;
+  miles_basis?: number | string | null;
+  miles_basis_type?: string | null;
+  rate_per_mile_cents?: number | string | null;
+  miles_deadhead?: number | string | null;
+  rate_empty_per_mile_cents?: number | string | null;
+  loaded_pay_cents?: number | string | null;
+  deadhead_pay_cents?: number | string | null;
+};
 
-const ADVANCE_CATEGORY_LABEL: Record<BrokerAdvanceCategory, string> = {
-  diesel: "Diesel",
-  driver_pay: "Driver pay",
-  repair: "Repair",
-  other: "Other",
-};
+const ADVANCE_CATEGORY_LABEL: Record<BrokerAdvanceCategory, string> = { diesel: "Diesel", driver_pay: "Driver pay", repair: "Repair", other: "Other" };
 const TYPE_LABEL: Record<CostChoice, string> = {
   expense: "Expense · paid now",
   bill: "Bill · owed",
   fuel_advance: "Fuel advance",
   advance: "Advance received",
 };
-const TYPE_ORDER: CostChoice[] = ["expense", "bill", "fuel_advance", "advance"];
+/** The live board's 5-way split (load-costs-board.routes.ts). Kept as the per-card split line and the
+ *  footer breakdown — owner 2026-09-05: "adding the columns we really require … do not remove". */
+const BUCKET_LABEL: Record<Bucket, string> = { late_fee: "Late Fee", lumper: "Lumper", fuel: "Fuel", repairs_maintenance: "R&M Exp", other: "Other" };
+const BUCKETS: Bucket[] = ["late_fee", "lumper", "fuel", "repairs_maintenance", "other"];
 
-/** Same 5-way split the Load Costs board uses (load-costs-board.routes.ts): detention→late fee,
- *  lumper→lumper, diesel/def→fuel, work-order/repair→R&M, everything else→other. Here we classify by
- *  the chosen category account's name (display only — the AMOUNT column always carries the real number). */
 function bucketOf(kind: CostChoice, categoryName: string): Bucket {
   if (kind === "fuel_advance") return "fuel";
   const n = categoryName.toLowerCase();
@@ -93,27 +105,21 @@ function bucketOf(kind: CostChoice, categoryName: string): Bucket {
 
 function blankDraft(kind: CostChoice = "expense"): Draft {
   return {
-    id: crypto.randomUUID(),
-    number: "",
-    kind,
-    date: companyToday(),
-    vendorId: "",
-    vendorName: "",
-    categoryId: "",
-    categoryName: "",
-    paymentAccountId: "",
-    invoiceNo: "",
-    amount: "",
-    error: null,
-    advanceCategory: "",
-    instrumentType: "",
-    instrumentReference: "",
+    id: crypto.randomUUID(), number: "", kind, date: companyToday(), vendorId: "", vendorName: "", categoryId: "", categoryName: "",
+    paymentAccountId: "", invoiceNo: "", vendorDocNo: "", amount: "", error: null, advanceCategory: "", instrumentType: "", instrumentReference: "",
+    attachmentDraftId: crypto.randomUUID(), receiptCount: 0,
   };
 }
 
+const num = (v: number | string | null | undefined) => (v == null || v === "" ? 0 : Number(v));
+const fmtMiles = (v: number | string | null | undefined) => (v == null || v === "" || !Number.isFinite(Number(v)) ? DASH : Number(v).toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 }));
+const fmtRate = (cents: number | string | null | undefined) => (cents == null || cents === "" ? DASH : `$${(Number(cents) / 100).toFixed(4)}`);
+const mmdd = (iso: string | null | undefined) => (iso ? `${iso.slice(5, 7)} / ${iso.slice(8, 10)}` : DASH);
+const acctLabel = (number: string | null | undefined, name: string | null | undefined) => (name ? `${number ? `${number} ` : ""}${name}` : DASH);
+
 export function LoadDetailCostsTab({ load, canEdit, canEditReason }: { load: LoadDetail; canEdit: boolean; canEditReason?: string }) {
   const [drafts, setDrafts] = useState<Draft[]>([blankDraft()]);
-  const [costsView, setCostsView] = useState<CostsView>("costs");
+  const [popup, setPopup] = useState<null | { title: string; body: ReactNode }>(null);
   const queryClient = useQueryClient();
   const { pushToast } = useToast();
   const opco = load.operating_company_id;
@@ -123,316 +129,453 @@ export function LoadDetailCostsTab({ load, canEdit, canEditReason }: { load: Loa
   const vendors = useQuery({ queryKey: ["load-costs", "vendors", opco], queryFn: () => listVendors({ operating_company_id: opco, status: "active", limit: 5000 }) });
   const accounts = useQuery({ queryKey: ["load-costs", "accounts", opco], queryFn: () => listCatalogAccounts({ operating_company_id: opco, status: "active", postable_only: true }) });
   const advances = useQuery({ queryKey: ["load-costs", "advances", opco, load.id], queryFn: () => listBrokerAdvances(opco, { load_id: load.id }) });
-  // ACCT-F25053 (owner ruling 2026-09-04: "bind by role, never by name") — the fuel-advance debit
-  // account is resolved from accounting.chart_of_accounts_roles, never picked by a /fuel/i name match.
+  // ACCT-F25053 (owner 2026-09-04: "bind by role, never by name") — fuel-advance debit + operating bank
+  // come from accounting.chart_of_accounts_roles.
   const coaRoles = useQuery({ queryKey: ["load-costs", "coa-roles", opco], queryFn: () => listCoaRoles(opco) });
   const bankAccountsQuery = useQuery({ queryKey: ["load-costs", "bank-accounts", opco], queryFn: () => getAllAccounts(opco) });
   const advanceBankAccountRows = (bankAccountsQuery.data?.accounts ?? []) as Array<{ id: string; display_name?: string | null; account_name?: string | null; institution_name?: string | null; account_mask?: string | null }>;
-  const savedExpenses = expenses.data?.rows ?? [];
-  const savedBills = bills.data?.rows ?? [];
+
+  const savedExpenses: ExpenseListRow[] = expenses.data?.rows ?? [];
+  const savedBills: VendorBill[] = bills.data?.rows ?? [];
   const savedAdvances = (advances.data?.rows ?? []).filter((row) => !row.voided_at);
+  const liveExpenses = savedExpenses.filter((row) => row.status !== "void");
+  const liveBills = savedBills.filter((row) => row.status !== "voided");
   const savedCount = savedExpenses.length + savedBills.length;
   const currency = load.currency_code === "MXN" ? "MXN" : "USD";
-  const savedCosts = savedExpenses.filter((row) => row.status !== "void").reduce((sum, row) => sum + Number(row.total_amount_cents || 0), 0) + savedBills.filter((row) => row.status !== "voided").reduce((sum, row) => sum + Number(row.amount_cents || 0), 0);
-  const driverPay = (driverBills.data?.driver_bills ?? []).filter((row) => row.status !== "void").reduce((sum, row) => sum + Number(row.gross_amount_cents || 0), 0);
-  const revenue = Number(load.rate_total_cents ?? 0);
-  const chart = accounts.data?.accounts ?? [];
-  // ACCT-F25053 — account_type is the QBO enum spelling exactly ("CostOfGoodsSold", no spaces).
+  const savedCosts = liveExpenses.reduce((s, r) => s + num(r.total_amount_cents), 0) + liveBills.reduce((s, r) => s + num(r.amount_cents), 0);
+  const driverBillRows = (driverBills.data?.driver_bills ?? []).filter((row) => row.status !== "void");
+  const driverPay = driverBillRows.reduce((s, r) => s + num(r.gross_amount_cents), 0);
+  const revenue = num(load.rate_total_cents);
+  const chart: CatalogAccount[] = accounts.data?.accounts ?? [];
   const categories = chart.filter((row) => row.account_type === "Expense" || row.account_type === "OtherExpense" || row.account_type === "CostOfGoodsSold");
-  const paymentAccounts = chart.filter((row) => /asset|bank|credit ?card/i.test(row.account_type));
+  // LDT-1 LAW: Paid with = bank / card / fuel-card accounts ONLY (paidWith.ts). Never a receivable,
+  // factoring or driver-advance account — the live picker had all three (measured 2026-09-05).
+  const paymentAccounts = paidWithAccounts(chart);
   const fuelRoleRow = (coaRoles.data?.rows ?? []).find((row) => row.role === "company_fuel_advance_expense" && row.is_active && row.account_id);
   const fuelAccount = fuelRoleRow ? chart.find((row) => row.id === fuelRoleRow.account_id) : undefined;
   const operatingBankRoleRow = (coaRoles.data?.rows ?? []).find((row) => row.role === "operating_bank" && row.is_active && row.account_id);
   const operatingBankAccount = operatingBankRoleRow ? chart.find((row) => row.id === operatingBankRoleRow.account_id) : undefined;
-  const draftTotal = drafts.reduce((sum, row) => sum + Math.max(0, Math.round(Number(row.amount || 0) * 100)), 0);
+  const draftTotal = drafts.reduce((s, row) => s + Math.max(0, Math.round(Number(row.amount || 0) * 100)), 0);
   const margin = revenue - savedCosts - driverPay - draftTotal;
+  const entryCount = liveExpenses.length + liveBills.length;
 
-  // QuickBooks: blank NUMBER = system assigns load# then load#-1, load#-2… (one per prior saved cost +
-  // preceding blank drafts). A typed value wins verbatim.
+  // Split of saved costs by the board's 5 buckets (display; the amount column always carries the real number).
+  const split = useMemo(() => {
+    const acc: Record<Bucket, number> = { late_fee: 0, lumper: 0, fuel: 0, repairs_maintenance: 0, other: 0 };
+    for (const r of liveExpenses) acc[bucketOf("expense", r.category_account_name ?? r.line_description ?? "")] += num(r.total_amount_cents);
+    for (const r of liveBills) acc[bucketOf("bill", r.coa_account_name ?? "")] += num(r.amount_cents);
+    for (const r of drafts) acc[bucketOf(r.kind, r.categoryName)] += Math.max(0, Math.round(Number(r.amount || 0) * 100));
+    return acc;
+  }, [liveExpenses, liveBills, drafts]);
+
   const autoNumber = (index: number) => {
     const priorBlank = drafts.slice(0, index).filter((r) => !r.number.trim()).length;
     const seq = savedCount + priorBlank;
     return seq === 0 ? load.load_number : `${load.load_number}-${seq}`;
   };
   const resolvedNumber = (row: Draft, index: number) => (row.number.trim() ? row.number.trim() : autoNumber(index));
-  const update = (id: string, patch: Partial<Draft>) => setDrafts((rows) => rows.map((row) => row.id === id ? { ...row, ...patch, error: null } : row));
+  const update = (id: string, patch: Partial<Draft>) => setDrafts((rows) => rows.map((row) => (row.id === id ? { ...row, ...patch, error: null } : row)));
   const removeDraft = (id: string) => setDrafts((rows) => (rows.length > 1 ? rows.filter((r) => r.id !== id) : rows));
   const addDraft = (kind: CostChoice = "expense") => setDrafts((rows) => [...rows, blankDraft(kind)]);
+
+  /** A card nobody has touched yet — skipped by Save, never a blocker. */
+  const isPristine = (row: Draft) => !row.amount && !row.vendorId && !row.categoryId && !row.number.trim() && !row.invoiceNo.trim() && !row.vendorDocNo.trim() && !row.instrumentReference.trim() && !row.instrumentType.trim() && !row.advanceCategory && !row.paymentAccountId && row.receiptCount === 0 && (row.kind === "expense" || row.kind === "bill");
+
+  /** Why a card cannot post — in English, on the card. Save is disabled while any touched card is blocked. */
+  const blocker = (row: Draft): string | null => {
+    const amountCents = Math.round(Number(row.amount) * 100);
+    if (row.kind === "advance") {
+      if (!row.advanceCategory) return "Pick the advance category (diesel, driver pay, repair, other).";
+      if (!row.instrumentType.trim()) return "Instrument type is required (Comchek, EFT, wire).";
+      if (!row.instrumentReference.trim()) return "Instrument reference is required (check or transaction no.).";
+      if (row.advanceCategory !== "driver_pay" && !row.paymentAccountId) return "Bank account is required — diesel / repair / other cash lands in our bank.";
+      if (!(amountCents > 0)) return "Amount must be greater than zero.";
+      return null;
+    }
+    if (row.kind === "fuel_advance") {
+      if (!load.assigned_primary_driver_id) return "Assign a driver to this load before recording a fuel advance.";
+      if (!fuelAccount) return "No Fuel expense account — designate the company_fuel_advance_expense role on the CoaRoles page.";
+      if (!operatingBankAccount) return "No operating bank account — designate the operating_bank role on the CoaRoles page.";
+      if (!(amountCents > 0)) return "Amount must be greater than zero.";
+      return null;
+    }
+    if (!row.vendorId) return "Vendor is required.";
+    if (!row.categoryId) return "Category (expense account) is required.";
+    if (!(amountCents > 0)) return "Amount must be greater than zero.";
+    if (row.kind === "expense" && !row.paymentAccountId) return "Paid with is required — the bank, card or fuel card the money left.";
+    if (row.kind === "bill" && !row.invoiceNo.trim()) return "Vendor invoice number is required — it is what stops us paying the same bill twice.";
+    return null;
+  };
+
+  const paidWithLabel = (id: string) => { const a = paymentAccounts.find((x) => x.id === id); return a ? acctLabel(a.account_number, a.account_name) : null; };
+
+  /** The posting sentence for a draft — what the ledger will do when this card saves. */
+  const hint = (row: Draft, index: number): ReactNode => {
+    const n = resolvedNumber(row, index);
+    const ordinal = savedCount + drafts.slice(0, index).filter((r) => !r.number.trim()).length;
+    const why = row.number.trim() ? <>Numbered <b>{n}</b> — typed, kept verbatim.</> : ordinal === 0 ? <>Numbered <b>{n}</b> — first cost on the load.</> : <>Numbered <b>{n}</b> — cost {ordinal + 1} on this load; the number is derived.</>;
+    if (row.kind === "expense") return <>Posts <b>debit {row.categoryName || "the category account"}</b>, <b>credit {paidWithLabel(row.paymentAccountId) ?? "the paid-with account"}</b>. {why}</>;
+    if (row.kind === "bill") return <>Posts <b>debit {row.categoryName || "the category account"}</b>, <b>credit Accounts Payable</b>; clears later with the bill payment. The vendor's own invoice number is never filled in for you. {why}</>;
+    if (row.kind === "fuel_advance") return <>Company fuel advance: posts <b>debit {fuelAccount ? acctLabel(fuelAccount.account_number, fuelAccount.account_name) : "Fuel expense"}</b>, <b>credit {operatingBankAccount ? acctLabel(operatingBankAccount.account_number, operatingBankAccount.account_name) : "operating bank"}</b>. Company expense — not a driver deduction. {why}</>;
+    return <>Broker advance received from <b>{load.customer_name ?? "the broker"}</b>: <b>debit {row.paymentAccountId ? "bank" : "driver pay (paid to the driver directly)"}</b>, <b>credit Customer Deposits (Broker Advances)</b>; applied against the invoice at factoring.</>;
+  };
 
   const save = useMutation({
     mutationFn: async () => {
       const errors = new Map<string, string>();
+      let saved = 0;
       for (const [index, row] of drafts.entries()) {
+        if (isPristine(row)) continue;
         const amountCents = Math.round(Number(row.amount) * 100);
         const number = resolvedNumber(row, index);
-        const missing = row.kind === "advance"
-          ? !row.advanceCategory
-            ? "Advance category is required."
-            : !row.instrumentType.trim()
-              ? "Instrument type is required."
-              : !row.instrumentReference.trim()
-                ? "Instrument reference is required."
-                : row.advanceCategory !== "driver_pay" && !row.paymentAccountId
-                  ? "Bank account is required for this category — cash always lands in our bank for diesel/repair/other."
-                  : !(amountCents > 0)
-                    ? "Amount must be greater than zero."
-                    : null
-          : row.kind === "fuel_advance"
-            ? !load.assigned_primary_driver_id
-              ? "Assign a driver to this load before recording a fuel advance."
-              : !fuelAccount
-                ? "No Fuel expense account found — designate the company_fuel_advance_expense role on the CoaRoles page before recording a fuel advance."
-                : !operatingBankAccount
-                  ? "No operating bank account found — designate the operating_bank role on the CoaRoles page before recording a fuel advance."
-                  : !(amountCents > 0)
-                    ? "Amount must be greater than zero."
-                    : null
-            : !row.vendorId
-              ? "Vendor is required."
-              : !row.categoryId
-                ? "Category is required."
-                : !(amountCents > 0)
-                  ? "Amount must be greater than zero."
-                  : row.kind === "expense" && !row.paymentAccountId
-                    ? "Paid with is required."
-                    : row.kind === "bill" && !row.invoiceNo.trim()
-                      ? "Vendor invoice number is required."
-                      : null;
+        const missing = blocker(row);
         if (missing) { errors.set(row.id, missing); continue; }
         try {
           if (row.kind === "expense") {
-            await createExpense(opco, { category_account_id: row.categoryId, expense_date: row.date, amount_cents: amountCents, payment_account_uuid: row.paymentAccountId, vendor_uuid: row.vendorId, load_id: load.id, expense_number: number, memo: `Load cost · ${load.load_number}`, is_sample_data: false });
+            await createExpense(opco, { category_account_id: row.categoryId, expense_date: row.date, amount_cents: amountCents, payment_account_uuid: row.paymentAccountId, vendor_uuid: row.vendorId, load_id: load.id, expense_number: number, vendor_document_number: row.vendorDocNo.trim() || undefined, memo: `Load cost · ${load.load_number}`, is_sample_data: false, attachment_draft_id: row.attachmentDraftId });
           } else if (row.kind === "bill") {
-            await createVendorBill(opco, { vendor_id: row.vendorId, bill_number: row.invoiceNo.trim(), display_id: number, bill_date: row.date, amount_cents: amountCents, coa_account_id: row.categoryId, driver_id: load.assigned_primary_driver_id ?? undefined, memo: `Load cost · ${load.load_number}`, is_sample_data: false, lines: [{ account_id: row.categoryId, amount_cents: amountCents, description: `Load cost · ${load.load_number}`, section: "A", load_id: load.id }] }, { idempotencyKey: generateIdempotencyKey() });
+            await createVendorBill(opco, { vendor_id: row.vendorId, bill_number: row.invoiceNo.trim(), display_id: number, bill_date: row.date, amount_cents: amountCents, coa_account_id: row.categoryId, driver_id: load.assigned_primary_driver_id ?? undefined, memo: `Load cost · ${load.load_number}`, is_sample_data: false, attachment_draft_id: row.attachmentDraftId, lines: [{ account_id: row.categoryId, amount_cents: amountCents, description: `Load cost · ${load.load_number}`, section: "A", load_id: load.id }] }, { idempotencyKey: generateIdempotencyKey() });
           } else if (row.kind === "fuel_advance") {
-            await createExpense(opco, { category_account_id: fuelAccount!.id, expense_date: row.date, amount_cents: amountCents, payment_account_uuid: operatingBankAccount!.id, driver_id: load.assigned_primary_driver_id!, load_id: load.id, expense_number: number, memo: `Fuel advance · Load ${load.load_number}`, is_sample_data: false });
+            await createExpense(opco, { category_account_id: fuelAccount!.id, expense_date: row.date, amount_cents: amountCents, payment_account_uuid: operatingBankAccount!.id, driver_id: load.assigned_primary_driver_id!, load_id: load.id, expense_number: number, vendor_document_number: row.vendorDocNo.trim() || undefined, memo: `Fuel advance · Load ${load.load_number}`, is_sample_data: false, attachment_draft_id: row.attachmentDraftId });
           } else {
             await createBrokerAdvance(opco, { load_id: load.id, customer_id: load.customer_id, category: row.advanceCategory as BrokerAdvanceCategory, instrument_type: row.instrumentType.trim(), instrument_reference: row.instrumentReference.trim(), amount_cents: amountCents, received_at: row.date, bank_account_id: row.paymentAccountId || null });
           }
+          saved += 1;
         } catch (error) { errors.set(row.id, userFacingApiError(error, "Could not save this cost.")); }
       }
-      if (errors.size) { setDrafts((rows) => rows.map((row) => errors.has(row.id) ? { ...row, error: errors.get(row.id)! } : row)); throw new Error(`${errors.size} cost row${errors.size === 1 ? "" : "s"} need attention.`); }
+      if (!errors.size && saved === 0) throw new Error("Nothing to save — fill in a card first.");
+      if (errors.size) { setDrafts((rows) => rows.map((row) => (errors.has(row.id) ? { ...row, error: errors.get(row.id)! } : row))); throw new Error(`${errors.size} cost card${errors.size === 1 ? "" : "s"} need attention.`); }
     },
     onSuccess: async () => { pushToast("Load costs saved", "success"); setDrafts([blankDraft()]); await queryClient.invalidateQueries({ queryKey: ["load-costs"] }); },
     onError: (error) => pushToast(userFacingApiError(error, "Could not save load costs."), "error"),
   });
 
+  const anyBlocked = drafts.some((r) => !isPristine(r) && blocker(r) !== null);
   const statusBadge = statusLabel(load.status);
+  const pct = revenue > 0 ? `${((margin / revenue) * 100).toFixed(1)}%` : DASH;
 
-  return <div className="space-y-3" data-testid="load-costs-tab-shell">
-    {/* Identity strip — LOAD 13508 · customer · driver · Unit + status badge */}
-    <section data-testid="load-costs-identity" className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-sm border border-gray-200 bg-white px-3 py-2 text-xs">
-      <span className="font-semibold uppercase text-gray-500">Load</span>
-      <EntityLink kind="load" id={load.id} label={load.load_number} />
-      <span className="text-gray-300">·</span><span>{load.customer_name ?? "Customer not visible"}</span>
-      <span className="text-gray-300">·</span><span>{load.assigned_primary_driver_name ?? "Driver not assigned"}</span>
-      {load.assigned_unit_number ? <><span className="text-gray-300">·</span><span>Unit {load.assigned_unit_number}</span></> : null}
-      <span data-testid="load-costs-status-badge" className={`ml-auto inline-flex h-[22px] items-center rounded-sm border px-2 font-semibold uppercase ${statusBadge.className}`}>{statusBadge.label}</span>
+  // Driver pay sentence for the footer — the live driver bill, two lines when the bill carries them.
+  const driverPayBasis = (() => {
+    const b = driverBillRows[0];
+    if (!b) return "no driver bill on this load yet";
+    const loaded = `loaded ${fmtMiles(b.miles_basis)} × ${fmtRate(b.rate_per_mile_cents)}`;
+    const empty = num(b.miles_deadhead) > 0 ? ` + empty ${fmtMiles(b.miles_deadhead)} × ${fmtRate(b.rate_empty_per_mile_cents)}` : "";
+    const basis = (b.miles_basis_type ?? "").toLowerCase();
+    const lawNote = basis && basis !== "shortest" && basis !== "short" ? ` · basis ${basis} (law: short miles)` : "";
+    return `${loaded}${empty}${lawNote}`;
+  })();
+
+  return <div className="ldt-body" data-testid="load-costs-tab-shell">
+    {/* Identity strip */}
+    <section data-testid="load-costs-identity" className="ldt-rowbar">
+      <span><span className="ldt-muted">LOAD</span> <EntityLink kind="load" id={load.id} label={load.load_number} /> · {load.customer_name ?? "Customer not visible"} · {load.assigned_primary_driver_name ?? "Driver not assigned"}{load.assigned_unit_number ? ` · Unit ${load.assigned_unit_number}` : ""}</span>
+      <span data-testid="load-costs-status-badge" className={`ldt-pill ${statusBadge.tone}`}>{statusBadge.label}</span>
     </section>
 
-    {/* Sub-tabs WITHIN Load Costs (owner 2026-09-05): Costs · Pre-Settlement · Settlement. Reuses the
-        existing panels — no duplicate settlement logic. The create (+ New) lives only in Costs. */}
-    <div data-testid="load-costs-subtabs" className="flex flex-wrap gap-1">
-      {COSTS_VIEWS.map((v) => (
-        <button
-          key={v.id}
-          type="button"
-          data-testid={`load-costs-subtab-${v.id}`}
-          aria-selected={costsView === v.id}
-          onClick={() => setCostsView(v.id)}
-          className={`inline-flex h-[28px] items-center rounded-sm border px-2 text-xs font-semibold ${costsView === v.id ? "border-[#14314F] bg-[#14314F] text-white" : "border-[#C7D2DC] bg-white text-[#4B5563] hover:bg-gray-50"}`}
-        >
-          {v.label}
-        </button>
-      ))}
-    </div>
+    <>
+      {/* KPI strip — kept (live element), same numbers as the footer */}
+      <section data-testid="load-costs-kpis" className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+        <Kpi label="Line haul revenue" value={formatMoneyCents(revenue, currency)} />
+        <Kpi label="Costs on this load" value={formatMoneyCents(savedCosts + draftTotal, currency)} />
+        <Kpi label="Driver pay" value={formatMoneyCents(driverPay, currency)} />
+        <Kpi label="Approximate margin" value={`${formatMoneyCents(margin, currency)} · ${pct}`} strong />
+      </section>
 
-    {costsView === "settlement" ? (
-      <div data-testid="load-costs-view-settlement">
-        <LoadDetailSettlementTab loadId={load.id} operatingCompanyId={opco} currencyCode={currency} />
-      </div>
-    ) : null}
-
-    {costsView === "pre_settlement" ? (
-      <div data-testid="load-costs-view-pre-settlement">
-        {load.assigned_primary_driver_id
-          ? <PreSettlementPanel driverId={load.assigned_primary_driver_id} operatingCompanyId={opco} />
-          : <p className="text-xs text-gray-500">No driver assigned to this load — assign a driver to see the pre-settlement.</p>}
-      </div>
-    ) : null}
-
-    {costsView === "costs" ? <>
-    {/* Four KPI cards — light bg, darker border, centered */}
-    <section data-testid="load-costs-kpis" className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-      <Kpi label="Line haul revenue" value={formatMoneyCents(revenue, currency)} />
-      <Kpi label="Costs on this load" value={formatMoneyCents(savedCosts + draftTotal, currency)} />
-      <Kpi label="Driver pay" value={formatMoneyCents(driverPay, currency)} />
-      <Kpi label="Approximate margin" value={formatMoneyCents(margin, currency)} strong />
-    </section>
-    <p className="text-xs text-gray-500">Approximate · before settlement. Nothing here has posted to the general ledger — this tour is open.</p>
-
-    {canEdit ? <>
-      {/* Action row — ONE QuickBooks-style "+ New" dropdown + Save (owner 2026-09-05: one button, a
-          drop-down, so we do not have many buttons). Every menu item opens a real create flow. */}
-      <div className="flex flex-wrap items-center gap-2" data-testid="load-costs-actions">
-        <NewCostMenu
-          onPick={(kind) => addDraft(kind)}
-          receiptHref={`/accounting/receipts?load_id=${encodeURIComponent(load.id)}`}
-          billsHref={`/accounting/bills?load_id=${encodeURIComponent(load.id)}`}
-        />
-        <ActionButton testId="load-costs-save-all" onClick={() => save.mutate()} disabled={save.isPending}>Save</ActionButton>
+      <div className="ldt-rowbar">
+        <span>{entryCount === 0 ? "No costs on this load yet." : `${entryCount} cost${entryCount === 1 ? "" : "s"} on this load. Every one carries the load number.`} <span className="ldt-muted">Approximate · before settlement. Nothing here has posted to the general ledger — this tour is open.</span></span>
+        {canEdit ? <div className="ldt-actions" data-testid="load-costs-actions">
+          <NewCostMenu onPick={(kind) => addDraft(kind)} receiptHref={`/accounting/receipts?load_id=${encodeURIComponent(load.id)}`} billsHref={`/accounting/bills?load_id=${encodeURIComponent(load.id)}`} />
+          <button type="button" className="ldt-btn p" data-testid="load-costs-save-all" onClick={() => save.mutate()} disabled={save.isPending || anyBlocked} title={anyBlocked ? "A card below says what it still needs." : "Save every card"}>Save all</button>
+        </div> : null}
       </div>
 
-      {/* QuickBooks register — 12 columns, NUMBER empty & editable */}
-      <div className="overflow-x-auto rounded-sm border border-gray-200 bg-white" data-testid="load-costs-register">
-        <table className="w-full min-w-[1100px] border-collapse text-left text-xs">
-          <thead>
-            <tr className="bg-[#EEF2F6] font-bold uppercase tracking-wide text-[#4B5563]" style={{ fontSize: 11 }}>
-              {["Number", "Date", "Type", "Vendor", "Category", "Late Fee", "Lumper", "Fuel", "R&M Exp", "Other", "Amount", "Status"].map((h) => (
-                <th key={h} className={`whitespace-nowrap border-b-2 border-r border-[#C7D2DC] px-2 py-1.5 ${["Late Fee", "Lumper", "Fuel", "R&M Exp", "Other", "Amount"].includes(h) ? "text-right" : "text-left"}`}>{h}</th>
-              ))}
-              <th className="border-b-2 border-[#C7D2DC] px-2 py-1.5" />
-            </tr>
-          </thead>
-          <tbody>
-            {drafts.map((row, index) => {
-              const cents = row.amount ? Math.round(Number(row.amount) * 100) : 0;
-              const bucket = bucketOf(row.kind, row.categoryName);
-              const splitCell = (b: Bucket) => (bucket === b && cents ? formatMoneyCents(cents, currency) : DASH);
-              return <tr key={row.id} data-testid="load-costs-entry" className="border-b border-gray-100 align-top">
-                <td className="border-r border-gray-100 px-2 py-1.5"><input data-testid="load-cost-field-number" className="h-7 w-24 rounded-sm border border-gray-300 px-1.5 text-xs" placeholder={autoNumber(index)} value={row.number} onChange={(e) => update(row.id, { number: e.target.value })} /></td>
-                <td className="border-r border-gray-100 px-2 py-1.5"><DatePicker data-testid="load-cost-field-date" className="h-7 w-32" value={row.date} onChange={(value) => update(row.id, { date: value })} /></td>
-                <td className="border-r border-gray-100 px-2 py-1.5">
-                  <select data-testid="load-cost-field-type" className="h-7 w-36 rounded-sm border border-gray-300 px-1 text-xs" value={row.kind} onChange={(e) => update(row.id, { kind: e.target.value as CostChoice })}>
-                    {TYPE_ORDER.map((k) => <option key={k} value={k}>{TYPE_LABEL[k]}</option>)}
-                  </select>
-                </td>
-                <td className="border-r border-gray-100 px-2 py-1.5">
-                  {row.kind === "advance"
-                    ? <span className="text-gray-500">{load.customer_name ?? "Broker"}</span>
-                    : row.kind === "fuel_advance"
-                      ? <span className="text-gray-500">{load.assigned_primary_driver_name ?? "Driver"}</span>
-                      : <LocalCombobox testId="load-cost-field-vendor" placeholder="Select vendor" value={row.vendorName} options={(vendors.data?.vendors ?? []).map((v) => ({ id: v.id, label: v.name }))} onSelect={(o) => update(row.id, { vendorId: o.id, vendorName: o.label })} createHref="/dispatch/vendors" />}
-                </td>
-                <td className="border-r border-gray-100 px-2 py-1.5">
-                  {row.kind === "advance"
-                    ? <select data-testid="load-cost-field-advance-category" className="h-7 w-32 rounded-sm border border-gray-300 px-1 text-xs" value={row.advanceCategory} onChange={(e) => update(row.id, { advanceCategory: e.target.value as BrokerAdvanceCategory | "" })}><option value="">Select category</option>{BROKER_ADVANCE_CATEGORIES.map((c) => <option key={c} value={c}>{ADVANCE_CATEGORY_LABEL[c]}</option>)}</select>
-                    : row.kind === "fuel_advance"
-                      ? <span data-testid="load-cost-field-fuel-category" className="text-gray-500">{fuelAccount ? `${fuelAccount.account_number ? `${fuelAccount.account_number} · ` : ""}${fuelAccount.account_name} (auto)` : "No Fuel expense account found"}</span>
-                      : <LocalCombobox testId="load-cost-field-category" placeholder="Select category" value={row.categoryName} options={categories.map((a) => ({ id: a.id, label: `${a.account_number ? `${a.account_number} · ` : ""}${a.account_name}` }))} onSelect={(o) => update(row.id, { categoryId: o.id, categoryName: o.label })} createHref="/accounting/chart-of-accounts" />}
-                </td>
-                <td className="whitespace-nowrap border-r border-gray-100 px-2 py-1.5 text-right tabular-nums text-gray-500">{splitCell("late_fee")}</td>
-                <td className="whitespace-nowrap border-r border-gray-100 px-2 py-1.5 text-right tabular-nums text-gray-500">{splitCell("lumper")}</td>
-                <td className="whitespace-nowrap border-r border-gray-100 px-2 py-1.5 text-right tabular-nums text-gray-500">{splitCell("fuel")}</td>
-                <td className="whitespace-nowrap border-r border-gray-100 px-2 py-1.5 text-right tabular-nums text-gray-500">{splitCell("repairs_maintenance")}</td>
-                <td className="whitespace-nowrap border-r border-gray-100 px-2 py-1.5 text-right tabular-nums text-gray-500">{splitCell("other")}</td>
-                <td className="border-r border-gray-100 px-2 py-1.5 text-right"><div data-testid="load-cost-field-amount" className="ml-auto w-28"><MoneyInput className="h-7 w-full" valueCents={row.amount ? Math.round(Number(row.amount) * 100) : null} onChangeCents={(c) => update(row.id, { amount: c == null ? "" : String(c / 100) })} /></div></td>
-                <td className="whitespace-nowrap border-r border-gray-100 px-2 py-1.5"><span data-testid="load-cost-status" className="text-gray-500">{row.kind === "bill" ? "owed" : row.kind === "advance" ? "received" : "paid"} · new, not saved</span></td>
-                <td className="px-2 py-1.5 text-right">{drafts.length > 1 ? <button type="button" data-testid="load-cost-remove" className="text-gray-400 hover:text-red-600" onClick={() => removeDraft(row.id)} aria-label="Remove row">×</button> : null}</td>
-              </tr>;
-            })}
-            {drafts.map((row) => row.error ? <tr key={`${row.id}-err`}><td colSpan={13} className="border-b border-gray-100 bg-red-50 px-2 py-1 text-xs text-red-700" data-testid="load-cost-hint">{row.error}</td></tr> : null)}
-            {/* Extra inputs the register can't hold inline (bank / invoice / instrument) live in a details strip per draft */}
-          </tbody>
-        </table>
+      {/* ENTRY CARDS — saved first (read model), then the drafts being typed */}
+      <div className="ldt-body" data-testid="load-costs-register">
+        <div className="ldt-body" data-testid="load-costs-saved">
+        {liveExpenses.map((row) => <SavedExpenseCard key={row.id} row={row} opco={opco} currency={currency} canEdit={canEdit} onPop={setPopup} />)}
+        {savedExpenses.filter((r) => r.status === "void").map((row) => <SavedExpenseCard key={row.id} row={row} opco={opco} currency={currency} canEdit={false} onPop={setPopup} />)}
+        {savedBills.map((row) => <SavedBillCard key={row.id} row={row} opco={opco} currency={currency} canEdit={canEdit} onPop={setPopup} />)}
+        {savedAdvances.map((row) => (
+          <div key={row.id} className="ldt-entry" data-testid="load-cost-saved-advance">
+            <div className="ldt-ehead"><span className="ldt-enum">{row.instrument_reference}</span><span className="ldt-pill ok">Advance received · {ADVANCE_CATEGORY_LABEL[row.category]}</span><span className="ldt-emeta">{row.applied_to_invoice_id ? "applied to invoice" : "received · will apply at factoring"}</span></div>
+            <div className="ldt-fields">
+              <Ro label="Date" value={mmdd(row.received_at)} /><Ro label="From" value={load.customer_name ?? "Broker"} /><Ro label="Instrument" value={`${row.instrument_type} ${row.instrument_reference}`} /><Ro label="Amount" value={formatMoneyCents(num(row.amount_cents), currency)} mono />
+            </div>
+          </div>
+        ))}
+        </div>
+
+        {canEdit ? drafts.map((row, index) => {
+          const cents = row.amount ? Math.round(Number(row.amount) * 100) : 0;
+          const why = isPristine(row) ? null : blocker(row);
+          const isVendorKind = row.kind === "expense" || row.kind === "bill";
+          return <div key={row.id} className="ldt-entry" data-testid="load-costs-entry" data-cost-kind={row.kind}>
+            <div className="ldt-ehead">
+              <span data-testid="load-cost-number" className="ldt-enum" title="Derived — first cost = load number, then -1, -2 … you never type it">{autoNumber(index)}</span>
+              <span className="ldt-toggle" role="radiogroup" aria-label="Type" data-testid="load-cost-field-type">
+                <button type="button" data-testid="load-cost-toggle-expense" aria-pressed={row.kind === "expense"} className={row.kind === "expense" ? "on" : ""} onClick={() => update(row.id, { kind: "expense" })}>{TYPE_LABEL.expense}</button>
+                <button type="button" data-testid="load-cost-toggle-bill" aria-pressed={row.kind === "bill"} className={row.kind === "bill" ? "on" : ""} onClick={() => update(row.id, { kind: "bill" })}>{TYPE_LABEL.bill}</button>
+                {row.kind === "advance" ? <button type="button" className="on" data-testid="load-cost-toggle-advance" disabled>{TYPE_LABEL.advance}</button> : null}
+                {row.kind === "fuel_advance" ? <button type="button" className="on" data-testid="load-cost-toggle-fuel-advance" disabled>{TYPE_LABEL.fuel_advance}</button> : null}
+              </span>
+              <span className="ldt-emeta">
+                <span data-testid="load-cost-status">{row.kind === "bill" ? "owed" : row.kind === "advance" ? "received" : "paid"} · new — not saved</span>
+                {cents ? <span className="ldt-k">{BUCKET_LABEL[bucketOf(row.kind, row.categoryName)]}</span> : null}
+                {drafts.length > 1 ? <button type="button" data-testid="load-cost-remove" className="ldt-link" onClick={() => removeDraft(row.id)} aria-label="Remove card">remove</button> : null}
+              </span>
+            </div>
+            <div className="ldt-fields">
+              <div className="ldt-fld"><label>Date</label><DatePicker data-testid="load-cost-field-date" className="ldt-inp" value={row.date} onChange={(value) => update(row.id, { date: value })} /></div>
+              <div className="ldt-fld"><label>{row.kind === "advance" ? "From (broker)" : row.kind === "fuel_advance" ? "To (driver)" : "Vendor"}</label>
+                {row.kind === "advance" ? <div className="ldt-inp ro">{load.customer_name ?? "Broker"}</div>
+                  : row.kind === "fuel_advance" ? <div className="ldt-inp ro">{load.assigned_primary_driver_name ?? "Driver"}</div>
+                  : <LocalCombobox testId="load-cost-field-vendor" placeholder="Type a vendor…" value={row.vendorName} options={(vendors.data?.vendors ?? []).map((v) => ({ id: v.id, label: v.name }))} onSelect={(o) => update(row.id, { vendorId: o.id, vendorName: o.label })} createHref="/dispatch/vendors" />}
+              </div>
+              <div className="ldt-fld"><label>Category</label>
+                {row.kind === "advance" ? <select data-testid="load-cost-field-advance-category" value={row.advanceCategory} onChange={(e) => update(row.id, { advanceCategory: e.target.value as BrokerAdvanceCategory | "" })}><option value="">Select category</option>{BROKER_ADVANCE_CATEGORIES.map((c) => <option key={c} value={c}>{ADVANCE_CATEGORY_LABEL[c]}</option>)}</select>
+                  : row.kind === "fuel_advance" ? <div data-testid="load-cost-field-fuel-category" className="ldt-inp ro">{fuelAccount ? `${acctLabel(fuelAccount.account_number, fuelAccount.account_name)} (by role)` : "No Fuel expense account found"}</div>
+                  : <LocalCombobox testId="load-cost-field-category" placeholder="Expense account…" value={row.categoryName} options={categories.map((a) => ({ id: a.id, label: acctLabel(a.account_number, a.account_name) }))} onSelect={(o) => update(row.id, { categoryId: o.id, categoryName: o.label })} createHref="/accounting/chart-of-accounts" />}
+              </div>
+              {row.kind === "expense" ? <div className="ldt-fld"><label>Paid with</label>
+                <select data-testid="load-cost-field-paid-with" value={row.paymentAccountId} onChange={(e) => update(row.id, { paymentAccountId: e.target.value })}>
+                  <option value="">Bank, card or fuel card…</option>
+                  {paymentAccounts.map((a) => <option key={a.id} value={a.id}>{acctLabel(a.account_number, a.account_name)} · {PAID_WITH_KIND_LABEL[paidWithKind(a) ?? "bank"]}</option>)}
+                </select></div> : null}
+              {row.kind === "fuel_advance" ? <div className="ldt-fld"><label>Paid from (bank)</label><div data-testid="load-cost-field-fuel-bank" className="ldt-inp ro">{operatingBankAccount ? `${acctLabel(operatingBankAccount.account_number, operatingBankAccount.account_name)} (by role)` : "No operating bank account found"}</div></div> : null}
+              {row.kind === "bill" ? <div className="ldt-fld"><label>Vendor invoice no.</label><input data-testid="load-cost-field-vendor-invoice" placeholder="off the paper" value={row.invoiceNo} onChange={(e) => update(row.id, { invoiceNo: e.target.value })} /></div> : null}
+              {row.kind === "expense" || row.kind === "fuel_advance" ? <div className="ldt-fld"><label>Vendor doc no.</label><input data-testid="load-cost-field-vendor-doc" className="ldt-mono" placeholder="receipt / ticket no." value={row.vendorDocNo} onChange={(e) => update(row.id, { vendorDocNo: e.target.value })} /></div> : null}
+              {row.kind === "advance" ? <>
+                <div className="ldt-fld"><label>Instrument type</label><input data-testid="load-cost-field-instrument-type" placeholder="Comchek / EFT / wire" value={row.instrumentType} onChange={(e) => update(row.id, { instrumentType: e.target.value })} /></div>
+                <div className="ldt-fld"><label>Instrument reference</label><input data-testid="load-cost-field-instrument-reference" placeholder="check / transaction no." value={row.instrumentReference} onChange={(e) => update(row.id, { instrumentReference: e.target.value })} /></div>
+                <div className="ldt-fld"><label>{row.advanceCategory === "driver_pay" ? "Deposited into (bank) — optional" : "Deposited into (bank)"}</label><select data-testid="load-cost-field-advance-bank" value={row.paymentAccountId} onChange={(e) => update(row.id, { paymentAccountId: e.target.value })}><option value="">{row.advanceCategory === "driver_pay" ? "No bank — broker paid the driver directly" : "Select bank account"}</option>{advanceBankAccountRows.map((a) => <option key={a.id} value={a.id}>{formatBankAccountPickerLabel(a)}</option>)}</select></div>
+              </> : null}
+              <div className="ldt-fld"><label>Amount</label><div data-testid="load-cost-field-amount"><MoneyInput className="ldt-inp mono right" valueCents={cents || null} onChangeCents={(c) => update(row.id, { amount: c == null ? "" : String(c / 100) })} /></div></div>
+              {isVendorKind || row.kind === "fuel_advance" ? <div className="ldt-fld"><label>Receipt</label>
+                <CardReceipt opco={opco} entityType={row.kind === "bill" ? "bill" : "expense"} entityId={row.attachmentDraftId} onCountChange={(n) => setDrafts((rows) => rows.map((r) => (r.id === row.id ? { ...r, receiptCount: n } : r)))} />
+              </div> : null}
+            </div>
+            {row.error || why ? <div className="ldt-hint bad" data-testid="load-cost-hint">{row.error ?? why}</div> : <div className="ldt-hint" data-testid="load-cost-caption">{hint(row, index)}</div>}
+          </div>;
+        }) : <section data-testid="load-costs-readonly-reason" className="ldt-note warn">{canEditReason ?? "You don't have permission to add costs to this load right now."}</section>}
       </div>
 
-      {drafts.map((row) => needsExtra(row) ? <div key={`${row.id}-extra`} data-testid="load-cost-extra" className="grid grid-cols-1 gap-2 rounded-sm border border-gray-200 bg-gray-50 p-2 text-xs sm:grid-cols-2">
-        {row.kind === "expense" ? <Field label="Paid with"><select data-testid="load-cost-field-paid-with" className="mt-1 h-8 w-full rounded-sm border border-gray-300 px-2 text-xs" value={row.paymentAccountId} onChange={(e) => update(row.id, { paymentAccountId: e.target.value })}><option value="">Select bank or card</option>{paymentAccounts.map((a) => <option key={a.id} value={a.id}>{a.account_number ? `${a.account_number} · ` : ""}{a.account_name}</option>)}</select></Field> : null}
-        {row.kind === "fuel_advance" ? <Field label="Paid from (bank)"><div data-testid="load-cost-field-fuel-bank" className="mt-1 flex h-8 w-full items-center rounded-sm border border-gray-200 bg-white px-2 text-xs text-gray-600">{operatingBankAccount ? `${operatingBankAccount.account_number ? `${operatingBankAccount.account_number} · ` : ""}${operatingBankAccount.account_name} (auto)` : "No operating bank account found"}</div></Field> : null}
-        {row.kind === "bill" ? <Field label="Vendor invoice no."><input data-testid="load-cost-field-vendor-invoice" className="mt-1 h-8 w-full rounded-sm border border-gray-300 px-2 text-xs" placeholder="off the paper" value={row.invoiceNo} onChange={(e) => update(row.id, { invoiceNo: e.target.value })} /></Field> : null}
-        {row.kind === "advance" ? <>
-          <Field label="Instrument type"><input data-testid="load-cost-field-instrument-type" className="mt-1 h-8 w-full rounded-sm border border-gray-300 px-2 text-xs" placeholder="Comchek / EFT / wire" value={row.instrumentType} onChange={(e) => update(row.id, { instrumentType: e.target.value })} /></Field>
-          <Field label="Instrument reference"><input data-testid="load-cost-field-instrument-reference" className="mt-1 h-8 w-full rounded-sm border border-gray-300 px-2 text-xs" placeholder="check / transaction no." value={row.instrumentReference} onChange={(e) => update(row.id, { instrumentReference: e.target.value })} /></Field>
-          <Field label={row.advanceCategory === "driver_pay" ? "Deposited into (bank) — optional" : "Deposited into (bank)"}><select data-testid="load-cost-field-advance-bank" className="mt-1 h-8 w-full rounded-sm border border-gray-300 px-2 text-xs" value={row.paymentAccountId} onChange={(e) => update(row.id, { paymentAccountId: e.target.value })}><option value="">{row.advanceCategory === "driver_pay" ? "No bank — broker paid the driver directly" : "Select bank account"}</option>{advanceBankAccountRows.map((a) => <option key={a.id} value={a.id}>{formatBankAccountPickerLabel(a)}</option>)}</select></Field>
-        </> : null}
-      </div> : null)}
-    </> : <section data-testid="load-costs-readonly-reason" className="rounded-sm border border-slate-300 bg-slate-100 p-3 text-xs text-slate-700">{canEditReason ?? "You don't have permission to add costs to this load right now."}</section>}
+      {canEdit ? <div className="ldt-actions">
+        <button type="button" className="ldt-btn p" data-testid="load-costs-add-another" onClick={() => addDraft("expense")}>+ Add another cost</button>
+        <Link className="ldt-btn" data-testid="load-costs-add-from-receipt" to={`/accounting/receipts?load_id=${encodeURIComponent(load.id)}`}>+ Add from a receipt photo</Link>
+        <button type="button" className="ldt-btn g" data-testid="load-costs-add-fuel-advance" onClick={() => addDraft("fuel_advance")}>+ Fuel advance (company expense)</button>
+      </div> : null}
 
-    {/* Saved costs — read-only register rows, void never deletes */}
-    <div className="overflow-x-auto rounded-sm border border-gray-200 bg-white" data-testid="load-costs-saved">
-      <table className="w-full min-w-[900px] border-collapse text-left text-xs">
-        <thead><tr className="bg-[#EEF2F6] font-bold uppercase tracking-wide text-[#4B5563]" style={{ fontSize: 11 }}><th className="border-b-2 border-r border-[#C7D2DC] px-2 py-1.5">Number</th><th className="border-b-2 border-r border-[#C7D2DC] px-2 py-1.5">Type</th><th className="border-b-2 border-r border-[#C7D2DC] px-2 py-1.5 text-right">Amount</th><th className="border-b-2 border-[#C7D2DC] px-2 py-1.5">Status</th></tr></thead>
-        <tbody>
-          {savedExpenses.map((row) => <tr key={row.id} className="border-b border-gray-100" data-cost-driver-column="driver_uuid"><td className="border-r border-gray-100 px-2 py-1.5"><EntityLink kind="expense" id={row.id} label={row.expense_number ?? "Expense"} /></td><td className="border-r border-gray-100 px-2 py-1.5">Expense</td><td className="border-r border-gray-100 px-2 py-1.5 text-right tabular-nums">{formatMoneyCents(Number(row.total_amount_cents), currency)}</td><td className="px-2 py-1.5">{row.status === "void" ? "void" : row.matched_bank_transaction_id ? "paid · matched" : "paid"}</td></tr>)}
-          {savedBills.map((row) => <tr key={row.id} className="border-b border-gray-100" data-cost-driver-column="driver_id"><td className="border-r border-gray-100 px-2 py-1.5"><EntityLink kind="bill" id={row.id} label={row.bill_number ?? "Bill"} /></td><td className="border-r border-gray-100 px-2 py-1.5">Bill</td><td className="border-r border-gray-100 px-2 py-1.5 text-right tabular-nums">{formatMoneyCents(Number(row.amount_cents), currency)}</td><td className="px-2 py-1.5">{row.status === "voided" ? "void" : "owed"}</td></tr>)}
-          {savedAdvances.map((row) => <tr key={row.id} className="border-b border-gray-100" data-testid="load-cost-saved-advance"><td className="border-r border-gray-100 px-2 py-1.5" colSpan={2}>Advance · {ADVANCE_CATEGORY_LABEL[row.category]} · {row.instrument_type} {row.instrument_reference}</td><td className="border-r border-gray-100 px-2 py-1.5 text-right tabular-nums">{formatMoneyCents(Number(row.amount_cents), currency)}</td><td className="px-2 py-1.5">{row.applied_to_invoice_id ? "applied to invoice" : "received"}</td></tr>)}
-          {!savedCount && !savedAdvances.length ? <tr><td colSpan={4} className="px-2 py-3 text-center text-gray-500">No costs on this load yet.</td></tr> : null}
-        </tbody>
-      </table>
-    </div>
-    {savedCount || savedAdvances.length ? <Link className="inline-block text-xs font-semibold text-slate-700 underline" to={`/accounting/expenses?load_id=${encodeURIComponent(load.id)}`}>Open saved costs</Link> : null}
-    </> : null}
+      {/* FIXED TOTALS FOOTER — never moves with columns */}
+      <div data-testid="load-costs-margin" className="sticky bottom-0 z-10 ldt-card ldt-footer">
+        <div data-testid="load-costs-totals">
+        <div className="ldt-rows">
+          <div className="ldt-row"><span>Line haul revenue</span><span className="ldt-m" data-testid="load-costs-total-revenue">{formatMoneyCents(revenue, currency)}</span></div>
+          <div className="ldt-row click" role="button" tabIndex={0} onClick={() => setPopup({ title: `Costs on load ${load.load_number}`, body: <SplitTable split={split} currency={currency} /> })}><span>Costs on this load — {entryCount + drafts.filter((d) => d.amount).length} entries <span className="ldt-sub">{BUCKETS.filter((b) => split[b]).map((b) => `${BUCKET_LABEL[b]} ${formatMoneyCents(split[b], currency)}`).join(" · ") || "no split yet"}</span></span><span className="ldt-m" data-testid="load-costs-total-costs">{formatMoneyCents(savedCosts + draftTotal, currency)}</span></div>
+          <div className="ldt-row click" role="button" tabIndex={0} onClick={() => setPopup({ title: "Driver pay on this load", body: <DriverPayTable rows={driverBillRows} currency={currency} /> })}><span>Driver pay — {driverPayBasis}</span><span className="ldt-m" data-testid="load-costs-total-driver-pay">{formatMoneyCents(driverPay, currency)}</span></div>
+          <div className="ldt-row big"><span>Margin on load {load.load_number}</span><span className="ldt-m" data-testid="load-costs-total-margin">{formatMoneyCents(margin, currency)} · {pct}</span></div>
+        </div>
+        </div>
+      </div>
+
+      {/* WHAT THE BANK WILL DO WITH THESE */}
+      <div className="ldt-card" data-testid="load-costs-bank-section">
+        <div className="ldt-ch">What the bank will do with these<Link className="ldt-open" to="/banking/transactions">open the bank feed ↗</Link></div>
+        <div className="ldt-rows">
+          {liveExpenses.map((r) => <div className="ldt-row" key={r.id}><span>{(r.vendor_name ?? "Vendor").toUpperCase()} — {formatMoneyCents(num(r.total_amount_cents), currency)}<span className="ldt-sub">{acctLabel(r.payment_account_number, r.payment_account_name)} · {r.matched_bank_transaction_description ? `bank: ${r.matched_bank_transaction_description}` : "not yet in the feed"}</span></span><span className="ldt-m">{r.matched_bank_transaction_id ? <span className="ldt-pill ok">Matched to {load.load_number}</span> : <span className="ldt-pill warn">Will be offered when it lands</span>}</span></div>)}
+          {liveBills.map((r) => <div className="ldt-row" key={r.id}><span>{r.vendor_name ?? "Vendor"} — {formatMoneyCents(num(r.amount_cents), currency)}<span className="ldt-sub">Bill · {num(r.paid_cents) > 0 ? `paid ${formatMoneyCents(num(r.paid_cents), currency)}` : "unpaid"}</span></span><span className="ldt-m">{num(r.paid_cents) > 0 ? <span className="ldt-pill ok">Matches on the bill payment</span> : <span className="ldt-pill warn">Matches on the bill payment, not now</span>}</span></div>)}
+          {!liveExpenses.length && !liveBills.length ? <div className="ldt-row"><span className="ldt-muted">Nothing for the bank yet — save a cost and it becomes a candidate for the match.</span><span /></div> : null}
+        </div>
+      </div>
+      {savedCount || savedAdvances.length ? <Link className="ldt-link" to={`/accounting/expenses?load_id=${encodeURIComponent(load.id)}`}>Open saved costs</Link> : null}
+    </>
+
+    {popup ? <div className="ldt-modal-backdrop" onClick={() => setPopup(null)} data-testid="load-costs-popup">
+      <div className="ldt-modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+        <div className="ldt-modal-head"><span className="ldt-modal-title">{popup.title}</span><button type="button" className="ldt-btn g" onClick={() => setPopup(null)} aria-label="Close">×</button></div>
+        <div className="ldt-modal-body">{popup.body}</div>
+      </div>
+    </div> : null}
   </div>;
 }
 
-function statusLabel(status: string | null | undefined): { label: string; className: string } {
+function SavedExpenseCard({ row, opco, currency, canEdit, onPop }: { row: ExpenseListRow; opco: string; currency: string; canEdit: boolean; onPop: (p: { title: string; body: ReactNode }) => void }) {
+  const voided = row.status === "void";
+  const posted = row.posting_status === "posted";
+  const matched = Boolean(row.matched_bank_transaction_id);
+  return <SavedEntry kind="expense" driverColumn="driver_uuid" receipts={row.attachment_count ?? 0}>
+    <div className="ldt-ehead">
+      <span className="ldt-enum"><EntityLink kind="expense" id={row.id} label={row.expense_number ?? "Expense"} /></span>
+      <span className="ldt-toggle"><button type="button" className="on" disabled>{TYPE_LABEL.expense}</button><button type="button" disabled>{TYPE_LABEL.bill}</button></span>
+      <span className="ldt-emeta">
+        {voided ? <span className="ldt-pill bad">void</span> : posted ? <span className="ldt-pill ok">posted</span> : <span className="ldt-pill warn">saved · not posted</span>}
+        {/* ACC-50 (LAW §2) — real reason, not the generic "not posted": this expense's load has a
+            tour/settlement still open, so it holds even with GL posting enabled. */}
+        {!voided && !posted && row.posting_hold_reason === "tour_open" ? <span className="ldt-pill bad">held — tour open</span> : null}
+        {!voided ? (matched ? <span className="ldt-pill ok">matched to bank</span> : <span className="ldt-pill warn">waiting for the bank</span>) : null}
+        <span className="ldt-k">{BUCKET_LABEL[bucketOf("expense", row.category_account_name ?? row.line_description ?? "")]}</span>
+        {row.journal_entry_id ? <EntityLink kind="journal_entry" id={row.journal_entry_id} label="JE" /> : null}
+      </span>
+    </div>
+    <div className="ldt-fields">
+      <Ro label="Date" value={mmdd(row.transaction_date)} />
+      <Ro label="Vendor" value={row.vendor_name ?? DASH} />
+      <Ro label="Category" value={acctLabel(row.category_account_number, row.category_account_name)} />
+      <Ro label="Paid with" value={acctLabel(row.payment_account_number, row.payment_account_name)} />
+      <Ro label="Vendor doc no." value={row.vendor_document_number ?? DASH} mono />
+      <Ro label="Amount" value={formatMoneyCents(num(row.total_amount_cents), currency)} mono />
+      <Ro label="Status" value={`${row.status} · ${row.posting_status}`} />
+      <div className="ldt-fld"><label>Receipt</label><CardReceipt opco={opco} entityType="expense" entityId={row.id} readOnly={!canEdit || voided} /></div>
+    </div>
+    <div className="ldt-hint">
+      {posted ? <>Posted <b>debit {row.category_account_name ?? "category"}</b>, <b>credit {row.payment_account_name ?? "paid-with account"}</b>.</> : <>Will post <b>debit {row.category_account_name ?? "category"}</b>, <b>credit {row.payment_account_name ?? "paid-with account"}</b> when the tour closes.</>}
+      {row.memo ? <> Memo: {row.memo}.</> : null}
+      {" "}<button type="button" className="ldt-link" onClick={() => onPop({ title: `Expense ${row.expense_number ?? ""}`, body: <ExpensePop row={row} currency={currency} /> })}>details</button>
+    </div>
+  </SavedEntry>;
+}
+
+function SavedBillCard({ row, opco, currency, canEdit, onPop }: { row: VendorBill; opco: string; currency: string; canEdit: boolean; onPop: (p: { title: string; body: ReactNode }) => void }) {
+  const voided = row.status === "voided";
+  const paid = num(row.paid_cents) >= num(row.amount_cents) && num(row.amount_cents) > 0;
+  return <SavedEntry kind="bill" driverColumn="driver_id" receipts={row.attachment_count ?? 0}>
+    <div className="ldt-ehead">
+      <span className="ldt-enum"><EntityLink kind="bill" id={row.id} label={row.display_id ?? row.bill_number ?? "Bill"} /></span>
+      <span className="ldt-toggle"><button type="button" disabled>{TYPE_LABEL.expense}</button><button type="button" className="on" disabled>{TYPE_LABEL.bill}</button></span>
+      <span className="ldt-emeta">
+        {voided ? <span className="ldt-pill bad">void</span> : paid ? <span className="ldt-pill ok">paid</span> : <span className="ldt-pill warn">owed</span>}
+        {/* ACC-50 (LAW §2) — this bill has a line naming a load whose tour/settlement is still
+            open, so it holds instead of posting even with bill GL posting enabled. */}
+        {!voided && row.posting_hold_reason === "tour_open" ? <span className="ldt-pill bad">held — tour open</span> : null}
+        <span className="ldt-k">{BUCKET_LABEL[bucketOf("bill", row.coa_account_name ?? "")]}</span>
+        {row.journal_entry_id ? <EntityLink kind="journal_entry" id={row.journal_entry_id} label="JE" /> : null}
+      </span>
+    </div>
+    <div className="ldt-fields">
+      <Ro label="Date" value={mmdd(row.bill_date)} />
+      <Ro label="Vendor" value={row.vendor_name ?? DASH} />
+      <Ro label="Category" value={acctLabel(row.coa_account_number, row.coa_account_name)} />
+      <Ro label="Vendor invoice no." value={row.bill_number ?? DASH} mono />
+      <Ro label="Due" value={mmdd(row.due_date)} />
+      <Ro label="Amount" value={formatMoneyCents(num(row.amount_cents), currency)} mono />
+      <div className="ldt-fld"><label>Receipt</label><CardReceipt opco={opco} entityType="bill" entityId={row.id} readOnly={!canEdit || voided} /></div>
+    </div>
+    <div className="ldt-hint">Posts <b>debit {row.coa_account_name ?? "category"}</b>, <b>credit Accounts Payable</b>; {paid ? <>cleared by the bill payment ({formatMoneyCents(num(row.paid_cents), currency)}).</> : <>clears when the bill is paid.</>}{" "}<button type="button" className="ldt-link" onClick={() => onPop({ title: `Bill ${row.display_id ?? row.bill_number ?? ""}`, body: <BillPop row={row} currency={currency} /> })}>details</button></div>
+  </SavedEntry>;
+}
+
+function ExpensePop({ row, currency }: { row: ExpenseListRow; currency: string }) {
+  return <div className="ldt-rows">
+    <div className="ldt-row"><span>Number</span><span className="ldt-m">{row.expense_number ?? DASH}</span></div>
+    <div className="ldt-row"><span>Date</span><span className="ldt-m">{formatDateUS(row.transaction_date)}</span></div>
+    <div className="ldt-row"><span>Vendor</span><span className="ldt-m">{row.vendor_name ?? DASH}</span></div>
+    <div className="ldt-row"><span>Category</span><span className="ldt-m">{acctLabel(row.category_account_number, row.category_account_name)}</span></div>
+    <div className="ldt-row"><span>Paid with</span><span className="ldt-m">{acctLabel(row.payment_account_number, row.payment_account_name)}</span></div>
+    <div className="ldt-row"><span>Vendor document no.</span><span className="ldt-m">{row.vendor_document_number ?? DASH}</span></div>
+    <div className="ldt-row"><span>Amount</span><span className="ldt-m">{formatMoneyCents(num(row.total_amount_cents), currency)}</span></div>
+    <div className="ldt-row"><span>Status · posting</span><span className="ldt-m">{row.status} · {row.posting_status}</span></div>
+    <div className="ldt-row"><span>Bank</span><span className="ldt-m">{row.matched_bank_transaction_description ?? "not matched yet"}</span></div>
+    <div className="ldt-row"><span>Journal entry</span><span className="ldt-m">{row.journal_entry_id ? <EntityLink kind="journal_entry" id={row.journal_entry_id} label={row.journal_entry_memo ?? "open"} /> : "none yet"}</span></div>
+    <div className="ldt-row"><span>Receipts on file</span><span className="ldt-m">{row.attachment_count ?? 0}</span></div>
+    <div className="ldt-row"><span>Memo</span><span className="ldt-m">{row.memo ?? DASH}</span></div>
+  </div>;
+}
+
+function BillPop({ row, currency }: { row: VendorBill; currency: string }) {
+  return <div className="ldt-rows">
+    <div className="ldt-row"><span>Bill no.</span><span className="ldt-m">{row.display_id ?? DASH}</span></div>
+    <div className="ldt-row"><span>Vendor invoice no.</span><span className="ldt-m">{row.bill_number ?? DASH}</span></div>
+    <div className="ldt-row"><span>Date · due</span><span className="ldt-m">{row.bill_date} · {row.due_date ?? DASH}</span></div>
+    <div className="ldt-row"><span>Vendor</span><span className="ldt-m">{row.vendor_name ?? DASH}</span></div>
+    <div className="ldt-row"><span>Category</span><span className="ldt-m">{acctLabel(row.coa_account_number, row.coa_account_name)}</span></div>
+    <div className="ldt-row"><span>Amount · paid · balance</span><span className="ldt-m">{formatMoneyCents(num(row.amount_cents), currency)} · {formatMoneyCents(num(row.paid_cents), currency)} · {formatMoneyCents(num(row.amount_cents) - num(row.paid_cents), currency)}</span></div>
+    <div className="ldt-row"><span>Status</span><span className="ldt-m">{row.status}</span></div>
+    <div className="ldt-row"><span>Receipts on file</span><span className="ldt-m">{row.attachment_count ?? 0}</span></div>
+    <div className="ldt-row"><span>Memo</span><span className="ldt-m">{row.memo ?? DASH}</span></div>
+  </div>;
+}
+
+function SplitTable({ split, currency }: { split: Record<Bucket, number>; currency: string }) {
+  const total = BUCKETS.reduce((s, b) => s + split[b], 0);
+  return <div className="ldt-rows">
+    <div className="ldt-row head"><span>Bucket (live board split)</span><span className="ldt-m">Amount</span></div>
+    {BUCKETS.map((b) => <div className="ldt-row" key={b}><span>{BUCKET_LABEL[b]}</span><span className="ldt-m">{split[b] ? formatMoneyCents(split[b], currency) : DASH}</span></div>)}
+    <div className="ldt-row tot"><span>Total</span><span className="ldt-m">{formatMoneyCents(total, currency)}</span></div>
+  </div>;
+}
+
+function DriverPayTable({ rows, currency }: { rows: DriverBillRow[]; currency: string }) {
+  if (!rows.length) return <p className="ldt-muted">No driver bill on this load yet — it is minted when the load is booked with a driver.</p>;
+  return <div className="ldt-rows ldt-rows-4">
+    <div className="ldt-row head"><span>Line</span><span className="ldt-m">Miles</span><span className="ldt-m">Rate</span><span className="ldt-m">Amount</span></div>
+    {rows.map((b, i) => <DriverPayLines key={b.id ?? i} b={b} currency={currency} />)}
+  </div>;
+}
+function DriverPayLines({ b, currency }: { b: DriverBillRow; currency: string }) {
+  const loaded = b.loaded_pay_cents != null ? num(b.loaded_pay_cents) : num(b.gross_amount_cents) - num(b.deadhead_pay_cents);
+  return <>
+    <div className="ldt-row"><span>Loaded miles <span className="ldt-sub">basis {b.miles_basis_type ?? "unknown"} · law: short miles</span></span><span className="ldt-m">{fmtMiles(b.miles_basis)}</span><span className="ldt-m">{fmtRate(b.rate_per_mile_cents)}</span><span className="ldt-m">{formatMoneyCents(loaded, currency)}</span></div>
+    <div className="ldt-row"><span>Empty miles <span className="ldt-sub">deadhead attributed to this pickup</span></span><span className="ldt-m">{fmtMiles(b.miles_deadhead)}</span><span className="ldt-m">{fmtRate(b.rate_empty_per_mile_cents)}</span><span className="ldt-m">{b.deadhead_pay_cents == null ? DASH : formatMoneyCents(num(b.deadhead_pay_cents), currency)}</span></div>
+    <div className="ldt-row tot"><span>Gross · {b.status}</span><span /><span /><span className="ldt-m">{formatMoneyCents(num(b.gross_amount_cents), currency)}</span></div>
+  </>;
+}
+
+/** One saved cost card shell — the manifest id lives here exactly once. */
+function SavedEntry({ kind, driverColumn, receipts, children }: { kind: "expense" | "bill"; driverColumn: string; receipts: number; children: ReactNode }) {
+  return <div className="ldt-entry" data-testid="load-cost-saved-entry" data-cost-kind={kind} data-cost-driver-column={driverColumn} data-receipts={receipts}>{children}</div>;
+}
+
+/** The receipt control on every card (draft + saved) — one mount point, one test id. */
+function CardReceipt({ opco, entityType, entityId, readOnly = false, onCountChange }: { opco: string; entityType: "expense" | "bill"; entityId: string; readOnly?: boolean; onCountChange?: (n: number) => void }) {
+  return <ReceiptAttach operatingCompanyId={opco} entityType={entityType} entityId={entityId} readOnly={readOnly} testId="load-cost-receipt" onCountChange={onCountChange} />;
+}
+
+function Ro({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
+  return <div className="ldt-fld"><label>{label}</label><div className={`ldt-inp ro${mono ? " mono right" : ""}`} title={value}>{value}</div></div>;
+}
+
+function statusLabel(status: string | null | undefined): { label: string; tone: "ok" | "warn" | "bad" } {
   const s = (status ?? "").toLowerCase();
-  if (s === "draft") return { label: "Draft", className: "border-red-300 bg-red-50 text-red-700" };
-  if (s === "delivered" || s === "completed" || s === "invoiced" || s === "closed") return { label: s, className: "border-slate-200 bg-slate-100 text-slate-700" };
-  return { label: s || "—", className: "border-[#C7D2DC] bg-[#F4F7FA] text-[#1F2937]" };
+  if (s === "draft") return { label: "Draft", tone: "bad" };
+  if (s === "delivered" || s === "completed" || s === "invoiced" || s === "closed") return { label: s, tone: "ok" };
+  return { label: s || DASH, tone: "warn" };
 }
-
-function needsExtra(row: Draft): boolean {
-  return row.kind === "expense" || row.kind === "bill" || row.kind === "advance" || row.kind === "fuel_advance";
-}
-
-function Field({ label, children }: { label: string; children: ReactNode }) { return <label className="block text-xs font-semibold uppercase text-gray-500">{label}{children}</label>; }
 
 function Kpi({ label, value, strong = false }: { label: string; value: string; strong?: boolean }) {
-  return <div data-testid="load-costs-kpi" className="flex flex-col items-center justify-center rounded-sm border border-[#C7D2DC] bg-[#F4F7FA] px-2 py-2 text-center">
-    <span className="font-bold uppercase tracking-wide text-[#4B5563]" style={{ fontSize: 11 }}>{label}</span>
-    <span className={`mt-0.5 tabular-nums text-xs ${strong ? "font-semibold text-[#0F1219]" : "text-[#1F2A44]"}`} style={{ fontSize: 13 }}>{value}</span>
+  return <div data-testid="load-costs-kpi" className={`ldt-card ${strong ? "" : ""}`} style={{ padding: "8px 10px", textAlign: "center" }}>
+    <div className="ldt-muted" style={{ textTransform: "uppercase", letterSpacing: ".04em", fontSize: 10 }}>{label}</div>
+    <div className={`ldt-mono ${strong ? "font-semibold" : ""}`} style={{ fontSize: 13 }}>{value}</div>
   </div>;
 }
 
-function ActionButton({ testId, children, onClick, primary = false, disabled = false }: { testId: string; children: ReactNode; onClick: () => void; primary?: boolean; disabled?: boolean }) {
-  return <button data-testid={testId} type="button" disabled={disabled} onClick={onClick} className={`inline-flex h-[28px] items-center rounded-sm border px-2 text-xs font-semibold disabled:opacity-50 ${primary ? "border-[#14314F] bg-[#14314F] text-white" : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"}`}>{children}</button>;
-}
-
-/** ONE QuickBooks "+ New" button with a drop-down (owner 2026-09-05: "1 button with drop down, just
- *  like quickbooks so we do not have many buttons"). Each item opens a real create flow — the four the
- *  owner named (Expense · Bill · Bill payment · Cash advance) plus Fuel advance and a receipt import.
- *  Expense / Bill / Fuel advance / Cash advance seed a register row of that kind (Save writes it);
- *  Bill payment routes to the real pay-a-bill surface scoped to this load (never a fabricated posting).
- *  Dismisses on outside click (owner picker law). */
+/** ONE QuickBooks "+ New" button with a drop-down (owner 2026-09-05: "1 button with drop down, just like
+ *  quickbooks so we do not have many buttons"). Expense · Bill · Bill payment · Cash advance · Fuel advance
+ *  · From a receipt photo. Dismisses on outside click / Escape. */
 function NewCostMenu({ onPick, receiptHref, billsHref }: { onPick: (kind: CostChoice) => void; receiptHref: string; billsHref: string }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     const onDown = (e: MouseEvent) => { if (rootRef.current && e.target instanceof Node && !rootRef.current.contains(e.target)) setOpen(false); };
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
+    document.addEventListener("mousedown", onDown); document.addEventListener("keydown", onKey);
     return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); };
   }, []);
   const pick = (kind: CostChoice) => { onPick(kind); setOpen(false); };
-  const itemClass = "block w-full px-3 py-1.5 text-left text-xs text-gray-700 hover:bg-slate-100";
+  const itemClass = "block w-full px-3 py-1.5 text-left text-xs";
   return <div ref={rootRef} className="relative">
-    <button
-      type="button"
-      data-testid="load-costs-add-top"
-      aria-haspopup="menu"
-      aria-expanded={open}
-      onClick={() => setOpen((v) => !v)}
-      className="inline-flex h-[28px] items-center gap-1 rounded-sm border border-[#14314F] bg-[#14314F] px-2 text-xs font-semibold text-white"
-    >
-      + New <span aria-hidden>▾</span>
-    </button>
-    {open ? <div role="menu" data-testid="load-costs-new-menu" className="absolute left-0 z-50 mt-1 w-56 rounded-sm border border-gray-200 bg-white py-1 shadow-md">
+    <button type="button" data-testid="load-costs-add-top" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((v) => !v)} className="ldt-btn p">+ New <span aria-hidden>▾</span></button>
+    {open ? <div role="menu" data-testid="load-costs-new-menu" className="ldt-pop" style={{ minWidth: 224 }}>
       <button type="button" role="menuitem" data-testid="load-costs-menu-expense" className={itemClass} onClick={() => pick("expense")}>Expense · paid now</button>
       <button type="button" role="menuitem" data-testid="load-costs-menu-bill" className={itemClass} onClick={() => pick("bill")}>Bill · owed</button>
       <Link role="menuitem" data-testid="load-costs-menu-bill-payment" className={itemClass} to={billsHref} onClick={() => setOpen(false)}>Bill payment · pay a bill</Link>
       <button type="button" role="menuitem" data-testid="load-costs-add-advance-top" className={itemClass} onClick={() => pick("advance")}>Cash advance · from broker</button>
       <button type="button" role="menuitem" data-testid="load-costs-add-fuel-advance-top" className={itemClass} onClick={() => pick("fuel_advance")}>Fuel advance · to driver</button>
-      <div className="my-1 border-t border-gray-100" />
       <Link role="menuitem" data-testid="load-costs-receipt-photo" className={itemClass} to={receiptHref} onClick={() => setOpen(false)}>From a receipt photo</Link>
     </div> : null}
   </div>;
 }
 
-/** Local typed-filter combobox over an in-memory option list, with a "+ Create" link when nothing matches
- *  (owner spec: "every picker a Combobox with typed filter and + Create"). Dismisses on outside click. */
+/** Typed-filter combobox over an in-memory list with "+ Create" (owner: "every picker a Combobox with typed
+ *  filter and + Create"). Dismisses on outside click. */
 function LocalCombobox({ testId, value, options, onSelect, placeholder, createHref }: { testId: string; value: string; options: Array<{ id: string; label: string }>; onSelect: (o: { id: string; label: string }) => void; placeholder?: string; createHref?: string }) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(value);
@@ -445,12 +588,12 @@ function LocalCombobox({ testId, value, options, onSelect, placeholder, createHr
   }, []);
   const q = draft.trim().toLowerCase();
   const filtered = useMemo(() => (q ? options.filter((o) => o.label.toLowerCase().includes(q)) : options).slice(0, 50), [options, q]);
-  return <div ref={rootRef} className="relative w-40">
-    <input data-testid={testId} className="h-7 w-full rounded-sm border border-gray-300 px-1.5 text-xs" placeholder={placeholder} value={draft} onFocus={() => setOpen(true)} onChange={(e) => { setDraft(e.target.value); setOpen(true); }} />
-    {open ? <div className="absolute z-50 mt-1 max-h-56 w-64 overflow-auto rounded-sm border border-gray-200 bg-white shadow-md">
-      {filtered.map((o) => <button key={o.id} type="button" className="block w-full px-2 py-1.5 text-left text-xs hover:bg-slate-100" onMouseDown={(e) => e.preventDefault()} onClick={() => { onSelect(o); setDraft(o.label); setOpen(false); }}>{o.label}</button>)}
-      {!filtered.length ? <div className="px-2 py-1.5 text-xs text-gray-500">No matches.</div> : null}
-      {createHref ? <Link to={createHref} className="block border-t border-gray-100 px-2 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">+ Create</Link> : null}
+  return <div ref={rootRef} className="relative">
+    <input data-testid={testId} placeholder={placeholder} value={draft} onFocus={() => setOpen(true)} onChange={(e) => { setDraft(e.target.value); setOpen(true); }} />
+    {open ? <div className="ldt-pop" style={{ maxHeight: 224, overflow: "auto" }}>
+      {filtered.map((o) => <button key={o.id} type="button" className="block w-full px-2 py-1.5 text-left text-xs" onMouseDown={(e) => e.preventDefault()} onClick={() => { onSelect(o); setDraft(o.label); setOpen(false); }}>{o.label}</button>)}
+      {!filtered.length ? <div className="ldt-muted">No matches.</div> : null}
+      {createHref ? <Link to={createHref} className="ldt-link">+ Create</Link> : null}
     </div> : null}
   </div>;
 }

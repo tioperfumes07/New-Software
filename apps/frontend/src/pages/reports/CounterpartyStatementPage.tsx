@@ -5,7 +5,7 @@ import { DatePicker } from "../../components/forms/DatePicker";
 import { Button } from "../../components/Button";
 import { PageHeader } from "../../components/layout/PageHeader";
 import { useCompanyContext } from "../../contexts/CompanyContext";
-import { getCustomerStatementOfAccount, getVendorStatementOfAccount, type CounterpartyStatementLine } from "../../api/reports";
+import { getCustomerStatementOfAccount, getVendorStatementOfAccount, type CounterpartyStatementLine, type CounterpartyStatementResponse } from "../../api/reports";
 import { listAllDispatchLoads, type DispatchLoad } from "../../api/dispatch";
 import { listExpenses, type ExpenseListRow } from "../../api/accounting";
 import { EntityLink } from "../../components/shared/EntityLink";
@@ -25,6 +25,34 @@ import { mmmDd } from "../../lib/formatDate";
 function money(cents: number) {
   if (!cents) return "—";
   return formatUsdCents(cents);
+}
+
+function csvCell(value: string): string {
+  if (value.includes(",") || value.includes('"') || value.includes("\n")) {
+    return `"${value.replace(/"/g, '""')}"`;
+  }
+  return value;
+}
+
+function exportStatementCsv(response: CounterpartyStatementResponse) {
+  const headers = ["Date", "Type", "Reference", "Description", "Debit", "Credit", "Running Balance"];
+  const rows = response.lines.map((line) => [
+    line.date,
+    typeLabel(line.type),
+    line.reference,
+    line.description,
+    line.debit_cents ? (line.debit_cents / 100).toFixed(2) : "",
+    line.credit_cents ? (line.credit_cents / 100).toFixed(2) : "",
+    (line.running_balance_cents / 100).toFixed(2),
+  ]);
+  const csv = [headers, ...rows].map((row) => row.map((cell) => csvCell(String(cell))).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `statement-${response.counterparty_id}-${response.from_date}-${response.to_date}.csv`;
+  anchor.click();
+  URL.revokeObjectURL(url);
 }
 
 function currentMonthRange() {
@@ -59,22 +87,26 @@ const loadColumns: Array<ParityColumn<LoadRow>> = [
   {
     key: "load_number",
     label: "Load #",
+    sortable: true,
     render: (load) => <EntityLink kind="load" id={load.id} label={load.load_number ?? "—"} />,
   },
-  { key: "status", label: "Status", render: (load) => load.status ?? "—" },
+  { key: "status", label: "Status", sortable: true, render: (load) => load.status ?? "—" },
   {
     key: "pickup_scheduled_at",
     label: "Pickup",
+    sortable: true,
     render: (load) => load.pickup_scheduled_at ? mmmDd(load.pickup_scheduled_at) : "—",
   },
   {
     key: "scheduled_delivery_date",
     label: "Delivery",
+    sortable: true,
     render: (load) => load.scheduled_delivery_date ? mmmDd(load.scheduled_delivery_date) : "—",
   },
   {
     key: "rate_total_cents",
     label: "Rate",
+    sortable: true,
     render: (load) => load.rate_total_cents != null ? formatUsdCents(load.rate_total_cents) : "—",
   },
 ];
@@ -85,21 +117,37 @@ const expenseColumns: Array<ParityColumn<ExpenseRow>> = [
   {
     key: "transaction_date",
     label: "Date",
+    sortable: true,
     render: (exp) => exp.transaction_date ? mmmDd(exp.transaction_date) : "—",
   },
-  { key: "memo", label: "Description", render: (exp) => exp.memo ?? "—" },
-  { key: "load_number", label: "Load", render: (exp) => exp.load_number ?? "—" },
+  { key: "memo", label: "Description", sortable: true, render: (exp) => exp.memo ?? "—" },
+  { key: "load_number", label: "Load", sortable: true, render: (exp) => exp.load_number ?? "—" },
   {
     key: "total_amount_cents",
     label: "Amount",
+    sortable: true,
     render: (exp) => exp.total_amount_cents != null ? formatUsdCents(Number(exp.total_amount_cents)) : "—",
   },
-  { key: "status", label: "Status", render: (exp) => exp.status ?? "—" },
+  { key: "status", label: "Status", sortable: true, render: (exp) => exp.status ?? "—" },
 ];
 
-export function CounterpartyStatementView({ kind }: { kind: "customer" | "vendor" }) {
+/**
+ * ACC-45 (row 45): `counterpartyId`/`embedded` let this SAME view mount inline as a "Statements"
+ * tab (Vendors.tsx list-drawer, no route param to read) as well as the standalone
+ * /customers/:id/statement · /vendors/:id/statement pages it already served — one read model, one
+ * rendering, never a second statement view that could drift from this one on what "balanced" means.
+ */
+export function CounterpartyStatementView({
+  kind,
+  counterpartyId: counterpartyIdProp,
+  embedded = false,
+}: {
+  kind: "customer" | "vendor";
+  counterpartyId?: string;
+  embedded?: boolean;
+}) {
   const { id } = useParams<{ id: string }>();
-  const counterpartyId = id ?? "";
+  const counterpartyId = counterpartyIdProp ?? id ?? "";
   const { selectedCompanyId } = useCompanyContext();
   const companyId = selectedCompanyId ?? "";
   const defaultRange = currentMonthRange();
@@ -138,17 +186,33 @@ export function CounterpartyStatementView({ kind }: { kind: "customer" | "vendor
 
   return (
     <div className="space-y-4 print:space-y-2">
-      <PageHeader
-        title={query.data ? `Statement — ${query.data.counterparty_name}` : "Statement of account"}
-        subtitle={kind === "customer" ? "Customer accounts receivable statement" : "Vendor accounts payable statement"}
-        backHref={backHref}
-        breadcrumb={[kind === "customer" ? "Customers" : "Vendors", "Statement"]}
-        actions={
+      {embedded ? (
+        <div className="flex justify-end gap-2">
+          <Button size="sm" variant="secondary" disabled={!query.data} onClick={() => query.data && exportStatementCsv(query.data)}>
+            Export CSV
+          </Button>
           <Button size="sm" variant="secondary" disabled={!query.data} onClick={() => openPrintableDocument(printPath)}>
             Print
           </Button>
-        }
-      />
+        </div>
+      ) : (
+        <PageHeader
+          title={query.data ? `Statement — ${query.data.counterparty_name}` : "Statement of account"}
+          subtitle={kind === "customer" ? "Customer accounts receivable statement" : "Vendor accounts payable statement"}
+          backHref={backHref}
+          breadcrumb={[kind === "customer" ? "Customers" : "Vendors", "Statement"]}
+          actions={
+            <div className="flex gap-2">
+              <Button size="sm" variant="secondary" disabled={!query.data} onClick={() => query.data && exportStatementCsv(query.data)}>
+                Export CSV
+              </Button>
+              <Button size="sm" variant="secondary" disabled={!query.data} onClick={() => openPrintableDocument(printPath)}>
+                Print
+              </Button>
+            </div>
+          }
+        />
+      )}
 
       {!companyId ? <p className="text-xs text-red-600">Select an operating company.</p> : null}
       {query.isError ? <p className="text-xs text-red-700">Failed to load statement — {String((query.error as Error)?.message ?? "unknown error")}</p> : null}

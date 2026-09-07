@@ -65,7 +65,14 @@ const CHECKS = [
   { name: "transfer label join company scoped", file: PLAID, pattern: /LEFT JOIN banking\.transfers transfer\s+ON transfer\.id = bt\.matched_transfer_id\s+AND transfer\.operating_company_id = bt\.operating_company_id/g },
   { name: "list transfer drill", file: VIEW, pattern: /kind="transfer"\s+id=\{tx\.matched_transfer_id\}[\s\S]{0,160}tx\.matched_transfer_label/ },
   { name: "transfer exact deep link read", file: TRANSFERS, pattern: /const deepLinkTransferId = searchParams\.get\("transfer_id"\)[\s\S]{0,5000}getTransfer\(deepLinkTransferId, companyId\)/ },
-  { name: "transfer readers resolve scoped JE labels", file: "apps/backend/src/banking/transfers.service.ts", pattern: /je\.memo AS journal_entry_memo[\s\S]*LEFT JOIN accounting\.journal_entries je[\s\S]{0,180}je\.operating_company_id = t\.operating_company_id[\s\S]*je\.memo AS journal_entry_memo[\s\S]*LEFT JOIN accounting\.journal_entries je[\s\S]{0,180}je\.operating_company_id = t\.operating_company_id/ },
+  // The inline `LEFT JOIN accounting.journal_entries je ... je.operating_company_id = t.operating_
+  // company_id` in transfers.service.ts was extracted into a shared, reusable, entity-scoped
+  // lookup (apps/backend/src/lib/transfer-tms-je-lookup.ts's attachTransferJournalEntryIds, called
+  // from transfers.routes.ts as attachTransferJournalReverse) — both the list and detail readers
+  // still call it (2 call sites, same "twice" invariant this check originally asserted via the
+  // inline JOIN's duplication), and the lookup itself scopes every query by operating_company_id.
+  { name: "transfer readers resolve scoped JE labels", file: "apps/backend/src/banking/transfers.routes.ts", pattern: /attachTransferJournalReverse\([\s\S]{0,1200}attachTransferJournalReverse\(/ },
+  { name: "transfer JE lookup helper is entity-scoped", file: "apps/backend/src/lib/transfer-tms-je-lookup.ts", pattern: /jep\.operating_company_id = t\.operating_company_id[\s\S]{0,2000}FROM accounting\.journal_entries\s*\n\s*WHERE operating_company_id = \$1::uuid/ },
   { name: "transfer detail JE reverse drill", file: TRANSFERS, pattern: /detail\.transfer\.journal_entry_id \? \([\s\S]{0,180}kind="journal_entry"[\s\S]{0,180}detail\.transfer\.journal_entry_memo/ },
   { name: "transfer detail bank transaction reverse drill", file: TRANSFERS, pattern: /detail\.transfer\.matched_bank_transaction_id \? \([\s\S]{0,180}kind="bank_transaction"[\s\S]{0,220}detail\.transfer\.matched_bank_transaction_label/ },
   { name: "transfer readers resolve counterparty labels", file: "apps/backend/src/banking/transfers.service.ts", pattern: /counterparty\.code AS counterparty_code[\s\S]*LEFT JOIN org\.companies counterparty[\s\S]{0,100}counterparty\.id = t\.counterparty_company_id[\s\S]*counterparty\.code AS counterparty_code[\s\S]*LEFT JOIN org\.companies counterparty[\s\S]{0,100}counterparty\.id = t\.counterparty_company_id/ },

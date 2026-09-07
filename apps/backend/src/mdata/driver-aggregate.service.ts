@@ -269,6 +269,9 @@ export async function buildDriverAggregate(
   const loadRes = await client.query(
     `
       SELECT l.id::text AS load_id, l.load_number, l.status::text,
+        l.assigned_unit_id::text AS unit_id,
+        u.unit_number,
+        u.vin,
         (
           SELECT NULLIF(TRIM(CONCAT_WS(', ', ls.city, ls.state)), '')
           FROM mdata.load_stops ls WHERE ls.load_id = l.id ORDER BY ls.sequence_number ASC LIMIT 1
@@ -278,6 +281,10 @@ export async function buildDriverAggregate(
           FROM mdata.load_stops ls WHERE ls.load_id = l.id ORDER BY ls.sequence_number DESC LIMIT 1
         ) AS delivery
       FROM mdata.loads l
+      LEFT JOIN mdata.units u
+        ON u.id = l.assigned_unit_id
+       AND COALESCE(u.currently_leased_to_company_id, u.owner_company_id) = l.operating_company_id
+       AND u.deactivated_at IS NULL
       WHERE (l.assigned_primary_driver_id = $1::uuid OR l.assigned_secondary_driver_id = $1::uuid)
         AND l.operating_company_id = $2::uuid
         AND l.soft_deleted_at IS NULL
@@ -477,6 +484,16 @@ export async function buildDriverAggregate(
     return { ...row, status };
   });
 
+  // ROUND 16.19 — Dispatch activity is a real current unit relationship even when Samsara has
+  // not emitted a vehicle_driver_assignments login. All 12 planner-active USMCA drivers had an
+  // assigned_unit_id on a real load while only 3 had an open telematics assignment. Prefer the
+  // telemetry assignment when present; otherwise expose the load's scoped unit so the driver and
+  // unit profiles remain mutually reachable instead of rendering a false em dash.
+  const currentTruck = mapTruck(currentTruckRes.rows[0] ?? loadRes.rows[0], {
+    samsara_logged_in_at: currentTruckRes.rows[0]?.samsara_logged_in_at ?? null,
+    source: currentTruckRes.rows[0] ? "samsara_webhook" : loadRes.rows[0] ? "dispatch_load" : null,
+  });
+
   const fastExp = driver.fast_card_expiration as string | null;
   const sentriExp = driver.sentri_expiration as string | null;
   const twicExp = driver.twic_expiration as string | null;
@@ -562,9 +579,7 @@ export async function buildDriverAggregate(
     hos_unavailable,
     current_assignment: {
       default_truck: mapTruck(defaultTruckRes.rows[0]),
-      currently_driving_truck: mapTruck(currentTruckRes.rows[0], {
-        samsara_logged_in_at: currentTruckRes.rows[0]?.samsara_logged_in_at ?? null,
-      }),
+      currently_driving_truck: currentTruck,
       current_load: loadRes.rows[0] ?? null,
     },
     performance_scorecard,

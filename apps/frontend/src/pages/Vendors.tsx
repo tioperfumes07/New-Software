@@ -21,21 +21,49 @@ import { VendorsListView } from "./vendors/VendorsListView";
 import { VendorListSidebar } from "./vendors/VendorListSidebar";
 import { VendorsSyncPanel } from "./vendors/VendorsSyncPanel";
 import { VendorCreateModal } from "../components/vendors/VendorCreateModal";
+import { VendorEditDrawer } from "../components/vendors/VendorEditDrawer";
 import { useViewModePref } from "../hooks/useViewModePref";
+import { useListPageSizePref } from "../hooks/useListPageSizePref";
 import { useUrlSort } from "../hooks/useUrlSort";
 import { formatDateUS, mmmDd } from "../lib/formatDate";
 import { EntityLink } from "../components/shared/EntityLink";
 import { EntityLinkOrTombstone } from "../components/shared/EntityLinkOrTombstone";
 import { ReferenceSelect, type ReferenceOption } from "../components/parity/ReferenceSelect";
 import { useCatalogQuery } from "../hooks/useCatalogQuery";
+import { CounterpartyStatementView } from "./reports/CounterpartyStatementPage";
+import { EntityActivityFeed } from "../components/shared/EntityActivityFeed";
 
-type VendorTabId = "transaction_list" | "vendor_details" | "notes";
+type VendorTabId = "transaction_list" | "vendor_details" | "statements" | "activity" | "notes";
+
+// VC-DETAIL-01 (owner ROUND 14) — one unified Transactions row shape spanning bills + expenses.
+type VendorTransactionRow = {
+  key: string;
+  id: string;
+  kind: "bill" | "expense";
+  date: string;
+  type: "Bill" | "Expense";
+  ref: string | null;
+  description: string;
+  amount_cents: number;
+  /** Bills carry a running open balance; an expense is a point-in-time outflow (null → "—"). */
+  balance_cents: number | null;
+};
 const VENDOR_LIST_TAB_IDS = ["all", "active", "inactive", "by-category"] as const;
 type VendorListTabId = (typeof VENDOR_LIST_TAB_IDS)[number];
 
+// ACC-45 (row 45, OWNER-ISSUE-INVENTORY-2026-09-05.md #45): "statements and all that … should
+// appear in their history" (owner 19:26Z). Customers.tsx already had Statements/Activity Feed
+// tabs; Vendors.tsx had exactly these 3 and no parity. Statements reuses the SAME real statement-
+// of-account read model (CounterpartyStatementView, opening→ledger→closing) the standalone
+// /vendors/:id/statement page already used; Activity reuses the SAME audit_events read
+// (EntityActivityFeed, extracted from Customers.tsx's own feed) — no new backend needed for
+// either, audit-events-list.routes.ts already maps entity_type "vendor" -> resource_type
+// "mdata.vendors".
 const VENDOR_TABS: Array<{ id: VendorTabId; label: string }> = [
   { id: "transaction_list", label: "Transaction List" },
   { id: "vendor_details", label: "Vendor Details" },
+  { id: "statements", label: "Statements" },
+  { id: "activity", label: "Activity" },
   { id: "notes", label: "Notes" },
 ];
 const VENDOR_TAB_IDS = new Set<string>(VENDOR_TABS.map((t) => t.id));
@@ -84,6 +112,8 @@ export function VendorsPage() {
   const companyId = selectedCompanyId ?? "";
   // USMCA/TRK are TMS-native — QBO vendor sync chrome is TRANSP-only (customers twin #8698 / LV #1420).
   const qboAvailable = selectedCompany?.code === "TRANSP";
+  // CUR-2: Edit opens the vendor's core fields in the right-side ParityDrawer (QBO-style), not the full page.
+  const [editVendorId, setEditVendorId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   // BANK-SORT-ROLLOUT-CRM — name sort persists in ?sort=name&dir= via shared useUrlSort
   // (same contract as accounting VendorsListView / #2609). Default (no params) = A→Z.
@@ -161,7 +191,8 @@ export function VendorsPage() {
   // K.9 — roster Vendor Type filter (inline, visible on first load, 0 clicks).
   const [rosterVendorType, setRosterVendorType] = useState("");
   const [sidebarPage, setSidebarPage] = useState(1);
-  const [sidebarPageSize, setSidebarPageSize] = useState(50);
+  // VC-10 / VC-LIST-02 — persisted page size (survives reload); "All" is a valid stored value.
+  const [sidebarPageSize, setSidebarPageSize] = useListPageSizePref("vendors", 50);
   const createOpen = searchParams.get("create") === "1";
   const openCreate = () => {
     if (searchParams.get("create") === "1") return;
@@ -401,7 +432,9 @@ export function VendorsPage() {
   });
   const expensesQuery = useQuery({
     queryKey: ["vendors", "expenses", companyId, selectedVendor?.id ?? ""],
-    queryFn: () => listExpenses(companyId, { vendor_uuid: selectedVendor?.id }),
+    // VC-DETAIL-01 — request the endpoint ceiling (200; the /expenses endpoint caps there, ROUND 11)
+    // so the unified Transactions table renders the vendor's real expense history, not the default page.
+    queryFn: () => listExpenses(companyId, { vendor_uuid: selectedVendor?.id, limit: 200 }),
     enabled: Boolean(companyId && selectedVendor?.id && activeTab === "transaction_list"),
   });
 
@@ -429,7 +462,7 @@ export function VendorsPage() {
   const txColumns = useMemo<ParityColumn<(typeof txRows)[number]>[]>(
     () => [
       { key: "date", label: "Date", sortable: true, render: (r) => formatDateUS(r.bill_date) },
-      { key: "type", label: "Type", sortable: true, render: () => "bill" },
+      { key: "type", label: "Type", sortable: true, sortValue: (r) => r.driver_id ? "driver_bill" : "vendor_bill", render: (r) => r.driver_id ? "Driver bill" : "Vendor bill" },
       {
         key: "doc_no",
         label: "Doc #",
@@ -444,12 +477,12 @@ export function VendorsPage() {
         label: "Balance",
         render: (r) => fmtMoney(Number(r.balance_cents ?? Number(r.amount_cents ?? 0) - Number(r.paid_cents ?? 0))),
       },
-      { key: "load_no", label: "Load #", render: () => "—" },
-      { key: "settlement_no", label: "Settlement #", defaultHidden: true, render: () => "—" },
-      { key: "truck_no", label: "Truck #", defaultHidden: true, render: () => "—" },
-      { key: "pickup_date", label: "Pick-up date", defaultHidden: true, render: () => "—" },
-      { key: "delivery_date", label: "Delivery date", defaultHidden: true, render: () => "—" },
-      { key: "loaded_miles", label: "Loaded miles", defaultHidden: true, render: () => "—" },
+      { key: "load_no", label: "Load #", sortable: true, sortValue: (r) => r.linked_load_number ?? "", render: (r) => r.linked_load_id ? <EntityLinkOrTombstone kind="load" id={r.linked_load_id} name={r.linked_load_number} noun="Load" /> : "—" },
+      { key: "settlement_no", label: "Settlement #", defaultHidden: true, sortable: true, sortValue: (r) => r.linked_settlement_display_id ?? "", render: (r) => r.linked_settlement_id ? <EntityLink kind="settlement" id={r.linked_settlement_id} label={r.linked_settlement_display_id ?? "—"} /> : "—" },
+      { key: "truck_no", label: "Truck #", defaultHidden: true, sortable: true, sortValue: (r) => r.linked_unit_number ?? "", render: (r) => r.linked_unit_number ?? "—" },
+      { key: "pickup_date", label: "Pick-up date", defaultHidden: true, sortable: true, sortValue: (r) => r.linked_pickup_date ?? "", render: (r) => mmmDd(r.linked_pickup_date) || "—" },
+      { key: "delivery_date", label: "Delivery date", defaultHidden: true, sortable: true, sortValue: (r) => r.linked_delivery_date ?? "", render: (r) => mmmDd(r.linked_delivery_date) || "—" },
+      { key: "loaded_miles", label: "Loaded miles", defaultHidden: true, sortable: true, sortValue: (r) => Number(r.linked_loaded_miles ?? 0), render: (r) => r.linked_loaded_miles != null ? Number(r.linked_loaded_miles).toLocaleString() : "—" },
     ],
     [],
   );
@@ -470,6 +503,67 @@ export function VendorsPage() {
       },
       { key: "amount", label: "Amount", render: (r) => fmtMoney(Number(r.total_amount_cents ?? 0)) },
       { key: "status", label: "Status", sortable: true, render: (r) => r.status ?? "—" },
+    ],
+    [],
+  );
+
+  // VC-DETAIL-01 (owner ROUND 14, 2026-09-06): the Transactions tab is ONE ParityTable of the
+  // vendor's expenses + bills — Date · Type · Ref no. · Description · Amount · Balance — sortable,
+  // exportable. LOVES proof: 183 expenses + 0 bills → 183 rows. Amount/Balance are the REAL cents
+  // off the same accounting.bills / accounting.expenses rows the detailed tables below drill into
+  // (bills carry a running open balance; an expense is a point-in-time cash outflow, no balance).
+  const vendorTransactions = useMemo<VendorTransactionRow[]>(() => {
+    const billRows: VendorTransactionRow[] = (txRows ?? []).map((b) => ({
+      key: `bill-${b.id}`,
+      id: b.id,
+      kind: "bill",
+      date: b.bill_date,
+      type: "Bill",
+      ref: b.bill_number ?? null,
+      description: b.memo ?? "—",
+      amount_cents: Number(b.amount_cents ?? 0),
+      balance_cents: Number(b.balance_cents ?? Number(b.amount_cents ?? 0) - Number(b.paid_cents ?? 0)),
+    }));
+    const expenseRows: VendorTransactionRow[] = (expensesQuery.data?.rows ?? []).map((e) => ({
+      key: `expense-${e.id}`,
+      id: e.id,
+      kind: "expense",
+      date: e.transaction_date,
+      type: "Expense",
+      ref: e.expense_number ?? null,
+      description: e.memo ?? e.line_description ?? "—",
+      amount_cents: Number(e.total_amount_cents ?? 0),
+      balance_cents: null,
+    }));
+    return [...billRows, ...expenseRows].sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""));
+  }, [txRows, expensesQuery.data?.rows]);
+
+  const vendorTransactionColumns = useMemo<ParityColumn<VendorTransactionRow>[]>(
+    () => [
+      { key: "date", label: "Date", sortable: true, sortValue: (r) => r.date ?? "", render: (r) => formatDateUS(r.date) || "—" },
+      { key: "type", label: "Type", sortable: true, render: (r) => r.type },
+      {
+        key: "ref",
+        label: "Ref no.",
+        sortable: true,
+        sortValue: (r) => r.ref ?? "",
+        render: (r) =>
+          r.kind === "bill" ? (
+            <EntityLink kind="bill" id={r.id} label={visibleDocumentLabel(r.ref, r.id, "Bill")} />
+          ) : (
+            <EntityLink kind="expense" id={r.id} label={r.ref ?? "Expense"} />
+          ),
+      },
+      { key: "description", label: "Description", sortable: true, sortValue: (r) => r.description, render: (r) => r.description },
+      { key: "amount", label: "Amount", sortable: true, sortValue: (r) => r.amount_cents, cellClass: "text-right tabular-nums", render: (r) => fmtMoney(r.amount_cents) },
+      {
+        key: "balance",
+        label: "Balance",
+        sortable: true,
+        sortValue: (r) => r.balance_cents ?? -1,
+        cellClass: "text-right tabular-nums",
+        render: (r) => (r.balance_cents == null ? "—" : fmtMoney(r.balance_cents)),
+      },
     ],
     [],
   );
@@ -696,9 +790,16 @@ export function VendorsPage() {
                         />
                       </h2>
                       <p className="text-xs text-gray-500">{selectedVendor.vendor_code || "Vendor"} — {selectedVendor.vendor_type ?? "Type not set"}</p>
-                      <p className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${vendorQualityLabel(selectedVendor.notes).className}`}>
-                        Vendor quality: {vendorQualityLabel(selectedVendor.notes).label}
-                      </p>
+                      {/* VC-DETAIL-01 — Status = active/inactive (deactivated_at); the quality chip
+                          is its own separate chip, never the Status value. */}
+                      <div className="mt-1 flex flex-wrap items-center gap-2">
+                        <span className={`inline-flex rounded-sm px-2 py-0.5 text-xs font-semibold ${selectedVendor.deactivated_at ? "bg-gray-200 text-gray-700" : "bg-slate-100 text-slate-700"}`} data-testid="vendor-detail-status">
+                          {selectedVendor.deactivated_at ? "Inactive" : "Active"}
+                        </span>
+                        <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${vendorQualityLabel(selectedVendor.notes).className}`}>
+                          Quality: {vendorQualityLabel(selectedVendor.notes).label}
+                        </span>
+                      </div>
                     </div>
                     <div className="flex items-center gap-2" data-testid="vendor-header-actions">
                       {/* CLS-CHROME / CUST-CHROME-01 sibling: same-row Edit must share Button chrome with New transaction. */}
@@ -706,7 +807,7 @@ export function VendorsPage() {
                         type="button"
                         variant="secondary"
                         className="h-8"
-                        onClick={() => navigate(`/vendors/${selectedVendor.id}`)}
+                        onClick={() => setEditVendorId(selectedVendor.id)}
                         data-testid="vendor-header-edit"
                       >
                         Edit
@@ -728,8 +829,14 @@ export function VendorsPage() {
                 </section>
                 <section className="rounded-sm border border-gray-200 bg-white p-3">
                   <h3 className="mb-2 text-xs font-semibold text-gray-900">Summary</h3>
+                  {/* VC-DETAIL-01 — Open balance + Spend read the SAME rollup the Vendors list reads:
+                      open balance from GET /accounting/vendor-balances (openByVendorId), Spend YTD
+                      from GET /mdata/vendor-rollups (rollupByVendorId.spend_ytd_cents). No second
+                      per-detail computation that could drift from the list column. */}
                   <p className="text-xs text-gray-600">Open balance</p>
                   <p className="text-page-title font-semibold text-gray-900">{balancesQuery.isError ? <span className="text-red-600 text-xs">Failed to load — <button type="button" className="underline" onClick={() => void balancesQuery.refetch()}>Retry</button></span> : fmtMoney(openByVendorId.get(selectedVendor.id) ?? 0)}</p>
+                  <p className="mt-2 text-xs text-gray-600">Spend (YTD)</p>
+                  <p className="text-page-title font-semibold text-gray-900" data-testid="vendor-detail-spend-ytd">{vendorRollupsQuery.isError ? <span className="text-red-600 text-xs">Failed to load</span> : fmtMoney(rollupByVendorId.get(selectedVendor.id)?.spend_ytd_cents ?? 0)}</p>
                   <p className="mt-2 text-xs text-gray-600">Overdue payment</p>
                   <p className="text-page-title font-semibold text-red-700">{fmtMoney(overdueCents)}</p>
                 </section>
@@ -747,6 +854,22 @@ export function VendorsPage() {
                   <ListErrorState title="Couldn't load vendor transactions" status={0} message={(billsQuery.error as Error)?.message} onRetry={() => void billsQuery.refetch()} />
                 ) : (
                   <>
+                    {/* VC-DETAIL-01 — the headline Transactions table: one ParityTable of this
+                        vendor's expenses + bills (Date · Type · Ref no. · Description · Amount ·
+                        Balance), sortable, exportable. The detailed Bills / Expenses breakdowns
+                        below are preserved (§7, additive). */}
+                    <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Transactions</h4>
+                    <ParityTable
+                      rows={vendorTransactions}
+                      columns={vendorTransactionColumns}
+                      rowKey={(r) => r.key}
+                      loading={billsQuery.isPending || expensesQuery.isPending}
+                      storageKey="vendor-transactions-unified"
+                      emptyText="No bills or expenses for this vendor."
+                      exportFilename="vendor-transactions-all"
+                      allowAllPageSize
+                    />
+                    <h4 className="mb-2 mt-4 text-xs font-semibold uppercase tracking-wide text-gray-500">Bills</h4>
                     <ParityTable
                   rows={txRows}
                   columns={txColumns}
@@ -862,6 +985,16 @@ export function VendorsPage() {
                     <div><dt className="text-xs font-semibold text-gray-500">Phone</dt><dd>{selectedVendor.phone || "—"}</dd></div>
                   </dl>
                 </div>
+              ) : activeTab === "statements" ? (
+                <CounterpartyStatementView kind="vendor" counterpartyId={selectedVendor.id} embedded />
+              ) : activeTab === "activity" ? (
+                <EntityActivityFeed
+                  operatingCompanyId={companyId}
+                  entityType="vendor"
+                  entityId={selectedVendor.id}
+                  storageKey="vendor-activity-feed"
+                  emptyText="No recorded activity for this vendor."
+                />
               ) : (
                 <div className="rounded-sm border border-gray-200 bg-white p-3 text-xs text-gray-500">{selectedVendorPublicNotes || "No notes."}</div>
               )}
@@ -873,6 +1006,18 @@ export function VendorsPage() {
       </div>
       )}
       <VendorCreateModal open={createOpen} onClose={closeCreate} operatingCompanyId={companyId} />
+      {/* CUR-2: Edit-in-side-drawer (QBO style). Full-page /vendors/:id stays reachable by URL. */}
+      <VendorEditDrawer
+        open={Boolean(editVendorId)}
+        vendorId={editVendorId}
+        vendorName={selectedVendor?.id === editVendorId ? selectedVendor?.name : null}
+        operatingCompanyId={companyId || undefined}
+        onClose={() => setEditVendorId(null)}
+        onSaved={() => {
+          void vendorsQuery.refetch();
+          void inactiveVendorsQuery.refetch();
+        }}
+      />
     </div>
   );
 }

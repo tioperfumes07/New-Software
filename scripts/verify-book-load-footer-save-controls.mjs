@@ -8,8 +8,8 @@
 //      /dispatch/loads/:id/dispatch-sheet.html) — never a new PDF path.
 //   c) An in-modal, aria-live save-confirmation banner (the page-level toast renders behind the
 //      wizard, so the operator inside it never sees it).
-//   d) "Save and send" must NOT be wired to a real send yet — it carries a pending-ruling reason
-//      (WIZ-49d) instead, so it is a visible-but-disabled affordance, not a dead no-op.
+//   d) "Save and send" IS wired to the one real send (onSaveAndSend) — WIZ-49d resolved by owner
+//      order 2026-09-04 item 5 "enable Book and send" (#20456).
 //
 // Exit 1 on any missing contract; exit 0 when all hold.
 
@@ -84,14 +84,17 @@ must(
   "MISSING: the in-modal save banner must be aria-live so it is announced inside the modal"
 );
 
-// (d) Save and send is filed, not built
+// (d) WIZ-49d RESOLVED — owner order 2026-09-04 item 5 "enable Book and send" (#20456, 0aca76377d).
+// The hold is lifted: "Save and send" is WIRED to the one real send path (onSaveAndSend) and is no
+// longer a disabled placeholder. The pre-ruling pins (disabled reason present / send forbidden)
+// enforced the retracted state and reddened CI (ENV-CENSUS-FAIL, lead re-pin 2026-09-06).
 must(
-  /saveAndSendDisabledReason=/.test(modal),
-  "MISSING: 'Save and send' must be a disabled affordance with a pending-ruling reason (WIZ-49d), not wired"
+  /onSaveAndSend=\{/.test(modal),
+  "MISSING: 'Save and send' must be wired (onSaveAndSend) — owner order 2026-09-04 item 5 enabled Book and send (WIZ-49d resolved)"
 );
 must(
-  !/onSaveAndSend=\{/.test(modal),
-  "FORBIDDEN: onSaveAndSend must NOT be wired yet — the send is on owner hold (WIZ-49d)"
+  !/saveAndSendDisabledReason=\{?["'`][^"'`]*(pending|hold|WIZ-49d)/i.test(modal),
+  "FORBIDDEN: 'Save and send' still carries a pending-ruling disabled reason — the WIZ-49d hold was lifted 2026-09-04"
 );
 
 // SaveDropdown must actually support the disabled 'Save and send' contract.
@@ -105,5 +108,5 @@ if (errors.length) {
   for (const e of errors) console.error("  - " + e);
   process.exit(1);
 }
-console.log("verify-book-load-footer-save-controls: PASS (split save + print + in-modal ack; send filed WIZ-49d)");
+console.log("verify-book-load-footer-save-controls: PASS (split save + print + in-modal ack; Book and send wired per owner order 2026-09-04)");
 process.exit(0);

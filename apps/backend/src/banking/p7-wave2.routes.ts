@@ -4,7 +4,7 @@ import { appendCrudAudit } from "../audit/crud-audit.js";
 import { companyQuerySchema, currentAuthUser, validationError, withCompanyScope } from "../accounting/shared.js";
 import { BankingRuleRow, PlaidCategoryRuleRow, mergeSuggestionPreferHigher, suggestionFromPlaidCategory, suggestionFromRules } from "./suggestion-engine.js";
 import { assertCompanyMembership } from "../_helpers/company-membership-guard.js";
-import { findCandidates } from "../accounting/bank-recon/match.service.js";
+import { findCandidates, QBO_DAYS_AFTER, QBO_DAYS_BEFORE } from "../accounting/bank-recon/match.service.js";
 import { bankTransactionHiddenFilterSql, isBankAccountHideEnabled } from "./bank-account-visibility.js";
 import { supersedePlaidPendingByExactPostedCandidate } from "./bank-tx-dedup.js";
 import { runDriftDetectors } from "./drift-alerts.service.js";
@@ -140,6 +140,7 @@ export async function registerBankingP7Wave2Routes(app: FastifyInstance) {
           mergeSuggestionPreferHigher(
             suggestionFromRules(rules, {
               description_normalized: row.description_normalized as string | null,
+              description: row.description as string | null,
               amount_cents: Number(row.amount_cents),
               bank_account_id: String(row.bank_account_id),
             }),
@@ -202,6 +203,19 @@ export async function registerBankingP7Wave2Routes(app: FastifyInstance) {
           .union([z.literal("1"), z.literal("true"), z.literal("yes")])
           .optional()
           .transform((v) => Boolean(v)),
+        // BANK-MATCH-QBO (owner 2026-09-06): the QuickBooks "Find match" filters — Show (kinds, csv),
+        // Payee, date From/To, amount From/To (dollars, as typed).
+        kinds: z
+          .string()
+          .max(120)
+          .optional()
+          .transform((v) => (v ? v.split(",").map((k) => k.trim()).filter(Boolean) : undefined))
+          .pipe(z.array(z.enum(["payment", "bill_payment", "transfer", "je", "bill", "expense"])).optional()),
+        payee: z.string().max(200).optional(),
+        date_from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        date_to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        amount_min: z.coerce.number().min(0).optional(),
+        amount_max: z.coerce.number().min(0).optional(),
       })
       .safeParse(req.query ?? {});
     if (!parsed.success) return validationError(reply, parsed.error);
@@ -217,6 +231,12 @@ export async function registerBankingP7Wave2Routes(app: FastifyInstance) {
       actor_user_uuid: user.uuid,
       window_days: windowDays,
       search_query: parsed.data.q,
+      kinds: parsed.data.kinds,
+      payee: parsed.data.payee,
+      date_from: parsed.data.date_from,
+      date_to: parsed.data.date_to,
+      amount_min_cents: parsed.data.amount_min == null ? undefined : Math.round(parsed.data.amount_min * 100),
+      amount_max_cents: parsed.data.amount_max == null ? undefined : Math.round(parsed.data.amount_max * 100),
     });
 
     // LINK-F5190: the response never echoed which bank_transaction_id these candidates are FOR --
@@ -225,8 +245,19 @@ export async function registerBankingP7Wave2Routes(app: FastifyInstance) {
     return {
       candidates,
       match_candidates_count: candidates.length,
-      window_days: windowDays ?? 7,
+      // QuickBooks default: 90 days before / 20 after the bank date when no window is given.
+      window_days: windowDays ?? null,
+      days_before: windowDays ?? QBO_DAYS_BEFORE,
+      days_after: windowDays ?? QBO_DAYS_AFTER,
       search_query: parsed.data.q ?? null,
+      filters: {
+        kinds: parsed.data.kinds ?? null,
+        payee: parsed.data.payee ?? null,
+        date_from: parsed.data.date_from ?? null,
+        date_to: parsed.data.date_to ?? null,
+        amount_min: parsed.data.amount_min ?? null,
+        amount_max: parsed.data.amount_max ?? null,
+      },
       bank_transaction_id: params.data.id,
     };
   });
@@ -448,6 +479,7 @@ export async function registerBankingP7Wave2Routes(app: FastifyInstance) {
       );
       const sug = suggestionFromRules(rulesRes.rows as BankingRuleRow[], {
         description_normalized: row.description_normalized as string | null,
+              description: row.description as string | null,
         amount_cents: Number(row.amount_cents),
         bank_account_id: String(row.bank_account_id),
       });

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { DatePicker } from "../../components/forms/DatePicker";
+import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "../../components/Button";
 import { PageHeader } from "../../components/layout/PageHeader";
@@ -12,7 +12,7 @@ import {
 } from "../../api/reports";
 import { ReportBlockTPendingBanner } from "./ReportBlockTPendingBanner";
 import { ReportsSubNav } from "./ReportsSubNav";
-import { CollapsedListFilters, useStagedListFilters } from "../../components/table";
+import { ReportFilterBar } from "../../components/reports/ReportFilterBar";
 import { formatAccountTypeLabel } from "../../lib/formatAccountTypeLabel";
 import { formatCashFlowCompoundLabel } from "../../lib/formatCashFlowCompoundLabel";
 import { humanizeEnumLabel } from "../../lib/humanizeEnumLabel";
@@ -43,16 +43,13 @@ function sortLines(lines: AccountingCashFlowLine[]) {
 export function CashFlowStatementPage() {
   const { selectedCompanyId } = useCompanyContext();
   const companyId = selectedCompanyId ?? "";
+  const [searchParams, setSearchParams] = useSearchParams();
   const defaultRange = currentMonthRange();
   // Q7 precedent (cash-basis/engine.ts, already locked for every other basis-enabled report in this
   // app): basis defaults to accrual, frontend-only, no per-user memory.
   const [applied, setApplied] = useState<{ start: string; end: string; basis: AccountingBasis }>({ ...defaultRange, basis: "accrual" });
-  const staged = useStagedListFilters({
-    applied,
-    empty: { ...defaultRange, basis: "accrual" as AccountingBasis },
-    onApply: setApplied,
-  });
   const exportAction = useExportAction();
+  const [reportSearch, setReportSearch] = useState("");
 
   const query = useQuery({
     queryKey: ["reports", "cash-flow-statement", companyId, applied.start, applied.end, applied.basis],
@@ -67,9 +64,27 @@ export function CashFlowStatementPage() {
     retry: false,
   });
 
-  const operatingLines = useMemo(() => sortLines(query.data?.operating.lines ?? []), [query.data?.operating.lines]);
-  const investingLines = useMemo(() => sortLines(query.data?.investing.lines ?? []), [query.data?.investing.lines]);
-  const financingLines = useMemo(() => sortLines(query.data?.financing.lines ?? []), [query.data?.financing.lines]);
+  const operatingLines = useMemo(() => {
+    const q = reportSearch.toLowerCase();
+    return sortLines(query.data?.operating.lines ?? []).filter((line) => {
+      if (!q) return true;
+      return String(line.label ?? "").toLowerCase().includes(q);
+    });
+  }, [query.data?.operating.lines, reportSearch]);
+  const investingLines = useMemo(() => {
+    const q = reportSearch.toLowerCase();
+    return sortLines(query.data?.investing.lines ?? []).filter((line) => {
+      if (!q) return true;
+      return String(line.label ?? "").toLowerCase().includes(q);
+    });
+  }, [query.data?.investing.lines, reportSearch]);
+  const financingLines = useMemo(() => {
+    const q = reportSearch.toLowerCase();
+    return sortLines(query.data?.financing.lines ?? []).filter((line) => {
+      if (!q) return true;
+      return String(line.label ?? "").toLowerCase().includes(q);
+    });
+  }, [query.data?.financing.lines, reportSearch]);
 
   function printLetter() {
     const data = query.data;
@@ -213,47 +228,27 @@ export function CashFlowStatementPage() {
         </p>
       ) : null}
 
-      <CollapsedListFilters
-        activeFilterCount={JSON.stringify(applied) !== JSON.stringify({ ...defaultRange, basis: "accrual" as AccountingBasis }) ? 1 : 0}
-        defaultOpen={true}
-        onApply={staged.apply}
-        onReset={staged.reset}
-        onCancel={staged.cancel}
-        applyDisabled={!staged.dirty}
+      <ReportFilterBar
         testIdPrefix="reports-cash-flow-statement"
-        className="no-print rounded-sm border border-gray-200 bg-white p-3"
+        fromDate={applied.start}
+        toDate={applied.end}
+        onFromDateChange={(d) => setApplied((p) => ({ ...p, start: d ?? "" }))}
+        onToDateChange={(d) => setApplied((p) => ({ ...p, end: d ?? "" }))}
+        onPresetSelect={(preset) => {
+          const next = new URLSearchParams(searchParams);
+          next.set("preset", preset);
+          setSearchParams(next, { replace: true });
+        }}
+        search={reportSearch}
+        onSearchChange={setReportSearch}
       >
-        <div className="flex flex-wrap items-end gap-3">
-          <label className="text-xs text-gray-600">
-            From
-            <DatePicker
-              className="mt-1 block h-9"
-              value={staged.draft.start}
-              onChange={(next) => staged.setDraft((previous) => ({ ...previous, start: next }))}
-            />
-          </label>
-          <label className="text-xs text-gray-600">
-            To
-            <DatePicker
-              className="mt-1 block h-9"
-              value={staged.draft.end}
-              onChange={(next) => staged.setDraft((previous) => ({ ...previous, end: next }))}
-            />
-          </label>
-          {/* ACCT-CASHFLOW-BASIS-DEAD-SELECTOR / ACCT-CASHFLOW-BASIS-LOCK-CONFLICT: this control used to
-              be a fully dead <select> (never wired end-to-end) sitting behind a hard owner lock. The
-              owner ruling 2026-09-05 ("cash flow should always have cash and accrual selector, as in
-              QuickBooks") lifted that lock and asked for a real, working toggle — this is it, wired
-              through to getCashFlowStatementReport()'s real `basis` param and the backend route's
-              (previously-ignored) `basis` query param, both fixed in the same PR. */}
-          <div data-testid="reports-cash-flow-statement-basis">
-            <BasisSelector
-              value={staged.draft.basis}
-              onChange={(next) => staged.setDraft((previous) => ({ ...previous, basis: next }))}
-            />
-          </div>
+        <div data-testid="reports-cash-flow-statement-basis">
+          <BasisSelector
+            value={applied.basis}
+            onChange={(next) => setApplied((p) => ({ ...p, basis: next }))}
+          />
         </div>
-      </CollapsedListFilters>
+      </ReportFilterBar>
 
       {query.data ? (
         <div className="grid gap-2 md:grid-cols-4">

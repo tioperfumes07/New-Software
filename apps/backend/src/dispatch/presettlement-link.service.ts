@@ -26,7 +26,7 @@ export class PresettlementLinkError extends Error {
   }
 }
 
-export type TripType = "NB" | "TR" | "SB";
+export type TripType = "NB" | "TR" | "SB" | "LOCAL";
 
 /**
  * PS2 (claude/GO-22-PRESETTLEMENT-REGISTER-2026-09-02.md): "No settlement doc type in
@@ -248,9 +248,13 @@ export async function confirmPresettlementLink(client: DbClient, input: ConfirmI
       `
         INSERT INTO driver_finance.driver_settlements (
           operating_company_id, driver_id, status, display_id, tour_id, first_load_id,
-          period_start, period_end, trip_started_at, created_by_user_id, is_sample_data
+          period_start, period_end, trip_started_at, created_by_user_id, is_sample_data,
+          -- LDT-5 (2026-09-06): a booking-time pre-settlement IS the load-bookended model. Without this the
+          -- Pre-Settlement tab (settlement_model = 'load_bookended' filter) and trip close (same check) never
+          -- saw these rows — 15/15 open USMCA settlements were NULL. Backfill: 202613800100.
+          settlement_model
         )
-        VALUES ($1::uuid, $2::uuid, 'open', $3, $4::uuid, $5::uuid, $6::date, $6::date, now(), $7::uuid, $8)
+        VALUES ($1::uuid, $2::uuid, 'open', $3, $4::uuid, $5::uuid, $6::date, $6::date, now(), $7::uuid, $8, 'load_bookended')
         RETURNING id
       `,
       [input.operating_company_id, suggestion.driver_id, displayId, suggestion.tour_id, suggestion.load_id, periodDate, input.actor_user_id, isSampleData]

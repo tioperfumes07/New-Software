@@ -14,6 +14,8 @@ import {
   reversePostedSourceTransactionInClientTx,
 } from "./posting-engine.service.js";
 import { isBillPaymentGlPostingEnabled } from "./bill-payment-gl.service.js";
+import { insertTransferInClient, type TransferInput } from "../banking/transfers.service.js";
+import { isEnabled } from "../lib/feature-flags/service.js";
 import { vendorIdentitySetSql } from "./vendor-identity.js";
 import {
   auditVoid,
@@ -277,6 +279,19 @@ type BillRow = {
   // matched directly — 'bill' is not a valid ledger_entry_kind (see 202607011600 migration
   // comment); reconciliation happens at the bill_payment level, so this rolls that up to the bill.
   is_reconciled: boolean;
+  /** LDT-1 (additive): category account + receipt count for the Load Costs cards. */
+  coa_account_number?: string | null;
+  coa_account_name?: string | null;
+  attachment_count?: number | null;
+  /** CV-TRANSACTION-COLUMNS (inv #46) — load/settlement/unit linkage for vendor bill transactions tab. */
+  linked_load_id?: string | null;
+  linked_load_number?: string | null;
+  linked_settlement_id?: string | null;
+  linked_settlement_display_id?: string | null;
+  linked_unit_number?: string | null;
+  linked_pickup_date?: string | null;
+  linked_delivery_date?: string | null;
+  linked_loaded_miles?: number | null;
 };
 
 type BillPaymentRow = {
@@ -990,15 +1005,56 @@ export async function listBillsByVendor(
                ${BILL_JOURNAL_ENTRY_DATE_SQL} AS journal_entry_date,
                ${BILL_JOURNAL_ENTRY_MEMO_SQL} AS journal_entry_memo,
                wo.display_id AS linked_work_order_display_id,
-               claim.claim_number AS insurance_claim_number
+               claim.claim_number AS insurance_claim_number,
+               -- LDT-1 (2026-09-06, lead): Load Costs cards read the bill's category account and receipt
+               -- count from the same list row. Additive, nullable.
+               coa.account_number AS coa_account_number,
+               coa.account_name AS coa_account_name,
+               (
+                 SELECT COUNT(*)::int
+                 FROM documents.attachments att
+                 WHERE att.operating_company_id = b.operating_company_id
+                   AND att.entity_type = 'bill'
+                   AND att.entity_id = b.id
+                   AND att.is_deleted = false
+               ) AS attachment_count,
+               -- CV-TRANSACTION-COLUMNS (inv #46): load/settlement/unit linkage via bill_lines → loads.
+               load_link.load_id AS linked_load_id,
+               load_link.load_number AS linked_load_number,
+               load_link.pickup_date AS linked_pickup_date,
+               load_link.delivery_date AS linked_delivery_date,
+               load_link.miles_practical AS linked_loaded_miles,
+               load_link.unit_number AS linked_unit_number,
+               settlement_link.settlement_id AS linked_settlement_id,
+               settlement_link.settlement_display_id AS linked_settlement_display_id
         FROM accounting.bills b
         ${BILL_VENDOR_RESOLVE_JOIN_SQL}
+        LEFT JOIN catalogs.accounts coa ON coa.id = b.coa_account_id AND coa.operating_company_id = b.operating_company_id
         LEFT JOIN maintenance.work_orders wo
           ON wo.id = b.linked_work_order_uuid
          AND wo.operating_company_id = b.operating_company_id
         LEFT JOIN insurance.claim claim
           ON claim.id = b.insurance_claim_id
          AND claim.tenant_id = b.operating_company_id
+        LEFT JOIN LATERAL (
+          SELECT bl.load_id, l.load_number, l.pickup_date, l.delivery_date, l.miles_practical,
+                 u.unit_number
+          FROM accounting.bill_lines bl
+          JOIN mdata.loads l ON l.id = bl.load_id AND l.operating_company_id = b.operating_company_id
+          LEFT JOIN mdata.units u ON u.id = l.assigned_unit_id AND COALESCE(u.currently_leased_to_company_id, u.owner_company_id) = l.operating_company_id
+          WHERE bl.bill_id = b.id AND bl.load_id IS NOT NULL
+          ORDER BY bl.line_sequence ASC
+          LIMIT 1
+        ) load_link ON true
+        LEFT JOIN LATERAL (
+          SELECT s.id::text AS settlement_id, s.display_id AS settlement_display_id
+          FROM driver_finance.driver_settlements s
+          WHERE s.operating_company_id = b.operating_company_id
+            AND s.voided_at IS NULL
+            AND (s.first_load_id = load_link.load_id OR s.last_load_id = load_link.load_id)
+          ORDER BY s.created_at DESC
+          LIMIT 1
+        ) settlement_link ON true
         WHERE b.operating_company_id = $1::uuid AND ${where.join(" AND ")}
         ORDER BY ${billListOrderBy(options.sort, options.dir)}
         LIMIT $${values.length - 1}
@@ -1090,9 +1146,22 @@ export async function listAllBillsForCompany(
                ${BILL_JOURNAL_ENTRY_DATE_SQL} AS journal_entry_date,
                ${BILL_JOURNAL_ENTRY_MEMO_SQL} AS journal_entry_memo,
                wo.display_id AS linked_work_order_display_id,
-               claim.claim_number AS insurance_claim_number
+               claim.claim_number AS insurance_claim_number,
+               -- LDT-1 (2026-09-06, lead): Load Costs cards read the bill's category account and receipt
+               -- count from the same list row. Additive, nullable.
+               coa.account_number AS coa_account_number,
+               coa.account_name AS coa_account_name,
+               (
+                 SELECT COUNT(*)::int
+                 FROM documents.attachments att
+                 WHERE att.operating_company_id = b.operating_company_id
+                   AND att.entity_type = 'bill'
+                   AND att.entity_id = b.id
+                   AND att.is_deleted = false
+               ) AS attachment_count
         FROM accounting.bills b
         ${BILL_VENDOR_RESOLVE_JOIN_SQL}
+        LEFT JOIN catalogs.accounts coa ON coa.id = b.coa_account_id AND coa.operating_company_id = b.operating_company_id
         LEFT JOIN maintenance.work_orders wo
           ON wo.id = b.linked_work_order_uuid
          AND wo.operating_company_id = b.operating_company_id
@@ -2562,6 +2631,18 @@ export async function payBill(input: PayBillInput, userId: string) {
   // flips per entity are the owner's, after the entity's ap_control + bank-GL-account prerequisites are met.
   const glPostingEnabled = await isBillPaymentGlPostingEnabled(input.operatingCompanyId, userId);
 
+  // PETTY_CASH_CHECK_TRANSFER (owner request 2026-09-06): when a check is generated and the feature
+  // flag is ON for this entity, the check amount posts a transfer FROM the source bank account TO the
+  // entity's petty cash account using the existing transfer machinery (insertTransferInClient). The
+  // transfer handles BOTH balance legs (source −, petty cash +), so the normal source-bank decrement
+  // below is SKIPPED when a petty cash transfer fires — avoiding a double-decrement. When the flag is
+  // OFF (default) or no petty cash account exists, check payments work exactly as before.
+  const pettyCashTransferEnabled = await withCurrentUser(userId, async (client) => {
+    await client.query(`SELECT set_config('app.operating_company_id', $1::text, true)`, [input.operatingCompanyId]);
+    return isEnabled(client, "PETTY_CASH_CHECK_TRANSFER_ENABLED", { operating_company_id: input.operatingCompanyId, user_uuid: userId });
+  });
+  let pettyCashTransferId: string | null = null;
+
   const payment = await withCurrentUser(userId, async (client) => {
     await client.query(`SELECT set_config('app.operating_company_id', $1::text, true)`, [input.operatingCompanyId]);
     const billRes = await client.query<BillRow>(
@@ -2660,7 +2741,42 @@ export async function payBill(input: PayBillInput, userId: string) {
     );
 
     if (input.fromBankAccountId) {
-      await updateBankBalance(client, input.operatingCompanyId, input.fromBankAccountId, -Math.abs(input.amountCents));
+      // PETTY_CASH_CHECK_TRANSFER: when the flag is ON, a petty cash account exists, and this is a
+      // check payment, create a transfer (source → petty cash) instead of just decrementing the source.
+      // The transfer handles BOTH legs (source −, petty cash +), so we skip the direct decrement.
+      let pettyCashAccountId: string | null = null;
+      if (pettyCashTransferEnabled && input.paymentMethod === "check") {
+        const pcRes = await client.query<{ id: string }>(
+          `SELECT id FROM banking.bank_accounts WHERE operating_company_id = $1::uuid AND is_petty_cash = true AND is_active = true AND deactivated_at IS NULL LIMIT 1`,
+          [input.operatingCompanyId]
+        );
+        pettyCashAccountId = pcRes.rows[0]?.id ?? null;
+      }
+
+      if (pettyCashAccountId && pettyCashAccountId !== input.fromBankAccountId) {
+        // Create the transfer within this same transaction — atomicity: if anything fails, both the
+        // bill payment and the transfer roll back together. Reuses insertTransferInClient (the existing
+        // transfer machinery — no new GL math). The transfer's own GL poster (TRANSFER_GL_POSTING_ENABLED)
+        // fires after-commit via maybePostTransferGl in createTransfer; here we use the in-txn helper
+        // so the balance bumps + transfer row are atomic with the bill payment.
+        const transferInput: TransferInput = {
+          operatingCompanyId: input.operatingCompanyId,
+          transferType: "petty_cash_funding",
+          fromAccountId: input.fromBankAccountId,
+          fromAccountKind: "bank",
+          toAccountId: pettyCashAccountId,
+          toAccountKind: "bank",
+          amountCents: input.amountCents,
+          transferDate: input.paymentDate,
+          memo: `Petty cash funding — check ${input.checkNumber ?? ""}`.trim(),
+          referenceNumber: input.checkNumber,
+        };
+        const transferRow = await insertTransferInClient(client, transferInput, userId);
+        pettyCashTransferId = transferRow.id;
+      } else {
+        // No petty cash transfer — normal path: decrement the source bank account directly.
+        await updateBankBalance(client, input.operatingCompanyId, input.fromBankAccountId, -Math.abs(input.amountCents));
+      }
     }
 
     await appendCrudAudit(
@@ -2752,7 +2868,7 @@ export async function payBill(input: PayBillInput, userId: string) {
     });
   });
 
-  return payment;
+  return { ...payment, petty_cash_transfer_id: pettyCashTransferId };
 }
 
 // BANK-TXN-LINKED-BILL-VOID-NO-CASCADE (ACCT-F5673) — a bill created FROM a bank transaction

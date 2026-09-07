@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
 import { PageHeader } from "../../components/layout/PageHeader";
 import { useCompanyContext } from "../../contexts/CompanyContext";
 import { getDriverQualificationRoster, getDriverQualificationSummary, type DqfRosterDriver } from "../../api/safety";
@@ -7,7 +8,7 @@ import { ReportsSubNav } from "./ReportsSubNav";
 import { ParityTable, type ParityColumn } from "../../components/parity/ParityTable";
 import { ListErrorState } from "../../components/ListErrorState";
 import { formatPlannerDayLabel } from "../dispatch/planners/plannerDayLabel";
-import { CollapsedListFilters, useStagedListFilters } from "../../components/table";
+import { ReportFilterBar } from "../../components/reports/ReportFilterBar";
 
 function mmmDd(iso: string | null | undefined): string {
   if (!iso) return "—";
@@ -42,8 +43,11 @@ function driverName(row: DqfRosterDriver): string {
 export function DriverQualificationReportPage() {
   const { selectedCompanyId } = useCompanyContext();
   const operatingCompanyId = selectedCompanyId ?? "";
+  const [searchParams, setSearchParams] = useSearchParams();
   const [includeInactive, setIncludeInactive] = useState(false);
   const [complianceFilter, setComplianceFilter] = useState("");
+  const [sortBy, setSortBy] = useState("name");
+  const [reportSearch, setReportSearch] = useState("");
 
   const rosterQ = useQuery({
     queryKey: ["safety", "driver-qualification", "roster", operatingCompanyId, includeInactive],
@@ -57,18 +61,17 @@ export function DriverQualificationReportPage() {
     queryFn: () => getDriverQualificationSummary(operatingCompanyId),
   });
 
-  const staged = useStagedListFilters({
-    applied: { compliance: complianceFilter, sortBy: "name" },
-    empty: { compliance: "", sortBy: "name" },
-    onApply: (next) => setComplianceFilter(next.compliance),
-  });
-
   const rows = useMemo(() => {
     const all = rosterQ.data?.drivers ?? [];
     const filter = complianceFilter;
-    if (!filter) return all;
-    return all.filter((d) => d.compliance_level === filter);
-  }, [complianceFilter, rosterQ.data]);
+    const filtered = filter ? all.filter((d) => d.compliance_level === filter) : all;
+    const q = reportSearch.toLowerCase();
+    if (!q) return filtered;
+    return filtered.filter((d) => {
+      const haystack = `${driverName(d)} ${d.cdl_number ?? ""} ${d.cdl_state ?? ""} ${d.driver_status ?? ""}`.toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [complianceFilter, rosterQ.data, reportSearch]);
 
   const columns = useMemo<ParityColumn<DqfRosterDriver>[]>(() => [
     {
@@ -206,6 +209,50 @@ export function DriverQualificationReportPage() {
         </div>
 
         {/* Filter bar */}
+        <div className="mb-3">
+          <ReportFilterBar
+            testIdPrefix="reports-driver-qualification"
+            fromDate={null}
+            toDate={null}
+            onFromDateChange={() => {}}
+            onToDateChange={() => {}}
+            onPresetSelect={(preset) => {
+              const next = new URLSearchParams(searchParams);
+              next.set("preset", preset);
+              setSearchParams(next, { replace: true });
+            }}
+            search={reportSearch}
+            onSearchChange={setReportSearch}
+          >
+            <label className="flex items-center gap-1 text-xs text-slate-600">
+              <span className="font-semibold text-slate-600">Compliance</span>
+              <select
+                value={complianceFilter}
+                onChange={(e) => setComplianceFilter(e.target.value)}
+                className="h-7 rounded-sm border border-slate-300 bg-white px-2 text-xs"
+              >
+                <option value="">All compliance levels</option>
+                <option value="compliant">Compliant</option>
+                <option value="attention">Needs attention</option>
+                <option value="non_compliant">Non-compliant</option>
+                <option value="empty">No DQF items</option>
+              </select>
+            </label>
+            <label className="flex items-center gap-1 text-xs text-slate-600">
+              <span className="font-semibold text-slate-600">Sort by</span>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                className="h-7 rounded-sm border border-slate-300 bg-white px-2 text-xs"
+                data-testid="driver-qualification-sort-by"
+              >
+                <option value="name">Name</option>
+                <option value="expiry">Expiry</option>
+                <option value="status">Status</option>
+              </select>
+            </label>
+          </ReportFilterBar>
+        </div>
         <div className="mb-3 flex items-center gap-3">
           <label className="flex items-center gap-1.5 text-xs text-gray-700">
             <input
@@ -216,45 +263,6 @@ export function DriverQualificationReportPage() {
             />
             Include inactive drivers
           </label>
-          <CollapsedListFilters
-            activeFilterCount={complianceFilter ? 1 : 0}
-            defaultOpen={true}
-            onApply={staged.apply}
-            onReset={staged.reset}
-            onCancel={staged.cancel}
-            applyDisabled={!staged.dirty}
-            testIdPrefix="driver-qualification"
-          >
-            <div className="flex flex-wrap items-end gap-3">
-              <label className="block text-xs font-semibold text-gray-700">
-                Compliance
-                <select
-                  value={staged.draft.compliance}
-                  onChange={(event) => staged.setDraft({ ...staged.draft, compliance: event.target.value })}
-                  className="mt-1 h-7 w-full rounded-sm border border-gray-300 bg-white px-2 text-xs"
-                >
-                  <option value="">All compliance levels</option>
-                  <option value="compliant">Compliant</option>
-                  <option value="attention">Needs attention</option>
-                  <option value="non_compliant">Non-compliant</option>
-                  <option value="empty">No DQF items</option>
-                </select>
-              </label>
-              <label className="block text-xs font-semibold text-gray-700">
-                Sort by
-                <select
-                  value={staged.draft.sortBy}
-                  onChange={(event) => staged.setDraft({ ...staged.draft, sortBy: event.target.value })}
-                  className="mt-1 h-7 w-full rounded-sm border border-gray-300 bg-white px-2 text-xs"
-                  data-testid="driver-qualification-sort-by"
-                >
-                  <option value="name">Name</option>
-                  <option value="expiry">Expiry</option>
-                  <option value="status">Status</option>
-                </select>
-              </label>
-            </div>
-          </CollapsedListFilters>
         </div>
 
         {rosterQ.isError ? (

@@ -1,4 +1,23 @@
+# ★★★ HARD WAKE — 2026-09-07 03:48Z — Cursor cloud lead (owner: HARD WAKE)
+
+**Tip main:** `0cc2a61752` (#21232 navy loopholes just merged; FE+API deploy in flight). Live proof ROUND 16.25 ParityTable FIXED (Claude lead re-measured: Cash Flow 0/64 tall max 34.4px; Factoring 0/20 max 30.8px).
+**Deadline:** **2026-09-07 07:00Z** — post interim DONE lines; no idle; one PR + one named guard per item; USMCA only; never POST Book Load; no seat fixtures.
+
+## CODEX — HARD WAKE NOW · ROUND 16.26 NEXT WAVE
+
+START NOW: **DRV-03, DRV-04, DRV-05, DRV-12, DRV-14** then TEL-04/09/11/12 if early.
+TEL-07 stays BLOCKED unless blocker cleared — report honestly, do not re-claim. Real Neon/Samsara only. Deadline **07:00Z**.
+
+
+---
+
 # ▶ NOW — 2026-09-05 22:06Z (Cursor registrar/lead; Claude audits)
+
+**23:45Z — LEAD · ROUND 3 — YOUR ONE ITEM:**
+
+## CODEX — TEL-40 continues: after API deploy e12f6cc3 is live, rerun the backfill and post the live guard numbers. Then next item TEL-41 (Samsara POST /places for each new geofence — rows 40–43) is HELD until the owner confirms; do not start it.
+
+---
 
 **23:15Z — LEAD · TEL-39 / LST-DUP audited ✔. YOUR NEXT ONE ITEM:**
 
@@ -317,3 +336,22 @@ from ternary to switch), not a real regression, but I didn't want to guess-edit 
 or your component without your context on why it changed. Please either update the guard's regex
 to match the switch-case shape (if the refactor is correct/intentional) or restore the ternary
 (if not) — whichever is right, not fixed here.
+
+
+## 2026-09-06 00:10Z — LEAD → this seat (round 5 audit + round 4 item). Full text: docs/bus/ONE-ITEM-INSTRUCTIONS-ALL-SEATS-2026-09-05.md § AUDIT round 5 / ROUND 4.
+- TEL-40 ✗: 1/98 stops geocoded; the 97 `provider_error` rows all have `address_line1` NULL; live probe shows the chain returns a random business (Texstar Travel Center) for `Temple, TX, 76504` and the catch swallows the error class. Continue as **TEL-40b** (persist error class; no street → locality precision, NO fence, NO location row; backfill; Stops-tab chip). Deadline 02:00Z. Then **TEL-42** yard row + fence 188cf90c linkage + bias default + `GET /api/v1/locations/yard`, deadline 03:30Z. TEL-41 HELD.
+
+
+## 2026-09-06 00:24Z — LEAD: **TEL-41 CLOSED (owner: no Samsara Places push, ever).** TEL-40b (02:00Z) → TEL-42 (03:30Z).
+
+
+## 2026-09-06 01:05Z — LEAD → ROUND 5 item for this seat. Full text: docs/bus/ONE-ITEM-INSTRUCTIONS-ALL-SEATS-2026-09-05.md § ROUND 5.
+- Lead deploys 662e832b now (dep-daeblr1t0dsc739j6l5g) — never wait on Cursor. **TEL-42 starts now** with **part 0**: candidateStops must also take stops WITH coordinates and no active fence (picker = rooftop) → location + fence; post-book hook = geocodeStopsBackfill. Then yard row / fence 188cf90c linkage / bias / GET /api/v1/locations/yard. Deadline 03:30Z.
+
+
+## 2026-09-06 01:45Z — LEAD (ROUND 6): see ONE-ITEM-INSTRUCTIONS § ROUND 6.
+- TEL-42 (03:30Z) then **LDT-2 Stops** (06:00Z, register § LDT-2, guard 8058). API 5314be31 live; de2d4a8c deploying. Surrender CC-3.
+
+## 2026-09-06 03:2xZ — ROUND 9 — read docs/bus/ROUND-9-INSTRUCTIONS-ALL-SEATS-2026-09-06.md § CODEX. Start now.
+
+## 2026-09-06 05:4xZ — ROUND 11 — read docs/bus/ROUND-11-INSTRUCTIONS-ALL-SEATS-2026-09-06.md § CODEX. Start now.

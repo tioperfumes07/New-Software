@@ -110,19 +110,28 @@ function checkExpensesPage(src) {
   }
 }
 
+// PAYMENTS-KPI-STRIP (ROUND 11, 2026-09-06): this check named Amount/Applied/Unapplied, but
+// COL-05 (5fa496e83a, #19273 — owner-ordered, non-financial column-naming standardization,
+// merged 2026-09-01) deliberately renamed the triad to Total/Open/Variance to match
+// BillsPage/InvoicesListPage/ExpensesListPage's own Total/Open convention, and shipped its OWN
+// guard (verify-col-05-money-column-triad.mjs) locking that rename in. The safety property this
+// guard actually protects (no fake $0.00 next to a live ListErrorBanner) was never lost — all
+// three renamed tiles still branch on query.isError (confirmed live on origin/main) — only this
+// guard's literal field-name strings went stale. Checking the CURRENT canonical names here,
+// never the pre-COL-05 ones, so this guard tests the real page instead of a removed schema.
 function checkPaymentsPage(src) {
-  if (!src.includes("Amount:")) {
-    fail(`${PAYMENTS_PAGE}: Amount totals strip not found — did it move?`);
+  if (!src.includes("Total: {")) {
+    fail(`${PAYMENTS_PAGE}: Total totals strip not found — did it move?`);
     return;
   }
-  if (!/Amount:\s*\{query\.isError/.test(src)) {
-    fail(`${PAYMENTS_PAGE}: Amount no longer branches on query.isError — will show $0.00 on a failed fetch.`);
+  if (!/Total:\s*\{query\.isError/.test(src)) {
+    fail(`${PAYMENTS_PAGE}: Total no longer branches on query.isError — will show $0.00 on a failed fetch.`);
   }
-  if (!/Applied:\s*\{query\.isError/.test(src)) {
-    fail(`${PAYMENTS_PAGE}: Applied no longer branches on query.isError.`);
+  if (!/Open:\s*\{query\.isError/.test(src)) {
+    fail(`${PAYMENTS_PAGE}: Open no longer branches on query.isError.`);
   }
-  if (!/Unapplied:\s*\{query\.isError/.test(src)) {
-    fail(`${PAYMENTS_PAGE}: Unapplied no longer branches on query.isError.`);
+  if (!/Variance:\s*\{query\.isError/.test(src)) {
+    fail(`${PAYMENTS_PAGE}: Variance no longer branches on query.isError.`);
   }
 }
 
@@ -578,15 +587,15 @@ function selftest() {
     probesProven++;
   }
 
-  // Mutation: PaymentsListPage drops query.isError from Amount strip.
+  // Mutation: PaymentsListPage drops query.isError from Total strip.
   {
     const original = fs.readFileSync(PAYMENTS_PAGE, "utf8");
     const mutated = original.replace(
-      'Amount: {query.isError ? "—" : money(totals.amount)}',
-      "Amount: {money(totals.amount)}"
+      'Total: {query.isError ? "—" : money(totals.total)}',
+      "Total: {money(totals.total)}"
     );
     if (mutated === original) {
-      console.error("SELFTEST SETUP FAILED: PaymentsListPage Amount isError pattern not found.");
+      console.error("SELFTEST SETUP FAILED: PaymentsListPage Total isError pattern not found.");
       process.exitCode = 1;
       return;
     }

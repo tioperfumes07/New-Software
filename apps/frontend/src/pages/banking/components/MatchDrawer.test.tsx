@@ -117,8 +117,12 @@ describe("MatchDrawer — Confirm-match exact-only (BANKREC-CONFIRM-01)", () => 
     const row = await screen.findByTestId("match-candidate-row");
     const confirmBtn = within(row).getByTestId("match-candidate-confirm");
     expect(confirmBtn).toBeDisabled();
+    // BANK-F9998 F8 (2026-09-03) updated this note's text once
+    // verify-bank-recon-variance-je-always-balanced.mjs proved the balanced-JE math structurally —
+    // Confirm itself stays disabled (a separate, owner-reserved Tier-1 go-ahead), only the wording
+    // changed from "pending" proof to "proven balanced, awaiting owner go-ahead".
     expect(within(row).getByTestId("match-candidate-variance-held")).toHaveTextContent(
-      "Variance posting pending balanced-JE proof (Tier-1)"
+      "Variance posting proven balanced (Tier-1) — awaiting owner go-ahead to enable Confirm"
     );
 
     await userEvent.click(confirmBtn);

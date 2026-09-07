@@ -744,6 +744,35 @@ export async function assignCustomerToFactor(
     [tenantId, customerId, factorId, effectiveFrom]
   );
 
+  // FACT-MIRROR-SYNC (owner 2026-09-06) — the effective-dated factoring.customer_factor_assignment
+  // above is the SYSTEM OF RECORD, but mdata.customers.factoring_company_vendor_id is the denormalized
+  // mirror the "submit to Faro" queue (submission-queue.service.ts) and every AP/rollup consumer reads.
+  // This function historically wrote the assignment and NEVER the mirror, so 1,220 of 1,221 assigned
+  // USMCA customers carried a NULL mirror and their invoices never entered the submit queue (measured:
+  // 28 sent, Faro-assigned invoices stranded with no advance). Resolve the factor's AP vendor from the
+  // effective canonical agreement (factor_profile_id = this assignment's factor_id) and write it here so
+  // the mirror can never drift from the assignment again. If no effective agreement resolves a vendor we
+  // leave the mirror untouched rather than invent one — a customer with no funding agreement is correctly
+  // absent from the submit queue.
+  await deps.client.query(
+    `
+      UPDATE mdata.customers c
+      SET factoring_company_vendor_id = cfa.factor_vendor_id,
+          updated_at = now()
+      FROM factoring.canonical_factor_agreements cfa
+      WHERE c.id = $2::uuid
+        AND c.operating_company_id = $1::uuid
+        AND cfa.tenant_id = $1::uuid
+        AND cfa.factor_profile_id = $3::uuid
+        AND cfa.factor_vendor_id IS NOT NULL
+        AND cfa.voided_at IS NULL
+        AND cfa.effective_from <= $4::date
+        AND (cfa.effective_to IS NULL OR cfa.effective_to > $4::date)
+        AND c.factoring_company_vendor_id IS DISTINCT FROM cfa.factor_vendor_id
+    `,
+    [tenantId, customerId, factorId, effectiveFrom]
+  );
+
   const assignment = inserted.rows[0] ?? {};
   const factor = await deps.client.query<Record<string, unknown>>(
     `

@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { ReceiptAttach } from "../../components/documents/ReceiptAttach";
 import { entityLabel } from "../../lib/entity-label";
 import { useLocation } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -42,6 +43,8 @@ type BillDraftRow = {
   expense_account_id: string;
   unit_id: string;
   driver_id: string;
+  /** LDT-1: documents.attachments draft id → attachment_draft_id on create (receipt on every bill creator). */
+  attachment_draft_id: string;
 };
 
 /** QBO Bill no. series BILL-YYYY-##### — allocate sequential previews for a batch grid. */
@@ -77,6 +80,7 @@ function rowFromSeed(seed: SeedDraft, index: number): BillDraftRow {
     expense_account_id: "",
     unit_id: "",
     driver_id: "",
+    attachment_draft_id: crypto.randomUUID(),
   };
 }
 
@@ -96,6 +100,7 @@ function emptyRow(): BillDraftRow {
     expense_account_id: "",
     unit_id: "",
     driver_id: "",
+    attachment_draft_id: crypto.randomUUID(),
   };
 }
 
@@ -239,6 +244,7 @@ export function CreateMultipleBillsPage() {
             memo: memoParts.filter(Boolean).join(" · ") || undefined,
             coa_account_id: row.coa_account_id,
             unit_id: row.unit_id || undefined,
+            attachment_draft_id: row.attachment_draft_id,
             lines: [
               {
                 amount_cents: amountCents,
@@ -511,6 +517,13 @@ export function CreateMultipleBillsPage() {
                 spellCheck={false}
                 onChange={(event) => updateRow(row.id, { bill_number: event.target.value })}
               />
+            ),
+          },
+          {
+            key: "receipt",
+            label: "Receipt",
+            render: (row) => (
+              <ReceiptAttach operatingCompanyId={companyId} entityType="bill" entityId={row.attachment_draft_id} testId="bills-batch-receipt" />
             ),
           },
           {

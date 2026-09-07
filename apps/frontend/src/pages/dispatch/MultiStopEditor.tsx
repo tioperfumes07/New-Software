@@ -31,6 +31,7 @@ export type MultiStopRow = {
   longitude: string;
   /** catalogs.pickup_time_types — Load drawer Stops picker_law (Book Load parity). */
   pickup_time_type_id: string;
+  geocode_precision: "rooftop" | "range" | "locality" | null;
 };
 
 function apiStopToRow(s: RefinedLoadStop): MultiStopRow {
@@ -53,6 +54,7 @@ function apiStopToRow(s: RefinedLoadStop): MultiStopRow {
     latitude: s.latitude != null ? String(s.latitude) : "",
     longitude: s.longitude != null ? String(s.longitude) : "",
     pickup_time_type_id: s.pickup_time_type_id ?? "",
+    geocode_precision: s.geocode_precision ?? null,
   };
 }
 
@@ -153,6 +155,11 @@ function SortableRow({
               value={row.location_address}
               onChange={(e) => onChange(row.key, { location_address: e.target.value })}
             />
+            {row.geocode_precision === "locality" ? (
+              <span data-testid="stop-geocode-locality-chip" className="mt-1 inline-flex rounded-sm bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
+                city-level only — no arrival fence
+              </span>
+            ) : null}
           </div>
           <div>
             <div className="text-xs font-semibold text-gray-500">City</div>
@@ -351,6 +358,7 @@ export function MultiStopEditor({ loadId, operatingCompanyId }: Props) {
         latitude: "",
         longitude: "",
         pickup_time_type_id: "",
+        geocode_precision: null,
       },
     ]);
   };

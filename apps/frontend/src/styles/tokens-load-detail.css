@@ -1,0 +1,199 @@
+/* LDT-T · Load-detail palette — the 2026-09-02 proposal / 2026-09-05 live-render token set.
+ * Owner 2026-09-05 23:13Z: "same colors in the same places in all load costs tabs … our app looks too cold."
+ * One token set, namespaced --ldt-*, used by every load-detail tab component through the .ldt-* classes
+ * below. No hex literals in the tab components (guard: verify-ldt-1-costs-cards.mjs).
+ * Same element → same colour on every tab: primary button = accent fill · secondary = accent outline ·
+ * muted = rule outline · active tab = ink text + accent underline · entry/table head = rule2 · totals row
+ * = paper · the "big" total = accent-soft with accent text · pills: ok accent-soft, pending warn-soft,
+ * failing bad-soft. */
+:root {
+  --ldt-paper: #f4f5f3;
+  --ldt-card: #ffffff;
+  --ldt-rule: #dbdfd8;
+  --ldt-rule2: #eceee9;
+  --ldt-ink: #131820;
+  --ldt-ink2: #3d4650;
+  --ldt-muted: #6a7480;
+  --ldt-accent: #2b5f52;
+  --ldt-accent-soft: #e3ece8;
+  --ldt-warn: #8a6410;
+  --ldt-warn-soft: #f5eeda;
+  --ldt-bad: #93301f;
+  --ldt-bad-soft: #f6e3df;
+  --ldt-debit: #8a4020;
+  --ldt-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  --ldt-body: "Public Sans", -apple-system, "Segoe UI", system-ui, sans-serif;
+  --ldt-display: "Newsreader", Georgia, "Times New Roman", serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ldt-paper: #14171a; --ldt-card: #1b1f22; --ldt-rule: #2e3439; --ldt-rule2: #23282c;
+    --ldt-ink: #e7eae6; --ldt-ink2: #b6bdb8; --ldt-muted: #8b948d;
+    --ldt-accent: #6fbba3; --ldt-accent-soft: #1d2a27; --ldt-warn: #d8b562; --ldt-warn-soft: #2a2418;
+    --ldt-bad: #e08a76; --ldt-bad-soft: #2c1d19; --ldt-debit: #d99168;
+  }
+}
+:root[data-theme="dark"] {
+  --ldt-paper: #14171a; --ldt-card: #1b1f22; --ldt-rule: #2e3439; --ldt-rule2: #23282c;
+  --ldt-ink: #e7eae6; --ldt-ink2: #b6bdb8; --ldt-muted: #8b948d;
+  --ldt-accent: #6fbba3; --ldt-accent-soft: #1d2a27; --ldt-warn: #d8b562; --ldt-warn-soft: #2a2418;
+  --ldt-bad: #e08a76; --ldt-bad-soft: #2c1d19; --ldt-debit: #d99168;
+}
+
+/* Surface */
+[data-surface="load-detail"] { background: var(--ldt-paper); color: var(--ldt-ink); font-family: var(--ldt-body); }
+.ldt-body { display: flex; flex-direction: column; gap: 14px; }
+.ldt-rowbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--ldt-ink2); }
+.ldt-rowbar .ldt-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* Buttons — primary accent fill, secondary accent outline, muted rule outline */
+.ldt-btn { display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 10px; border-radius: 2px; font-size: 12px; font-weight: 600; border: 1px solid var(--ldt-accent); color: var(--ldt-accent); background: var(--ldt-card); cursor: pointer; white-space: nowrap; }
+.ldt-btn.p { background: var(--ldt-accent); color: var(--ldt-card); }
+.ldt-btn.g { border-color: var(--ldt-rule); color: var(--ldt-ink2); }
+.ldt-btn:disabled { opacity: .5; cursor: not-allowed; }
+.ldt-link { background: none; border: 0; padding: 0; color: var(--ldt-accent); font-size: 12px; text-decoration: underline; cursor: pointer; text-align: left; }
+
+/* Entry card (one cost) */
+.ldt-entry { background: var(--ldt-card); border: 1px solid var(--ldt-rule); border-radius: 2px; overflow: hidden; }
+.ldt-ehead { display: flex; align-items: center; gap: 10px; padding: 7px 10px; background: var(--ldt-rule2); border-bottom: 1px solid var(--ldt-rule); font-size: 12px; flex-wrap: wrap; }
+.ldt-enum { font-family: var(--ldt-mono); font-weight: 600; color: var(--ldt-ink); font-size: 13px; }
+.ldt-emeta { margin-left: auto; color: var(--ldt-muted); font-size: 11px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.ldt-toggle { display: inline-flex; border: 1px solid var(--ldt-rule); border-radius: 2px; overflow: hidden; background: var(--ldt-card); }
+.ldt-toggle > button { border: 0; background: transparent; color: var(--ldt-ink2); font-size: 11px; padding: 3px 8px; cursor: pointer; }
+.ldt-toggle > button.on { background: var(--ldt-accent); color: var(--ldt-card); font-weight: 600; }
+.ldt-toggle > button:disabled { cursor: default; }
+.ldt-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px 10px; padding: 10px; }
+.ldt-fld label { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: var(--ldt-muted); margin-bottom: 3px; }
+/* ROUND 16.18 (owner, 2026-09-06): "check the calendars, there is a box within a box." Root
+   cause — this element-selector rule reached into DatePicker.tsx's OWN internal <input>/<select>
+   (already wrapped in its own bordered/backed control box) and painted a second border+background+
+   height around it. :not(.dp-input):not(.dp-select) excludes DatePicker's internal elements
+   app-wide (Load Detail, Banking, everywhere .ldt-fld wraps a <DatePicker>) instead of patching
+   one page. */
+.ldt-inp, .ldt-fld input:not(.dp-input), .ldt-fld select:not(.dp-select) { width: 100%; height: 28px; border: 1px solid var(--ldt-rule); border-radius: 2px; background: var(--ldt-card); color: var(--ldt-ink); font-size: 12px; padding: 0 7px; font-family: var(--ldt-body); }
+.ldt-inp { display: flex; align-items: center; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.ldt-inp.ro { background: var(--ldt-paper); color: var(--ldt-ink2); }
+.ldt-inp.mono, .ldt-mono { font-family: var(--ldt-mono); font-variant-numeric: tabular-nums; }
+.ldt-inp.right, .ldt-right { justify-content: flex-end; text-align: right; }
+.ldt-hint { padding: 7px 10px 9px; border-top: 1px solid var(--ldt-rule2); font-size: 11.5px; color: var(--ldt-ink2); }
+.ldt-hint b { color: var(--ldt-ink); }
+.ldt-hint.bad, .ldt-bad-text { color: var(--ldt-bad); }
+.ldt-hint.bad { background: var(--ldt-bad-soft); }
+.ldt-muted { color: var(--ldt-muted); font-size: 11px; }
+
+/* Pills — ok / pending / failing */
+.ldt-pill { display: inline-flex; align-items: center; height: 18px; padding: 0 7px; border-radius: 2px; font-size: 10.5px; font-weight: 600; white-space: nowrap; border: 0; cursor: default; }
+.ldt-pill.ok { background: var(--ldt-accent-soft); color: var(--ldt-accent); }
+.ldt-pill.warn { background: var(--ldt-warn-soft); color: var(--ldt-warn); }
+.ldt-pill.bad { background: var(--ldt-bad-soft); color: var(--ldt-bad); }
+button.ldt-pill { cursor: pointer; }
+.ldt-live { font-size: 9.5px; font-weight: 700; letter-spacing: .06em; color: var(--ldt-bad); text-transform: uppercase; }
+
+/* ROUND 16.1 — Legs column: one line of compact type-colored pills (count first, then each leg
+   as an EntityLink pill, overflow → "+N more"). Row must never grow past one line, so the row is
+   nowrap + overflow-hidden and each pill is 18px tall. Type colors: NB accent-soft, TR rule2,
+   SB warn-soft, LOCAL muted. */
+.ldt-legs { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; overflow: hidden; max-width: 100%; line-height: 1; }
+.ldt-legcount { display: inline-flex; align-items: center; height: 18px; padding: 0 6px; border-radius: 2px; font-size: 10.5px; font-weight: 700; white-space: nowrap; background: var(--ldt-rule2); color: var(--ldt-ink); }
+.ldt-legpill { display: inline-flex; align-items: center; height: 18px; padding: 0 6px; border-radius: 2px; font-size: 10.5px; font-weight: 600; white-space: nowrap; text-decoration: none; }
+.ldt-legpill:hover { text-decoration: underline; }
+.ldt-legpill.nb { background: var(--ldt-accent-soft); color: var(--ldt-accent); }
+.ldt-legpill.tr { background: var(--ldt-rule2); color: var(--ldt-ink); }
+.ldt-legpill.sb { background: var(--ldt-warn-soft); color: var(--ldt-warn); }
+.ldt-legpill.local { background: var(--ldt-rule); color: var(--ldt-muted); }
+.ldt-legmore { display: inline-flex; align-items: center; height: 18px; padding: 0 6px; border-radius: 2px; font-size: 10.5px; font-weight: 600; white-space: nowrap; background: var(--ldt-rule); color: var(--ldt-muted); cursor: help; }
+
+/* Attach control + pop-up */
+.ldt-att { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border: 1px dashed var(--ldt-accent); border-radius: 2px; background: var(--ldt-card); color: var(--ldt-accent); font-size: 11px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.ldt-att:disabled { opacity: .6; cursor: progress; }
+.ldt-pop { position: absolute; z-index: 60; top: calc(100% + 4px); left: 0; min-width: 280px; max-width: 420px; background: var(--ldt-card); border: 1px solid var(--ldt-rule); border-radius: 2px; box-shadow: 0 6px 18px rgba(0,0,0,.12); padding: 8px; display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--ldt-ink); }
+.ldt-pop-row { display: grid; grid-template-columns: 40px 1fr auto auto; gap: 8px; align-items: center; }
+.ldt-thumb { width: 40px; height: 40px; object-fit: cover; border: 1px solid var(--ldt-rule); border-radius: 2px; background: var(--ldt-rule2); display: inline-flex; align-items: center; justify-content: center; font-size: 9px; color: var(--ldt-muted); font-weight: 700; }
+
+/* Cards and tables shared by every tab */
+.ldt-card { background: var(--ldt-card); border: 1px solid var(--ldt-rule); border-radius: 2px; overflow: hidden; }
+.ldt-card.click { cursor: pointer; }
+.ldt-ch { display: flex; justify-content: space-between; align-items: center; padding: 7px 10px; background: var(--ldt-rule2); border-bottom: 1px solid var(--ldt-rule); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--ldt-ink2); }
+.ldt-ch .ldt-open { font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--ldt-accent); }
+.ldt-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.ldt-table th { text-align: left; padding: 6px 10px; background: var(--ldt-rule2); color: var(--ldt-ink2); font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; border-bottom: 1px solid var(--ldt-rule); white-space: nowrap; }
+.ldt-table td { padding: 6px 10px; border-bottom: 1px solid var(--ldt-rule2); vertical-align: top; color: var(--ldt-ink); }
+.ldt-table tr:last-child td { border-bottom: 0; }
+.ldt-table tr.click { cursor: pointer; }
+.ldt-table tr.click:hover td { background: var(--ldt-accent-soft); }
+.ldt-table .m, .ldt-m { font-family: var(--ldt-mono); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.ldt-table tr.tot td { background: var(--ldt-paper); font-weight: 600; }
+.ldt-table tr.big td { background: var(--ldt-accent-soft); color: var(--ldt-accent); font-weight: 700; font-size: 13px; }
+.ldt-sub { display: block; color: var(--ldt-muted); font-size: 10.5px; font-weight: 400; }
+.ldt-k { font-family: var(--ldt-mono); font-size: 11.5px; }
+.ldt-grid2 { display: grid; grid-template-columns: 1fr; gap: 10px; }
+@media (min-width: 900px) { .ldt-grid2 { grid-template-columns: 1fr 1fr; } }
+.ldt-note { border-left: 3px solid var(--ldt-rule); background: var(--ldt-card); padding: 8px 10px; font-size: 11.5px; color: var(--ldt-ink2); }
+.ldt-note.warn { border-left-color: var(--ldt-warn); background: var(--ldt-warn-soft); }
+.ldt-note.bad { border-left-color: var(--ldt-bad); background: var(--ldt-bad-soft); }
+
+/* Fixed footer for totals (owner 2026-09-05: "if you rearrange columns … the totals stay stuck") */
+.ldt-footer { position: sticky; bottom: 0; z-index: 5; box-shadow: 0 -4px 12px rgba(0,0,0,.06); }
+
+/* Modal pop-up over a source (shared by every tab's boxes) */
+.ldt-modal-backdrop { position: fixed; inset: 0; background: rgba(19,24,32,.45); z-index: 80; display: flex; align-items: center; justify-content: center; padding: 16px; }
+.ldt-modal { background: var(--ldt-card); color: var(--ldt-ink); border: 1px solid var(--ldt-rule); border-radius: 2px; width: min(760px, 100%); max-height: 88vh; overflow: auto; box-shadow: 0 16px 40px rgba(0,0,0,.25); }
+.ldt-modal-head { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--ldt-rule); background: var(--ldt-rule2); }
+.ldt-modal-title { font-family: var(--ldt-display); font-size: 17px; color: var(--ldt-ink); }
+.ldt-modal-body { padding: 12px 14px; font-size: 12px; display: flex; flex-direction: column; gap: 10px; }
+
+/* Key/value readout rows (not data registers — those are ParityTable). */
+.ldt-rows { display: flex; flex-direction: column; font-size: 12px; }
+.ldt-row { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; padding: 6px 10px; border-bottom: 1px solid var(--ldt-rule2); color: var(--ldt-ink); }
+.ldt-rows-4 .ldt-row { grid-template-columns: 1fr 90px 90px 110px; }
+.ldt-row:last-child { border-bottom: 0; }
+.ldt-row.head { background: var(--ldt-rule2); color: var(--ldt-ink2); font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; font-weight: 700; }
+.ldt-row.tot { background: var(--ldt-paper); font-weight: 600; }
+.ldt-row.big { background: var(--ldt-accent-soft); color: var(--ldt-accent); font-weight: 700; font-size: 13px; }
+.ldt-row.click { cursor: pointer; }
+.ldt-row.click:hover { background: var(--ldt-accent-soft); }
+.ldt-rows-pay .ldt-row { grid-template-columns: 1fr 210px 90px 90px 110px 1fr; }
+.ldt-rows-ded .ldt-row { grid-template-columns: 1fr 90px 1.2fr; }
+.ldt-rows-post .ldt-row { grid-template-columns: 1fr 110px 110px; }
+.ldt-rows-legs .ldt-row { grid-template-columns: 44px 80px 1fr 110px 110px 110px 150px; }
+.ldt-row.this { outline: 2px solid var(--ldt-accent-soft); outline-offset: -2px; }
+.ldt-row.cancelled { color: var(--ldt-muted); text-decoration: line-through; }
+.ldt-row.cancelled .ldt-sub { text-decoration: none; }
+.ldt-pill { white-space: normal; height: auto; min-height: 18px; padding: 2px 7px; line-height: 1.25; }
+
+/* LDT-4 Factoring (render § Factoring): one segmented stage bar; done = soft accent, now = accent fill, future = outlined. */
+.ldt-stages { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; border: 1px solid var(--ldt-rule); border-radius: 2px; overflow: hidden; margin: 10px; }
+.ldt-stage { padding: 9px 10px; text-align: center; font-size: 12px; font-weight: 600; color: var(--ldt-muted); background: var(--ldt-paper); border-right: 1px solid var(--ldt-rule); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ldt-stage:last-child { border-right: 0; }
+.ldt-stage.done { background: var(--ldt-accent-soft); color: var(--ldt-accent); }
+.ldt-stage.now { background: var(--ldt-accent); color: #fff; }
+.ldt-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; font-size: 11.5px; border: 1px solid var(--ldt-accent); border-radius: 2px; background: var(--ldt-paper); color: var(--ldt-accent); cursor: pointer; }
+.ldt-chip:disabled { opacity: .6; cursor: default; }
+
+/* BANK-DESIGN-1 (owner 2026-09-06: "A DARKER OUTLINE IN BOTH LARGE BOXES … CLEARER DIVISION BETWEEN THE SUGGESTIONS …
+   DATE, THEN DESCRIPTION … CLEANER LIKE QUICKBOOKS … THE NEW COLORS IN BANKING"). `.strong` = the dark 1px outline that
+   separates the transaction being categorized from the register behind it; `.ldt-rows-match` = the candidate register:
+   DATE · DESCRIPTION · TYPE · AMOUNT · GAP, one line per candidate, a full rule between every two. */
+.ldt-card.strong { border-color: var(--ldt-ink2); }
+/* BANK-MATCH-QBO-c: the candidate register moved off the hand-built .ldt-rows-match div-grid onto
+   a real <ParityTable> (gear = column show/hide + density, drag-resize, drag-reorder, its own
+   horizontal-scroll handling) — the .ldt-rows-match sizing/grid rules above are retired with it.
+   .ldt-rows-match-table wraps the ParityTable instance and keeps only the "best match" row tint,
+   applied to a real <tr class="best"> (ParityTable's own rowClassName prop) instead of a div row. */
+/* The expanded panel sits inside a <td> whose text-align is center; a register and a form read left. */
+[data-testid="banking-categorize-expanded-panel"] { text-align: left; }
+.ldt-rows-match-table tr.best { background: var(--ldt-accent-soft); }
+
+/* B1 EXPAND-BOX (owner CONSOLIDATED 2026-09-06, item 4): ParityTable's [data-testid=parity-expand-toggle]
+   measured 24x24/glyph 12px/no border -- too small next to the rest of the register chrome. This box is
+   shared by every ParityTable register app-wide (loaded globally via main.tsx), not a per-page override. */
+.parity-expand-toggle-box {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--ldt-rule);
+  border-radius: 4px;
+  font-size: 16px;
+  line-height: 1;
+  background: transparent;
+}
+.parity-expand-toggle-box:hover { background: var(--ldt-accent-soft); }

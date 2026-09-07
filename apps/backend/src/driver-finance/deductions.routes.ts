@@ -5,6 +5,9 @@ import { withCurrentUser } from "../auth/db.js";
 import { assertCompanyMembership } from "../_helpers/company-membership-guard.js";
 import { requireAuth } from "../auth/session-middleware.js";
 import { DeductionVoidError, voidSettlementDeduction } from "./settlement-deduction-void.service.js";
+import { createSettlementDeduction } from "./deductions.service.js";
+import { reassignDraftAttachments } from "../documents/attachments.service.js";
+import { resolveRoleAccountOptional } from "../accounting/coa-roles/resolver.service.js";
 
 const deductionIdParamsSchema = z.object({ id: z.string().uuid() });
 const companyQuerySchema = z.object({ operating_company_id: z.string().uuid() });
@@ -23,6 +26,16 @@ const holdBodySchema = z.object({
 });
 const voidBodySchema = z.object({
   reason: z.string().trim().min(10),
+});
+// SETL-DED-UI — the four typed, GL-bound deduction kinds ONLY. 'other' is retired going forward
+// (SETL-DED-GL); a pre-existing 'other' row can still be voided/listed above, just never created here.
+const createDeductionBodySchema = z.object({
+  driver_id: z.string().uuid(),
+  deduction_type: z.enum(["wire_fee", "ach_fee", "company_vehicle_fuel", "escrow_contribution"]),
+  amount_cents: z.number().int().positive(),
+  reason: z.string().trim().min(10),
+  load_id: z.string().uuid().optional(),
+  attachment_draft_id: z.string().uuid().optional(),
 });
 
 function authed(req: FastifyRequest, reply: FastifyReply) {
@@ -111,6 +124,7 @@ export async function registerDriverFinanceDeductionRoutes(app: FastifyInstance)
               l.load_number                     AS load_number,
               d.applied_to_settlement_id::text  AS applied_to_settlement_id,
               s.display_id                      AS applied_to_settlement_display_id,
+              d.reversed_reimbursement_id::text AS reversed_reimbursement_id,
               d.created_at::text                AS created_at
             FROM driver_finance.driver_settlement_deductions d
             LEFT JOIN mdata.drivers dr
@@ -128,12 +142,96 @@ export async function registerDriverFinanceDeductionRoutes(app: FastifyInstance)
           `,
           values
         );
-        return res.rows;
+
+        // SET-24 GL ROUTING: 'reimbursement_reversal' rows credit the SAME reimbursement_expense
+        // role account every real reimbursement does (bucketRecoveryRoleKey) — resolve it ONCE per
+        // request (company-wide role, not per-row) and attach its display name so the UI can show
+        // "reverses <expense account>" without guessing or re-deriving GL logic client-side.
+        let reimbursementExpenseAccountLabel: string | null = null;
+        if (res.rows.some((r: { deduction_type?: string }) => r.deduction_type === "reimbursement_reversal")) {
+          const acctId = await resolveRoleAccountOptional(client, operating_company_id, "reimbursement_expense");
+          if (acctId) {
+            const acctRes = await client.query(
+              `SELECT account_number, account_name FROM catalogs.accounts WHERE id = $1::uuid LIMIT 1`,
+              [acctId]
+            );
+            const acct = acctRes.rows[0] as { account_number: string | null; account_name: string | null } | undefined;
+            if (acct) {
+              reimbursementExpenseAccountLabel = [acct.account_number, acct.account_name].filter(Boolean).join(" ").trim() || null;
+            }
+          }
+        }
+
+        return res.rows.map((r: Record<string, unknown>) => ({
+          ...r,
+          reimbursement_reversal_expense_account: r.deduction_type === "reimbursement_reversal" ? reimbursementExpenseAccountLabel : null,
+        }));
       });
 
       return reply.code(200).send({ deductions: rows });
     }
   );
+
+  // SETL-DED-UI (owner item, deadline 05:30Z) — the deduction creator: manual entry limited to the
+  // four typed, GL-bound kinds (SETL-DED-GL) — no 'other'. A thin auth+validation wrapper around
+  // the REAL createSettlementDeduction writer (deductions.service.ts) — never a raw INSERT — plus
+  // the SAME create-time materialize call every other deduction-creating path already makes
+  // (createSettlementDeduction itself triggers it — see that function's own tail), and the SAME
+  // draft-attachment reassignment pattern ReceiptAttach's own doc comment describes for a CREATE
+  // form (expenses.routes.ts / bills.service.ts / invoices.routes.ts all do this identically).
+  app.post("/api/v1/driver-finance/settlement-deductions", { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } }, async (req, reply) => {
+    const user = requireDeductionWriteRole(req, reply);
+    if (!user) return;
+    const query = companyQuerySchema.safeParse(req.query ?? {});
+    if (!query.success) return validationError(reply, query.error);
+    const body = createDeductionBodySchema.safeParse(req.body ?? {});
+    if (!body.success) return validationError(reply, body.error);
+
+    try {
+      const row = await withCompany(user.uuid, query.data.operating_company_id, async (client) => {
+        const created = await createSettlementDeduction(client, {
+          driverId: body.data.driver_id,
+          operatingCompanyId: query.data.operating_company_id,
+          amountCents: body.data.amount_cents,
+          reason: body.data.reason,
+          sourceType: body.data.deduction_type,
+          loadId: body.data.load_id ?? null,
+          createdByUserId: user.uuid,
+        });
+        if (body.data.attachment_draft_id) {
+          await reassignDraftAttachments(client, {
+            operatingCompanyId: query.data.operating_company_id,
+            entityType: "manual",
+            draftId: body.data.attachment_draft_id,
+            newId: created.id,
+          });
+        }
+        await appendCrudAudit(
+          client,
+          user.uuid,
+          "driver_finance.settlement_deduction.created",
+          {
+            resource_type: "driver_finance.driver_settlement_deductions",
+            resource_id: created.id,
+            operating_company_id: query.data.operating_company_id,
+            driver_id: created.driver_id,
+            deduction_type: created.deduction_type,
+            amount_cents: created.amount_cents,
+            load_id: created.load_id,
+          },
+          "info",
+          "SETL-DED-UI"
+        );
+        return created;
+      });
+      return reply.code(201).send(row);
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith("E_INVALID_INPUT")) {
+        return reply.code(422).send({ error: "invalid_input", message: error.message });
+      }
+      throw error;
+    }
+  });
 
   app.patch("/api/v1/driver-finance/deduction-schedules/:id/hold", { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } }, async (req, reply) => {
     const user = requireDeductionWriteRole(req, reply);

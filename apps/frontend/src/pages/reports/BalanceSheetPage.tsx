@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import { DatePicker } from "../../components/forms/DatePicker";
+import { Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "../../components/Button";
 import { PageHeader } from "../../components/layout/PageHeader";
@@ -15,7 +14,7 @@ import {
 } from "../../api/reports";
 import { ReportBlockTPendingBanner } from "./ReportBlockTPendingBanner";
 import { ReportsSubNav } from "./ReportsSubNav";
-import { CollapsedListFilters, useStagedListFilters } from "../../components/table";
+import { ReportFilterBar } from "../../components/reports/ReportFilterBar";
 import { printLetterHtml } from "../../lib/openPrintableDocument";
 import { getShowAccountNumbers } from "../../lib/show-account-numbers";
 import { useExportAction } from "../../hooks/useExportAction";
@@ -42,14 +41,11 @@ export function BalanceSheetPage() {
   const { selectedCompanyId } = useCompanyContext();
   const companyId = selectedCompanyId ?? "";
   const today = companyToday();
+  const [searchParams, setSearchParams] = useSearchParams();
   const emptyFilters = { asOfDate: today, basis: "accrual" as AccountingBasis, compareToDate: "" };
   const [applied, setApplied] = useState(emptyFilters);
+  const [reportSearch, setReportSearch] = useState("");
   const exportAction = useExportAction();
-  const staged = useStagedListFilters({
-    applied,
-    empty: emptyFilters,
-    onApply: setApplied,
-  });
 
   const query = useQuery({
     queryKey: ["reports", "balance-sheet", companyId, applied.asOfDate, applied.basis],
@@ -63,9 +59,27 @@ export function BalanceSheetPage() {
     retry: false,
   });
 
-  const assets = useMemo(() => sortLines(query.data?.assets.lines ?? []), [query.data?.assets.lines]);
-  const liabilities = useMemo(() => sortLines(query.data?.liabilities.lines ?? []), [query.data?.liabilities.lines]);
-  const equity = useMemo(() => sortLines(query.data?.equity.lines ?? []), [query.data?.equity.lines]);
+  const assets = useMemo(() => {
+    const q = reportSearch.toLowerCase();
+    return sortLines(query.data?.assets.lines ?? []).filter((line) => {
+      if (!q) return true;
+      return String(line.account_name ?? "").toLowerCase().includes(q) || String(line.account_code ?? "").toLowerCase().includes(q);
+    });
+  }, [query.data?.assets.lines, reportSearch]);
+  const liabilities = useMemo(() => {
+    const q = reportSearch.toLowerCase();
+    return sortLines(query.data?.liabilities.lines ?? []).filter((line) => {
+      if (!q) return true;
+      return String(line.account_name ?? "").toLowerCase().includes(q) || String(line.account_code ?? "").toLowerCase().includes(q);
+    });
+  }, [query.data?.liabilities.lines, reportSearch]);
+  const equity = useMemo(() => {
+    const q = reportSearch.toLowerCase();
+    return sortLines(query.data?.equity.lines ?? []).filter((line) => {
+      if (!q) return true;
+      return String(line.account_name ?? "").toLowerCase().includes(q) || String(line.account_code ?? "").toLowerCase().includes(q);
+    });
+  }, [query.data?.equity.lines, reportSearch]);
   const cashBasisAdjustment = useMemo(
     () =>
       equity.find(
@@ -199,31 +213,25 @@ export function BalanceSheetPage() {
         </p>
       ) : null}
 
-      <CollapsedListFilters
-        activeFilterCount={JSON.stringify(applied) !== JSON.stringify(emptyFilters) ? 1 : 0}
-        defaultOpen={true}
-        onApply={staged.apply}
-        onReset={staged.reset}
-        onCancel={staged.cancel}
-        applyDisabled={!staged.dirty}
+      <ReportFilterBar
         testIdPrefix="reports-balance-sheet"
-        className="no-print rounded-sm border border-gray-200 bg-white p-3"
+        fromDate={applied.asOfDate}
+        toDate={null}
+        onFromDateChange={(d) => setApplied((p) => ({ ...p, asOfDate: d ?? today }))}
+        onToDateChange={() => {}}
+        onPresetSelect={(preset) => {
+          const next = new URLSearchParams(searchParams);
+          next.set("preset", preset);
+          setSearchParams(next, { replace: true });
+        }}
+        search={reportSearch}
+        onSearchChange={setReportSearch}
       >
-        <div className="flex flex-wrap items-end gap-3">
-          <BasisSelector
-            value={staged.draft.basis}
-            onChange={(next) => staged.setDraft((previous) => ({ ...previous, basis: next }))}
-          />
-          <label className="text-xs text-gray-600">
-            As-of date
-            <DatePicker className="mt-1 block h-9" value={staged.draft.asOfDate} onChange={(next) => staged.setDraft((previous) => ({ ...previous, asOfDate: next }))} />
-          </label>
-          <label className="text-xs text-gray-600">
-            Compare to
-            <DatePicker className="mt-1 block h-9" value={staged.draft.compareToDate} onChange={(next) => staged.setDraft((previous) => ({ ...previous, compareToDate: next }))} />
-          </label>
-        </div>
-      </CollapsedListFilters>
+        <BasisSelector
+          value={applied.basis}
+          onChange={(next) => setApplied((p) => ({ ...p, basis: next }))}
+        />
+      </ReportFilterBar>
 
       {query.data ? (
         <div className="grid gap-2 md:grid-cols-3">

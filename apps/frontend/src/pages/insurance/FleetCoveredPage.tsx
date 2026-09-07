@@ -62,7 +62,22 @@ export function FleetCoveredPage() {
       <p className="mt-1 text-xs text-slate-600">One row per active tractor or trailer, with current policy and allocated monthly economics.</p>
       <p className="mt-2 text-xs font-medium text-slate-700">Premium allocation: {allocationMethods.length ? allocationMethods.map(label).join(", ") : "—"}</p>
     </header>
-    <ParityTable rows={rows} columns={columns} rowKey={(row) => row.asset_id} loading={query.isPending} storageKey="insurance-fleet-covered" emptyText="No active fleet assets." enableColumnResize enableColumnReorder exportFilename="insurance-fleet-covered.csv" footer={<><tr className="border-t-2 border-slate-300 bg-slate-50 font-semibold"><td colSpan={9} className={`px-2 py-2 text-right ${coveredRows.length === 34 ? "text-slate-900" : "text-red-700"}`}>Totals · {coveredRows.length} covered units {coveredRows.length === 34 ? "" : "· expected 34"}</td><td className="px-2 py-2">{formatMoney(totals.tiv)}</td><td className="px-2 py-2">{formatMoney(totals.premium)}</td><td colSpan={3} /></tr><tr className="bg-slate-50"><td colSpan={9} className="px-2 py-2 text-right text-xs">Policy 437539 TIV {formatMoney(POLICY_437539_TIV_CENTS)} · Difference</td><td className={`px-2 py-2 text-xs font-semibold ${tivDifference === 0 ? "text-slate-700" : "text-red-700"}`}>{formatMoney(tivDifference)}</td><td colSpan={4} /></tr></>} />
+    {/* DSP-TBL (owner ruling 2026-09-05): footerCells replaces the raw 2-row footer. Row 1
+        (Totals) migrates 1:1 -- one cell per column, keyed, follows reorder/hide automatically.
+        Row 2 (the Policy 437539 TIV reconciliation line) was a second, unrelated <tr> the old
+        raw-footer prop happened to allow bolting on; footerCells is one row by design (DSP-TBL's
+        own spec: "footer rendered from the same ordered visible column list as the header"), so
+        that comparison line moves to its own paragraph right below the table -- same information,
+        same order on the page, no longer inside ParityTable's own footer machinery. */}
+    <ParityTable rows={rows} columns={columns} rowKey={(row) => row.asset_id} loading={query.isPending} storageKey="insurance-fleet-covered" emptyText="No active fleet assets." enableColumnResize enableColumnReorder exportFilename="insurance-fleet-covered.csv" footerCells={{
+      unit_number: <span className={coveredRows.length === 34 ? "text-slate-900" : "text-red-700"}>Totals · {coveredRows.length} covered units {coveredRows.length === 34 ? "" : "· expected 34"}</span>,
+      insured_value_cents: <span>{formatMoney(totals.tiv)}</span>,
+      premium_per_month_cents: <span>{formatMoney(totals.premium)}</span>,
+    }} />
+    <p className="text-xs text-slate-700" data-testid="fleet-covered-policy-tiv-diff">
+      Policy 437539 TIV {formatMoney(POLICY_437539_TIV_CENTS)} · Difference{" "}
+      <span className={`font-semibold ${tivDifference === 0 ? "text-slate-700" : "text-red-700"}`}>{formatMoney(tivDifference)}</span>
+    </p>
     <p className="text-xs text-slate-500">Deductible is shown as — because the current policy schema does not store a deductible; no value is inferred.</p>
   </div>;
 }

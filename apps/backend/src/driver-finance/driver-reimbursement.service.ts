@@ -19,6 +19,7 @@ import { isEnabled } from "../lib/feature-flags/service.js";
 import { postSourceTransactionInClientTx } from "../accounting/posting-engine.service.js";
 import { updateBankBalance } from "../accounting/bills.service.js";
 import { logger } from "../observability/structured-logger.js";
+import { materializeSettlementLines } from "./settlement-lines-materialize.service.js";
 
 /** Per-entity money-posting flag (auto-classified per-entity-only by the `_GL_POSTING_ENABLED` pattern). */
 export const REIMBURSEMENT_GL_POSTING_FLAG = "REIMBURSEMENT_GL_POSTING_ENABLED";
@@ -112,6 +113,35 @@ export async function createDriverReimbursementCore(
     "info",
     AUDIT_TAG
   );
+
+  // SETL-LINES-GL — "runs at line creation": if this driver already has an OPEN load-bookended
+  // settlement covering this reimbursement's load, materialize it into a real settlement_lines row
+  // (load_id + a resolved GL posting_account_id) immediately, rather than waiting for close. Best
+  // effort: a materializer hiccup must never fail the reimbursement claim itself — the close-time
+  // sweep (or a later manual retry) still picks up anything skipped here.
+  if ((body.pay_mode ?? "settlement") === "settlement" && body.load_id) {
+    try {
+      const openSettlementRes = await client.query(
+        `
+          SELECT id::text FROM driver_finance.driver_settlements
+           WHERE operating_company_id = $1::uuid AND driver_id = $2::uuid
+             AND settlement_model = 'load_bookended' AND status = 'open'
+           ORDER BY created_at DESC LIMIT 1
+        `,
+        [companyId, body.driver_id]
+      );
+      const openSettlementId = (openSettlementRes.rows[0] as { id?: string } | undefined)?.id;
+      if (openSettlementId) {
+        await materializeSettlementLines(client as unknown as Parameters<typeof materializeSettlementLines>[0], {
+          settlementId: openSettlementId,
+          operatingCompanyId: companyId,
+          actorUserId: actorUserUuid,
+        });
+      }
+    } catch (err) {
+      logger.warn("settlement_lines_materialize_at_creation_failed", { err, reimbursementId });
+    }
+  }
 
   return { ok: true, reimbursementId };
 }

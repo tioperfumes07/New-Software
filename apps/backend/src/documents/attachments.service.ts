@@ -44,7 +44,11 @@ async function setCompanyScope(client: DbClient, operatingCompanyId: string) {
 }
 
 /** Entity types whose create forms attach files BEFORE the record exists (random draft entity_id). */
-const RECONCILABLE_ENTITY_TYPES = new Set(["bill", "expense", "invoice", "payment", "work_order"]);
+// SETL-DED-UI — the settlement-deduction creator has no dedicated attachments entity_type (adding
+// one needs a migration to attachments_entity_type_check, out of this item's lane); its "source doc"
+// control reuses the existing, already-permitted 'manual' entity_type (documents.attachments'
+// generic bucket, unused elsewhere in the codebase today) instead of widening the CHECK constraint.
+const RECONCILABLE_ENTITY_TYPES = new Set(["bill", "expense", "invoice", "payment", "work_order", "manual"]);
 
 /**
  * Option B (attachment-draft-reconcile): re-key create-time draft attachments onto the real record id,

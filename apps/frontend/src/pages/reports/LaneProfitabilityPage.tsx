@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
-import { DatePicker } from "../../components/forms/DatePicker";
-import { MoneyInput } from "../../components/forms/MoneyInput";
+import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { MoneyInput } from "../../components/forms/MoneyInput";
 import {
   Bar,
   BarChart,
@@ -23,7 +23,7 @@ import { Button } from "../../components/Button";
 import { useCompanyContext } from "../../contexts/CompanyContext";
 import { LaneDetailModal } from "../../components/reports/LaneDetailModal";
 import { ReportsSubNav } from "./ReportsSubNav";
-import { CollapsedListFilters, useStagedListFilters } from "../../components/table";
+import { ReportFilterBar } from "../../components/reports/ReportFilterBar";
 import { SelectCombobox } from "../../components/Combobox";
 import { ParityTable, type ParityColumn } from "../../components/parity/ParityTable";
 import { ListErrorState } from "../../components/ListErrorState";
@@ -53,13 +53,10 @@ function marginClass(margin: number | null) {
 export function LaneProfitabilityPage() {
   const { selectedCompanyId } = useCompanyContext();
   const companyId = selectedCompanyId ?? "";
+  const [searchParams, setSearchParams] = useSearchParams();
   const emptyFilters = { period: "YTD" as LaneProfitabilityPeriod, customStart: "", customEnd: "", minRevenue: "", minLoads: "" };
   const [applied, setApplied] = useState(emptyFilters);
-  const staged = useStagedListFilters({
-    applied,
-    empty: emptyFilters,
-    onApply: setApplied,
-  });
+  const [reportSearch, setReportSearch] = useState("");
   const [selectedLane, setSelectedLane] = useState<LaneProfitabilityLane | null>(null);
 
   const query = useQuery({
@@ -102,6 +99,15 @@ export function LaneProfitabilityPage() {
   });
 
   const rows = query.data?.lanes ?? [];
+
+  const filtered = useMemo(() => {
+    const q = reportSearch.toLowerCase();
+    if (!q) return rows;
+    return rows.filter((lane) => {
+      const laneStr = `${lane.origin_city}, ${lane.origin_state} → ${lane.destination_city}, ${lane.destination_state}`.toLowerCase();
+      return laneStr.includes(q);
+    });
+  }, [rows, reportSearch]);
 
   const laneColumns = useMemo<ParityColumn<LaneProfitabilityLane>[]>(
     () => [
@@ -166,7 +172,7 @@ export function LaneProfitabilityPage() {
       "Profit/Mile",
       "Margin %",
     ];
-    const lines = rows.map((lane) =>
+    const lines = filtered.map((lane) =>
       [
         lane.origin_city,
         lane.origin_state,
@@ -196,65 +202,55 @@ export function LaneProfitabilityPage() {
       {!companyId ? <p className="text-xs text-red-600">Select operating company.</p> : null}
 
       <div className="flex flex-wrap items-end gap-3">
-        <CollapsedListFilters
-          activeFilterCount={JSON.stringify(applied) !== JSON.stringify(emptyFilters) ? 1 : 0}
-          defaultOpen={true}
-          onApply={staged.apply}
-          onReset={staged.reset}
-          onCancel={staged.cancel}
-          applyDisabled={!staged.dirty}
-          testIdPrefix="reports-lane-profitability"
-          className="rounded-sm border border-slate-200 bg-white p-4"
-        >
-          <div className="flex flex-wrap items-end gap-3">
-            <label className="text-xs text-slate-600">
-              Period
-              <SelectCombobox
-                className="mt-1 block"
-                value={staged.draft.period}
-                onChange={(e) => staged.setDraft((p) => ({ ...p, period: e.target.value as LaneProfitabilityPeriod }))}
-              >
-                <option value="YTD">YTD</option>
-                <option value="quarter">Last quarter</option>
-                <option value="month">Last month</option>
-                <option value="custom">Custom</option>
-              </SelectCombobox>
-            </label>
-            {staged.draft.period === "custom" ? (
-              <>
-                <label className="text-xs text-slate-600">
-                  Start
-                  <DatePicker className="mt-1 block" value={staged.draft.customStart} onChange={(next) => staged.setDraft((p) => ({ ...p, customStart: next }))} />
-                </label>
-                <label className="text-xs text-slate-600">
-                  End
-                  <DatePicker className="mt-1 block" value={staged.draft.customEnd} onChange={(next) => staged.setDraft((p) => ({ ...p, customEnd: next }))} />
-                </label>
-              </>
-            ) : null}
-            <label className="text-xs text-slate-600">
-              Min revenue (USD)
-              <MoneyInput
-                valueDollars={staged.draft.minRevenue ? Number(staged.draft.minRevenue) : null}
-                onChangeDollars={(d) => staged.setDraft((p) => ({ ...p, minRevenue: d == null ? "" : String(d) }))}
-                ariaLabel="Min revenue (USD)"
-                className="mt-1 w-28"
-              />
-            </label>
-            <label className="text-xs text-slate-600">
-              Min loads
-              <input
-                type="number"
-                min={0}
-                className="mt-1 block h-9 w-24 rounded-sm border border-gray-300 px-2 text-xs"
-                value={staged.draft.minLoads}
-                onChange={(e) => staged.setDraft((p) => ({ ...p, minLoads: e.target.value }))}
-                data-testid="reports-lane-profitability-min-loads"
-                // TODO: wire to backend filter
-              />
-            </label>
-          </div>
-        </CollapsedListFilters>
+        <ReportFilterBar
+        testIdPrefix="reports-lane-profitability"
+        fromDate={applied.period === "custom" ? applied.customStart : (query.data?.period.start ?? null)}
+        toDate={applied.period === "custom" ? applied.customEnd : (query.data?.period.end ?? null)}
+        onFromDateChange={(d) => setApplied((p) => ({ ...p, customStart: d ?? "", period: "custom" }))}
+        onToDateChange={(d) => setApplied((p) => ({ ...p, customEnd: d ?? "", period: "custom" }))}
+        onPresetSelect={(preset) => {
+          const next = new URLSearchParams(searchParams);
+          next.set("preset", preset);
+          setSearchParams(next, { replace: true });
+        }}
+        search={reportSearch}
+        onSearchChange={setReportSearch}
+      >
+        <label className="flex items-center gap-1 text-xs text-slate-600">
+          <span className="font-semibold text-slate-600">Period</span>
+          <SelectCombobox
+            className="h-7 rounded-sm border border-slate-300 px-2 text-xs"
+            value={applied.period}
+            onChange={(e) => setApplied((p) => ({ ...p, period: e.target.value as LaneProfitabilityPeriod }))}
+          >
+            <option value="YTD">YTD</option>
+            <option value="quarter">Last quarter</option>
+            <option value="month">Last month</option>
+            <option value="custom">Custom</option>
+          </SelectCombobox>
+        </label>
+        <label className="flex items-center gap-1 text-xs text-slate-600">
+          <span className="font-semibold text-slate-600">Min rev ($)</span>
+          <MoneyInput
+            valueDollars={applied.minRevenue ? Number(applied.minRevenue) : null}
+            onChangeDollars={(d) => setApplied((p) => ({ ...p, minRevenue: d == null ? "" : String(d) }))}
+            ariaLabel="Min revenue ($)"
+            className="h-7 w-24"
+            name="reports-lane-profitability-min-revenue"
+          />
+        </label>
+        <label className="flex items-center gap-1 text-xs text-slate-600">
+          <span className="font-semibold text-slate-600">Min loads</span>
+          <input
+            type="number"
+            min={0}
+            className="h-7 w-20 rounded-sm border border-slate-300 px-2 text-xs"
+            value={applied.minLoads}
+            onChange={(e) => setApplied((p) => ({ ...p, minLoads: e.target.value }))}
+            data-testid="reports-lane-profitability-min-loads"
+          />
+        </label>
+      </ReportFilterBar>
         <Button type="button" variant="secondary" onClick={exportCsv} disabled={rows.length === 0}>
           Export CSV
         </Button>
@@ -334,10 +330,10 @@ export function LaneProfitabilityPage() {
           </section>
 
           <ParityTable
-            rows={rows}
+            rows={filtered}
             columns={laneColumns}
             rowKey={(lane) => `${lane.origin_city}, ${lane.origin_state} → ${lane.destination_city}, ${lane.destination_state}`}
-            loading={query.isPending || (query.isFetching && rows.length === 0)}
+            loading={query.isPending || (query.isFetching && filtered.length === 0)}
             storageKey="lane-profitability"
             emptyText="No lanes match the current filters."
             onRowClick={(lane) => setSelectedLane(lane)}

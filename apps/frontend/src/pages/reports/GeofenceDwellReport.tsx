@@ -1,12 +1,12 @@
 import { useMemo, useState } from "react";
-import { DatePicker } from "../../components/forms/DatePicker";
+import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { PageHeader } from "../../components/layout/PageHeader";
 import { Button } from "../../components/Button";
 import { useCompanyContext } from "../../contexts/CompanyContext";
 import { getGeofenceDwellReport, listGeofences, type GeofenceDwellRow, type GeofenceLocationKind } from "../../api/geofencing";
 import { ReportsSubNav } from "./ReportsSubNav";
-import { CollapsedListFilters, useStagedListFilters } from "../../components/table";
+import { ReportFilterBar } from "../../components/reports/ReportFilterBar";
 import { mmmDdTime } from "../../lib/formatDate";
 import { EntityLinkOrTombstone } from "../../components/shared/EntityLinkOrTombstone";
 import { ParityTable, type ParityColumn } from "../../components/parity/ParityTable";
@@ -37,13 +37,10 @@ function today() {
 export function GeofenceDwellReport() {
   const { selectedCompanyId, companies } = useCompanyContext();
   const operatingCompanyId = selectedCompanyId ?? companies[0]?.id ?? "";
+  const [searchParams, setSearchParams] = useSearchParams();
   const emptyFilters = { periodStart: monthStart(), periodEnd: today(), geofenceId: "", locationKind: "" as GeofenceLocationKind | "" };
   const [applied, setApplied] = useState(emptyFilters);
-  const staged = useStagedListFilters({
-    applied,
-    empty: emptyFilters,
-    onApply: setApplied,
-  });
+  const [reportSearch, setReportSearch] = useState("");
 
   const geofenceQuery = useQuery({
     queryKey: ["telematics", "geofences", operatingCompanyId],
@@ -72,7 +69,7 @@ export function GeofenceDwellReport() {
   function exportCsv() {
     if (!reportQuery.data) return;
     const header = ["Geofence", "Kind", "Unit", "Driver", "Entered At", "Exited At", "Dwell Minutes", "Dwell Clock"];
-    const lines = reportQuery.data.rows.map((row) =>
+    const lines = filteredRows.map((row) =>
       [
         row.geofence_label,
         row.location_kind,
@@ -105,6 +102,15 @@ export function GeofenceDwellReport() {
   }, [reportQuery.data?.rows]);
 
   const dwellRows = reportQuery.data?.rows ?? [];
+
+  const filteredRows = useMemo(() => {
+    const q = reportSearch.toLowerCase();
+    if (!q) return dwellRows;
+    return dwellRows.filter((row) => {
+      const haystack = `${row.geofence_label ?? ""} ${row.location_kind ?? ""} ${row.unit_number ?? ""} ${driverName(row.first_name, row.last_name)}`.toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [dwellRows, reportSearch]);
 
   const columns = useMemo<ParityColumn<GeofenceDwellRow>[]>(
     () => [
@@ -143,44 +149,39 @@ export function GeofenceDwellReport() {
         }
       />
 
-      <CollapsedListFilters
-        activeFilterCount={JSON.stringify(applied) !== JSON.stringify(emptyFilters) ? 1 : 0}
-        onApply={staged.apply}
-        onReset={staged.reset}
-        onCancel={staged.cancel}
-        applyDisabled={!staged.dirty}
-        defaultOpen={true}
+      <ReportFilterBar
         testIdPrefix="reports-geofence-dwell"
-        className="rounded-sm border border-slate-200 bg-white p-3"
+        fromDate={applied.periodStart}
+        toDate={applied.periodEnd}
+        onFromDateChange={(d) => setApplied((p) => ({ ...p, periodStart: d ?? "" }))}
+        onToDateChange={(d) => setApplied((p) => ({ ...p, periodEnd: d ?? "" }))}
+        onPresetSelect={(preset) => {
+          const next = new URLSearchParams(searchParams);
+          next.set("preset", preset);
+          setSearchParams(next, { replace: true });
+        }}
+        search={reportSearch}
+        onSearchChange={setReportSearch}
       >
-        <div className="grid gap-3 md:grid-cols-4">
-          <label className="text-xs text-slate-700">
-            Start
-            <DatePicker className="mt-1 block h-9 w-full" value={staged.draft.periodStart} onChange={(next) => staged.setDraft((p) => ({ ...p, periodStart: next }))} />
-          </label>
-          <label className="text-xs text-slate-700">
-            End
-            <DatePicker className="mt-1 block h-9 w-full" value={staged.draft.periodEnd} onChange={(next) => staged.setDraft((p) => ({ ...p, periodEnd: next }))} />
-          </label>
+        <div className="flex items-center gap-2">
           <div className="text-xs text-slate-700">
-            <label htmlFor="geofence-dwell-filter">Geofence</label>
             <Combobox
               id="geofence-dwell-filter"
-              className="mt-1"
+              className="h-7"
               options={geofenceOptions}
-              value={staged.draft.geofenceId || null}
-              onChange={(next) => staged.setDraft((p) => ({ ...p, geofenceId: next ?? "" }))}
+              value={applied.geofenceId || null}
+              onChange={(next) => setApplied((p) => ({ ...p, geofenceId: next ?? "" }))}
               placeholder="All geofences"
               loading={geofenceQuery.isLoading}
               error={geofenceQuery.isError ? "Couldn't load geofences" : undefined}
             />
           </div>
-          <label className="text-xs text-slate-700">
-            Kind
+          <label className="flex items-center gap-1 text-xs text-slate-600">
+            <span className="font-semibold text-slate-600">Kind</span>
             <SelectCombobox
-              className="mt-1 block h-9 w-full rounded-sm border border-slate-300 px-2 text-xs"
-              value={staged.draft.locationKind}
-              onChange={(event) => staged.setDraft((p) => ({ ...p, locationKind: event.target.value as GeofenceLocationKind | "" }))}
+              className="h-7 rounded-sm border border-slate-300 px-2 text-xs"
+              value={applied.locationKind}
+              onChange={(event) => setApplied((p) => ({ ...p, locationKind: event.target.value as GeofenceLocationKind | "" }))}
             >
               <option value="">All kinds</option>
               <option value="customer_site">Customer site</option>
@@ -190,7 +191,7 @@ export function GeofenceDwellReport() {
             </SelectCombobox>
           </label>
         </div>
-      </CollapsedListFilters>
+      </ReportFilterBar>
 
       <section className="grid gap-2 sm:grid-cols-3">
         <div className="rounded-sm border border-slate-200 bg-white px-3 py-2">
@@ -208,10 +209,10 @@ export function GeofenceDwellReport() {
       </section>
 
       <ParityTable
-        rows={dwellRows}
+        rows={filteredRows}
         columns={columns}
         rowKey={(row) => `${row.geofence_id}-${row.unit_id}-${row.entered_at}`}
-        loading={reportQuery.isPending || (reportQuery.isFetching && dwellRows.length === 0)}
+        loading={reportQuery.isPending || (reportQuery.isFetching && filteredRows.length === 0)}
         storageKey="geofence-dwell"
         emptyText="No dwell events for the current filters."
         exportFilename={`geofence-dwell-${applied.periodStart}-${applied.periodEnd}`}

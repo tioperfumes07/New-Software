@@ -25,6 +25,7 @@ type TimelineListRow = {
   driverName: string;
   unit: string;
   hosStatus: string;
+  leaveStatus: string;
   currentLoad: string;
   loadCount: number;
 };
@@ -70,6 +71,21 @@ function parseLeaveCells(rows: Array<Record<string, unknown>> | undefined): Map<
 
 function LoadCustomerLink({ load }: { load: PlannerLoadEvent }) {
   return <EntityLinkOrTombstone kind="customer" id={load.customer_id} name={load.customer_name} noun="Customer" />;
+}
+
+function StatusPill({ status }: { status: string }) {
+  const unknown = status === "Unknown";
+  return (
+    <span
+      className="inline-block rounded-sm px-2 py-0.5 text-xs font-semibold uppercase tracking-wide"
+      style={{
+        backgroundColor: unknown ? "#F3F4F6" : "#DBEAFE",
+        color: unknown ? "#6B7280" : "#1E40AF",
+      }}
+    >
+      {status}
+    </span>
+  );
 }
 
 export function UnifiedTimelinePlanner() {
@@ -125,6 +141,11 @@ export function UnifiedTimelinePlanner() {
     for (const key of leaveByCell.keys()) s.add(key.split("|")[0]);
     return s;
   }, [leaveByCell]);
+
+  const leaveStatusForDriver = (driverId: string): string => {
+    if (leaveQuery.isError) return "Unknown";
+    return driverHasLeave.has(driverId) ? "On Leave" : "Available";
+  };
 
   const toRows = (list: PlannerDriverRow[]): PlannerGridRow[] =>
     list.map((driver) => {
@@ -234,6 +255,7 @@ export function UnifiedTimelinePlanner() {
               driverName: entityLabel(driver.name, driver.id, "Driver"),
               unit: driver.unit_number ?? "—",
               hosStatus: hosLabel,
+              leaveStatus: leaveStatusForDriver(driver.id),
               currentLoad: sorted.length > 0 ? sorted[0].load_number : "—",
               loadCount: sorted.length,
             };
@@ -242,6 +264,7 @@ export function UnifiedTimelinePlanner() {
             { key: "driverName", label: "Driver Name", sortable: true },
             { key: "unit", label: "Unit", sortable: true },
             { key: "hosStatus", label: "HOS Status", sortable: true },
+            { key: "leaveStatus", label: "Leave Status", sortable: true, render: (row) => <StatusPill status={row.leaveStatus} /> },
             { key: "currentLoad", label: "Current Load", sortable: true },
             { key: "loadCount", label: "Load Count", sortable: true },
           ];

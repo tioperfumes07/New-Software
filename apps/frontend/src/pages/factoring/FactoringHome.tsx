@@ -58,6 +58,7 @@ import { DuplicateVendorsBanner } from "../../components/factoring/DuplicateVend
 import { apiRequest } from "../../api/client";
 import { FACTORING_TAB_PATH, factoringTabFromPath } from "../../router/route-manifest";
 import { NavyPageSubNav } from "../../components/layout/NavyPageSubNav";
+import { DrillKpiCard } from "../../components/layout/DrillKpiCard";
 
 const SUBNAV = [
   { id: "reserve_tracker", label: "Reserve Tracker" },
@@ -506,49 +507,83 @@ export function FactoringHomePage({ initialTab = "recourse_pipeline" }: Factorin
         <ListErrorBanner onRetry={() => void summaryQuery.refetch()} />
       ) : null}
 
+      {/* FAC-07 (owner 2026-09-06 22:3xZ): navy tab strip is FIRST — same shape as Banking Home —
+          so the profile card can no longer push the tabs below the fold. */}
+      <NavyPageSubNav
+        items={SUBNAV.map((item) => ({ label: item.label, to: FACTORING_TAB_PATH[item.id] }))}
+      />
+
       <DuplicateVendorsBanner companyId={companyId} />
 
-      <div className="grid gap-2 md:grid-cols-4" data-testid="factoring-home-kpi-row">
-        <div className="rounded-sm border border-gray-200 bg-white p-3 text-xs">
-          <div className="text-xs uppercase tracking-wide text-gray-500">Active Factor</div>
-          <div className="mt-1 font-semibold text-gray-900">
-            {summaryQuery.isError ? "—" : (summary?.active_factor_name ?? "Not configured")}
+      <div className="grid grid-cols-1 gap-2 lg:grid-cols-12" data-testid="factoring-home-overview-row">
+        <div className="lg:col-span-7" data-testid="factoring-home-kpi-col">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3" data-testid="factoring-home-kpi-row">
+            <DrillKpiCard
+              testId="factoring-kpi-active-factor"
+              label="Active factor"
+              value={summaryQuery.isError ? null : (summary?.active_factor_name ?? null)}
+              to={FACTORING_TAB_PATH.statements_settings}
+            />
+            <DrillKpiCard
+              testId="factoring-kpi-reserve-balance"
+              label="Reserve balance"
+              value={summaryQuery.isError ? null : fmtCurrency(summary?.reserve_balance)}
+              to={FACTORING_TAB_PATH.reserve_tracker}
+            />
+            {/* FACTORING-CHARGEBACK-BALANCE-IS-ACTUALLY-OUTSTANDING-LIABILITY: this is Advance +
+                Reserve still owed to the factor (outstanding_liability_signed_cents), not a real
+                chargeback figure — honest label locked by verify-factoring-outstanding-liability-honest-label. */}
+            <DrillKpiCard
+              testId="factoring-kpi-outstanding-liability"
+              label="Outstanding Liability Balance"
+              value={summaryQuery.isError ? null : fmtCurrency(summary?.outstanding_liability_balance)}
+              to={FACTORING_TAB_PATH.recourse_pipeline}
+            />
+            <DrillKpiCard
+              testId="factoring-kpi-advanced-mtd"
+              label="Advanced MTD"
+              value={summaryQuery.isError ? null : fmtCurrency(summary?.mtd_advanced_total)}
+              hint={summary ? `${summary.mtd_advances_count} advances` : undefined}
+              to="/accounting/factoring"
+            />
+            <DrillKpiCard
+              testId="factoring-kpi-recourse-days"
+              label="Recourse days"
+              value={summaryQuery.isError ? null : Number(summary?.recourse_days ?? 95)}
+              unavailable="Contract recourse window (days)"
+            />
+            <DrillKpiCard
+              testId="factoring-kpi-chargebacks"
+              label="Chargebacks & fees"
+              value={null}
+              hint="Open statements"
+              to={FACTORING_TAB_PATH.chargebacks_fees}
+            />
           </div>
         </div>
-        <div className="rounded-sm border border-gray-200 bg-white p-3 text-xs">
-          <div className="text-xs uppercase tracking-wide text-gray-500">Reserve Balance</div>
-          <div className="mt-1 font-semibold text-gray-900">
-            {summaryQuery.isError ? "—" : fmtCurrency(summary?.reserve_balance)}
-          </div>
-        </div>
-        <div className="rounded-sm border border-gray-200 bg-white p-3 text-xs">
-          {/* FACTORING-CHARGEBACK-BALANCE-IS-ACTUALLY-OUTSTANDING-LIABILITY: this card read
-              summary.chargeback_balance, which is actually Advance + Reserve still owed to the
-              factor (outstanding_liability_signed_cents), not a real chargeback/recourse figure
-              — the honestly-computed chargeback total lives on the Chargebacks & Fees tab. */}
-          <div className="text-xs uppercase tracking-wide text-gray-500">Outstanding Liability Balance</div>
-          <div className="mt-1 font-semibold text-gray-900">
-            {summaryQuery.isError ? "—" : fmtCurrency(summary?.outstanding_liability_balance)}
-          </div>
-        </div>
-        <div className="rounded-sm border border-gray-200 bg-white p-3 text-xs">
-          <div className="text-xs uppercase tracking-wide text-gray-500">Recourse Days</div>
-          <div className="mt-1 font-semibold text-gray-900">
-            {summaryQuery.isError ? "—" : Number(summary?.recourse_days ?? 95)}
-          </div>
+        <div className="lg:col-span-5" data-testid="factoring-home-profile-col">
+          {activeFactor ? (
+            <FactoringProfilePanel
+              variant="compact"
+              vendorId={summary?.active_factor_id ?? null}
+              factor={activeFactor}
+              saving={savingFactorProfile}
+              onSave={() => {
+                setProfileEditForm(factorToProfileForm(activeFactor));
+                setProfileEditOpen(true);
+              }}
+            />
+          ) : (
+            <div className="rounded-sm border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-xs text-gray-500" data-testid="factoring-profile-empty">
+              {summary?.active_factor_profile_id || summary?.active_factor_name || summary?.active_factor_id
+                ? "Active factor row is still loading…"
+                : "No factor configured. Activate a factor to manage its profile."}
+            </div>
+          )}
         </div>
       </div>
-      {activeFactor ? (
-        <>
-          <FactoringProfilePanel
-            factor={activeFactor}
-            saving={savingFactorProfile}
-            onSave={() => {
-              setProfileEditForm(factorToProfileForm(activeFactor));
-              setProfileEditOpen(true);
-            }}
-          />
-          {profileEditForm && (
+
+      {activeFactor && profileEditForm && (
             <Modal open={profileEditOpen} onClose={() => { setProfileEditOpen(false); setProfileEditForm(null); }} title="Edit Factoring Profile">
               <div className="flex flex-col gap-3 text-xs" data-testid="factoring-profile-edit-modal">
                 <p className="text-xs text-gray-500">
@@ -676,18 +711,6 @@ export function FactoringHomePage({ initialTab = "recourse_pipeline" }: Factorin
               </div>
             </Modal>
           )}
-        </>
-      ) : (
-        <div className="rounded-sm border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-xs text-gray-500" data-testid="factoring-profile-empty">
-          {summary?.active_factor_profile_id || summary?.active_factor_name || summary?.active_factor_id
-            ? "Active factor row is still loading…"
-            : "No factor configured. Activate a factor to manage its profile."}
-        </div>
-      )}
-
-      <NavyPageSubNav
-        items={SUBNAV.map((item) => ({ label: item.label, to: FACTORING_TAB_PATH[item.id] }))}
-      />
 
       {tab === "reserve_tracker" ? (
         <div className="rounded-sm border border-gray-200 bg-white p-3">

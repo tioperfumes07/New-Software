@@ -24,8 +24,10 @@ const LABEL = "verify-payrun-close-reimbursements-and-active-lines";
 const SELFTEST = process.argv.includes("--selftest");
 const FILE = "apps/backend/src/driver-finance/settlement-payrun-close.service.ts";
 
+// advanceRecoveriesCents was later renamed appliedAdvanceRecoveryCents (more precisely describes
+// "advance recovery amounts actually applied") — same term, same position in the formula.
 const NET_FORMULA =
-  "grossCents +\n      reimbursementsCents +\n      detentionPayCents -\n      deductionsCents -\n      escrowContributionCents -\n      advanceRecoveriesCents -\n      chargebacksCents";
+  "grossCents +\n      reimbursementsCents +\n      detentionPayCents -\n      deductionsCents -\n      escrowContributionCents -\n      appliedAdvanceRecoveryCents -\n      chargebacksCents";
 const REIMB_QUERY_MARKER = "async function loadReimbursementsCents(";
 const REIMB_LEG_MARKER = 'legs.push({ account_id: reimbAcct, debit_or_credit: "debit", amount_cents: reimbursementsCents,';
 const DETENTION_QUERY_MARKER = "async function loadDetentionPayCents(";

@@ -1,3 +1,10 @@
+// VC-10 / VC-LIST-02 (owner "ALL PAGE SIZE"): the sentinel page size that renders EVERY row.
+// The vendor/customer rosters are fetched fully client-side (listAllVendors / listAllCustomers —
+// no server paging), so "All" is a safe client-side slice with no unbounded refetch (no REG-400).
+// 1_000_000 exceeds any real USMCA roster (vendors 619, customers 1,235), so slicing 0..ALL returns
+// all rows and totalPages collapses to 1.
+export const ALL_PAGE_SIZE = 1_000_000;
+
 type Props = {
   page: number;
   pageSize: number;
@@ -5,6 +12,8 @@ type Props = {
   onPageChange: (page: number) => void;
   onPageSizeChange: (pageSize: number) => void;
   pageSizeOptions?: number[];
+  /** VC-10: append an "All" option (value ALL_PAGE_SIZE) that renders the whole roster. */
+  allowAll?: boolean;
   /** When the roster query is still loading, suppress the "0-0 of 0" count so it never asserts an empty roster mid-fetch. */
   loading?: boolean;
 };
@@ -16,6 +25,7 @@ export function SidebarPagination({
   onPageChange,
   onPageSizeChange,
   pageSizeOptions = [25, 50, 100, 250],
+  allowAll = false,
   loading = false,
 }: Props) {
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
@@ -41,6 +51,11 @@ export function SidebarPagination({
                 {size}
               </option>
             ))}
+            {allowAll ? (
+              <option key="all" value={ALL_PAGE_SIZE}>
+                All
+              </option>
+            ) : null}
           </select>
         </label>
       </div>

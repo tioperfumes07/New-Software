@@ -12,7 +12,7 @@ import { writeTransactionSourceLink } from "./accounting-spine-emit.js";
 import { hasJournalEntryTypeColumn, resolveJournalEntryTypeId } from "./journal-entry-type-resolver.js";
 // ACCT-PERIOD-CLOSE-01: this recurring-JE template insert had no closed-period check at all.
 import { ensureOpenPeriod } from "./posting-engine.service.js";
-import { nextInvoiceDisplayId } from "./display-id.js";
+import { nextInvoiceDisplayId, nextExpenseDisplayId } from "./display-id.js";
 import { recomputeInvoiceTotals } from "./shared.js";
 import { companyBusinessDate } from "../lib/company-business-date.js";
 import { resolveMdataVendorIdBestEffort, resolveVendorIsSampleDataBestEffort } from "./bills.service.js";
@@ -395,6 +395,14 @@ async function materializeExpense(client: PoolClient, tmpl: Record<string, unkno
   // (not sample) when vendor_uuid is absent, matching the column's own default.
   const vendorIsSampleData = await resolveVendorIsSampleDataBestEffort(client, oc, body.vendor_uuid as string | null | undefined);
 
+  // INV-13 (owner CONSOLIDATED 2026-09-06 18:30Z item 5): this materializer never stamped
+  // expense_number -- the same LV-EXPENSE-NUMBER-NEVER-POPULATED shape already fixed for
+  // expenses.routes.ts's own create path and lumper-cash-advance-split.ts. A recurring template
+  // has no load_id (it is a periodic company expense, e.g. insurance), so this uses the SAME
+  // company-scoped fallback expenses.routes.ts itself falls back to when a load isn't in play
+  // (nextExpenseDisplayId, EXP-<year>-NNNNN) -- never a second numbering series invented.
+  const expenseNumber = await nextExpenseDisplayId(client, oc, new Date(`${expenseDate}T00:00:00.000Z`));
+
   const ins = await client.query<{ id: string }>(
     `
       INSERT INTO accounting.expenses (
@@ -405,7 +413,8 @@ async function materializeExpense(client: PoolClient, tmpl: Record<string, unkno
         total_amount,
         memo,
         payment_account_uuid,
-        is_sample_data
+        is_sample_data,
+        expense_number
       )
       VALUES (
         $1::uuid,
@@ -415,11 +424,12 @@ async function materializeExpense(client: PoolClient, tmpl: Record<string, unkno
         $4,
         $5,
         $6::uuid,
-        $7
+        $7,
+        $8
       )
       RETURNING id::text
     `,
-    [oc, body.vendor_uuid ?? null, expenseDate, totalAmount, body.memo ?? null, body.payment_account_uuid ?? null, vendorIsSampleData]
+    [oc, body.vendor_uuid ?? null, expenseDate, totalAmount, body.memo ?? null, body.payment_account_uuid ?? null, vendorIsSampleData, expenseNumber]
   );
   const expenseId = ins.rows[0]?.id;
   if (!expenseId) throw new Error("recurring_expense_insert_failed");

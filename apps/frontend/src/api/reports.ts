@@ -1277,3 +1277,29 @@ export async function getDuplicateMasters(
     withCompany(`/api/v1/reports/duplicate-masters?entity=${entity}`, operatingCompanyId),
   );
 }
+
+// ACC-51 — LAW §2 reversal plan, item (3): read-only, no action button anywhere on this data.
+// The owner confirms before any reversal runs, same as scripts/report-open-tour-posted-reversal-
+// plan.mjs's own header comment says.
+export type PostedWhileTourOpenAccountLine = {
+  account_number: string | null;
+  account_name: string | null;
+  debit_or_credit: string;
+  amount_cents: number;
+};
+
+export type PostedWhileTourOpenRow = {
+  doc_type: "expense" | "bill";
+  doc_id: string;
+  load_number: string | null;
+  journal_entry_id: string | null;
+  amount_cents: number;
+  settlement_status: string;
+  accounts: PostedWhileTourOpenAccountLine[];
+};
+
+export function getPostedWhileTourOpenReport(operatingCompanyId: string) {
+  return apiRequest<{ rows: PostedWhileTourOpenRow[] }>(
+    withCompany(`/api/v1/accounting/reports/posted-while-tour-open`, operatingCompanyId),
+  );
+}

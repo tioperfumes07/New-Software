@@ -94,14 +94,17 @@ export function CustomerListSidebar({
   // LIST-EMPTY-1: the empty message renders only after the roster settles.
   const listState = useListState(status, pagedCustomers.length === 0);
 
+  // MD-WIDTH-0 (lead 2026-09-06, measured live: aside 1770px, main 0px at 1920 viewport) — the master list must have an
+  // explicit width beside the detail pane; `w-full` + `shrink-0` alone swallowed the whole flex row and the detail never showed.
   return (
-    <aside className="w-full min-w-0 max-w-none shrink-0 rounded-sm border border-gray-200 bg-white p-2 xl:min-w-[300px] xl:max-w-[560px]" data-customer-list-sidebar="true">
+    <aside className="w-full shrink-0 rounded-sm border border-gray-200 bg-white p-2 xl:w-[440px] xl:min-w-[300px] xl:max-w-[560px]" data-customer-list-sidebar="true">
       <SidebarPagination
         page={safePage}
         pageSize={pageSize}
         totalCount={totalCount}
         onPageChange={onPageChange}
         onPageSizeChange={onPageSizeChange}
+        allowAll
         loading={listState.isLoading}
       />
       <input
@@ -125,15 +128,19 @@ export function CustomerListSidebar({
         <ResizableTable
           tableId="customers-master-list"
           columns={[
-            { id: "name", label: "Name", defaultWidth: 180, align: "left" },
-            { id: "open_balance", label: "Open Balance", defaultWidth: 110, align: "right" },
-            { id: "status", label: "Status", defaultWidth: 100, align: "left" },
+            { id: "name", label: "Name", defaultWidth: 170, align: "left" },
+            { id: "open_balance", label: "Open Balance", defaultWidth: 100, align: "right" },
+            // VC-DETAIL-01 (owner ROUND 14, 2026-09-06): Status is active/inactive (deactivated_at),
+            // NOT the quality chip; the quality chip moves to its own column (sibling to VendorListSidebar).
+            { id: "status", label: "Status", defaultWidth: 80, align: "left" },
+            { id: "quality", label: "Quality", defaultWidth: 90, align: "left" },
           ]}
         >
           {(widths) => (
             <tbody>
               {pagedCustomers.map((customer) => {
                 const rating = customerQualityRating(customer.quality_payment_score, customer.quality_overall_flag);
+                const isInactive = customer.deactivated_at != null;
                 const selected = selectedCustomerId === customer.id;
                 return (
                   <tr
@@ -155,6 +162,11 @@ export function CustomerListSidebar({
                       {openBalancesAvailable ? fmtMoney(openByCustomerId.get(customer.id) ?? 0) : "Unavailable"}
                     </td>
                     <td style={{ width: widths.status }} className="px-2 py-1.5">
+                      <span className={`inline-flex rounded-sm px-2 py-0.5 text-xs font-semibold ${isInactive ? "bg-gray-200 text-gray-700" : "bg-slate-100 text-slate-700"}`}>
+                        {isInactive ? "Inactive" : "Active"}
+                      </span>
+                    </td>
+                    <td style={{ width: widths.quality }} className="px-2 py-1.5">
                       <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${rating.className}`}>{rating.label}</span>
                     </td>
                   </tr>
@@ -173,6 +185,7 @@ export function CustomerListSidebar({
           totalCount={totalCount}
           onPageChange={onPageChange}
           onPageSizeChange={onPageSizeChange}
+          allowAll
           loading={listState.isLoading}
         />
       </div>

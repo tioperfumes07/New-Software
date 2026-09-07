@@ -7,7 +7,7 @@ file is kept current; that one is the "what was measured and why" record.
 - Base body: 12px
 - H1: 22px / weight 600
 - Column/section headers (page subheads, not table thead): 11px / weight 700 / UPPERCASE / color #4B5563
-- Table header row (ParityTable thead): 11px / weight 700 / UPPERCASE / background #14314F / text #FFFFFF (owner 2026-09-03 — grey-on-near-white did not differentiate); height 30px, one number for every table (owner ruling 2026-09-04, ORCH-measured — was emergent/undeclared and had drifted to 30px on Dispatch vs 34px on Load Costs)
+- Table header row (ParityTable thead): 11px / weight 700 / UPPERCASE / background #EEF2F6 / text #1F2937 (owner 2026-09-04 — "the blue is too aggressive"; navy #14314F/white retired from table headers, stays on rail/topbar/printed docs only); height 30px, one number for every table (owner ruling 2026-09-04, ORCH-measured — was emergent/undeclared and had drifted to 30px on Dispatch vs 34px on Load Costs)
 - Text colors: primary #0F1219 | secondary #1F2A44 | muted #6B7280
 - Cell padding: ~7px
 
@@ -18,7 +18,8 @@ file is kept current; that one is the "what was measured and why" record.
 - Border radius: 2px, one token (`rounded-sm`) everywhere except deliberate pills/avatars (SQUARE-EDGES LAW, owner ruling 2026-09-04, ORCH-measured — was a 2px/4px/0px/9999px mix)
 - Left rail (sidebar) + top banner: navy #14314F (NAVY-NOT-BLACK LAW, owner ruling 2026-09-04 —
   was #1B2333/#1F2A44, two different low-saturation shades that both read as near-black; now the
-  same blue already owner-approved for the table header row, 2026-09-03)
+  same blue already owner-approved for the rail and top banner, 2026-09-03; retired from table
+  headers 2026-09-04)
 - Primary action / status green: #16A34A
 
 ## Layout

@@ -14,21 +14,21 @@ export function audit(source = readFileSync(join(ROOT, FILE), "utf8")) {
   if (!/preSettlementsQuery\.isError\) void preSettlementsQuery\.refetch\(\)/.test(source)) problems.push("pre-settlement failure lacks exact retry");
   if (!/idleUnitsQuery\.isError\) void idleUnitsQuery\.refetch\(\)/.test(source)) problems.push("idle-unit failure lacks exact retry");
   if (!/Existing loads were not treated as an honest empty pairing/.test(source)) problems.push("failure truth is not explicit");
-  if (!/pairs\.length === 0[\s\S]{0,250}No active unit round trips/.test(source)) problems.push("honest zero-pair state was not preserved");
+  if (!/pairs\.length === 0[\s\S]{0,250}(?:No active unit round trips|No open tours)/.test(source)) problems.push("honest zero-pair state was not preserved");
   return problems;
 }
 
 function selftest() {
   const good = `const pairingReadFailed = preSettlementsQuery.isError || idleUnitsQuery.isError;
 if (pairingReadFailed) return <ListErrorState title="Round-trip pairing unavailable" message={\`Existing loads were not treated as an honest empty pairing.\`} onRetry={() => { if (preSettlementsQuery.isError) void preSettlementsQuery.refetch(); if (idleUnitsQuery.isError) void idleUnitsQuery.refetch(); }} />;
-pairs.length === 0 ? <div>No active unit round trips.</div> : null;`;
+pairs.length === 0 ? <div>No open tours. A tour opens when a northbound load is booked from the yard.</div> : null;`;
   const mutations = [
     good.replace(" || idleUnitsQuery.isError", ""),
     good.replace("Round-trip pairing unavailable", "Pairing"),
     good.replace("preSettlementsQuery.refetch()", "window.location.reload()"),
     good.replace("idleUnitsQuery.refetch()", "window.location.reload()"),
     good.replace("Existing loads were not treated as an honest empty pairing.", "Unavailable"),
-    good.replace("No active unit round trips.", "No rows"),
+    good.replace("No open tours. A tour opens when a northbound load is booked from the yard.", "No rows"),
   ];
   const failures = [];
   if (audit(good).length) failures.push(`good fixture rejected: ${audit(good).join(" | ")}`);

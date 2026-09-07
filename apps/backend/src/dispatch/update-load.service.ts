@@ -10,6 +10,7 @@
 // No migration: every column already exists. This file writes only mdata.loads + mdata.load_stops.
 import { resyncProformaInvoiceFromLoadRate } from "../accounting/resync-proforma-from-load-rate.js";
 import { appendCrudAudit } from "../audit/crud-audit.js";
+import { geocodeStopsWithClient } from "../telematics/stops-geocode-backfill.service.js";
 import { bookLoadRateTotalCents } from "./book-load-accessorial.js";
 import {
   assertDriverQualifiedForLoad,
@@ -102,7 +103,7 @@ export type UpdateDispatchLoadFields = Partial<{
   border_routing: string | null;
   /** FAIL-B4 — sample/demo flag, editable after creation. */
   is_sample_data: boolean;
-  trip_type: "NB" | "TR" | "SB";
+  trip_type: "NB" | "TR" | "SB" | "LOCAL";
   tour_id: string | null;
   // DISPATCH-LOAD-PATCH-COMMODITY-COLUMN-MISSING-500 (2026-08-27): commodity/cargo_weight_lbs/
   // reefer_setpoint_temp_f were REMOVED here — mdata.loads has never had these columns (verified live,
@@ -792,6 +793,9 @@ export async function updateDispatchLoad(
   let stopSummary: { updated: number; inserted: number; archived: number } | null = null;
   if (input.stops) {
     stopSummary = await replaceStops(client, loadId, input.stops);
+    if (stopSummary.inserted > 0) {
+      await geocodeStopsWithClient(client, requestingUserUuid, operatingCompanyId, loadId);
+    }
   }
 
   // 5) Re-read load + active stops.

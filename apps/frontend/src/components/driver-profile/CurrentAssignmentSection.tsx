@@ -51,10 +51,16 @@ export function CurrentAssignmentSection({
                 id={cur.unit_id == null ? null : String(cur.unit_id)}
                 name={cur.unit_number}
                 noun="Unit"
+                data-testid="driver-profile-current-unit-link"
               />
               {cur.samsara_logged_in_at ? (
                 <div className="text-slate-500">
                   Samsara {String(cur.samsara_logged_in_at)}
+                </div>
+              ) : null}
+              {cur.source === "dispatch_load" ? (
+                <div className="text-slate-500" data-testid="driver-profile-current-unit-dispatch-source">
+                  Current dispatch assignment
                 </div>
               ) : null}
             </>

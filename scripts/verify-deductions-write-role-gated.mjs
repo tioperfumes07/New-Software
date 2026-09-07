@@ -26,11 +26,14 @@ const FILE = "apps/backend/src/driver-finance/deductions.routes.ts";
 
 const REQUIRED_ROLES = ["Owner", "Administrator", "Accountant", "Payroll"];
 
+// A { config: { rateLimit: {...} } } object now sits between each path and its handler (this
+// repo's broader per-route rate-limiting rollout) — match any options object, not just a bare
+// handler, so this guard doesn't drift every time a rate limit is tuned.
 const ROUTES = [
-  [/app\.patch\("\/api\/v1\/driver-finance\/deduction-schedules\/:id\/hold", async \(req, reply\) => \{\s*\n\s*const user = (\w+)\(req, reply\);/, "PATCH /deduction-schedules/:id/hold"],
-  [/app\.patch\("\/api\/v1\/driver-finance\/deduction-schedules\/:id\/resume", async \(req, reply\) => \{\s*\n\s*const user = (\w+)\(req, reply\);/, "PATCH /deduction-schedules/:id/resume"],
-  [/app\.patch\("\/api\/v1\/driver-finance\/settlement-deductions\/:id\/hold", async \(req, reply\) => \{\s*\n\s*const user = (\w+)\(req, reply\);/, "PATCH /settlement-deductions/:id/hold"],
-  [/app\.patch\("\/api\/v1\/driver-finance\/settlement-deductions\/:id\/resume", async \(req, reply\) => \{\s*\n\s*const user = (\w+)\(req, reply\);/, "PATCH /settlement-deductions/:id/resume"],
+  [/app\.patch\("\/api\/v1\/driver-finance\/deduction-schedules\/:id\/hold",[^)]*?async \(req, reply\) => \{\s*\n\s*const user = (\w+)\(req, reply\);/, "PATCH /deduction-schedules/:id/hold"],
+  [/app\.patch\("\/api\/v1\/driver-finance\/deduction-schedules\/:id\/resume",[^)]*?async \(req, reply\) => \{\s*\n\s*const user = (\w+)\(req, reply\);/, "PATCH /deduction-schedules/:id/resume"],
+  [/app\.patch\("\/api\/v1\/driver-finance\/settlement-deductions\/:id\/hold",[^)]*?async \(req, reply\) => \{\s*\n\s*const user = (\w+)\(req, reply\);/, "PATCH /settlement-deductions/:id/hold"],
+  [/app\.patch\("\/api\/v1\/driver-finance\/settlement-deductions\/:id\/resume",[^)]*?async \(req, reply\) => \{\s*\n\s*const user = (\w+)\(req, reply\);/, "PATCH /settlement-deductions/:id/resume"],
 ];
 
 function assertAll(src) {
@@ -65,8 +68,8 @@ if (SELFTEST) {
   const src = read();
 
   const planted = src.replace(
-    'app.patch("/api/v1/driver-finance/settlement-deductions/:id/hold", async (req, reply) => {\n    const user = requireDeductionWriteRole(req, reply);',
-    'app.patch("/api/v1/driver-finance/settlement-deductions/:id/hold", async (req, reply) => {\n    const user = authed(req, reply);',
+    'app.patch("/api/v1/driver-finance/settlement-deductions/:id/hold", { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } }, async (req, reply) => {\n    const user = requireDeductionWriteRole(req, reply);',
+    'app.patch("/api/v1/driver-finance/settlement-deductions/:id/hold", { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } }, async (req, reply) => {\n    const user = authed(req, reply);',
   );
   if (planted === src) {
     console.error(`${LABEL} SELFTEST SETUP FAILED: mutation target not found (guard text drifted from real code)`);

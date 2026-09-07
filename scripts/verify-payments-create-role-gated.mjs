@@ -40,8 +40,11 @@ function assertAll(src) {
     }
   }
 
-  if (!/if \(!requireVoidCancelExecutor\(reply, String\(user\.role \?\? ""\)\)\) return;/.test(src)) {
-    problems.push(`POST /:id/void's requireVoidCancelExecutor gate is missing (sibling route regressed)`);
+  // PERMISSION WIRING 10.4: requireVoidCancelExecutor's sync role-only check was superseded here
+  // by requireVoidCancelExecutorWired (role floor when PERMISSION_MODEL_ENFORCED is OFF, granular
+  // permissionKey "payment.void" when ON) — a strict tightening, not a regression.
+  if (!/requireVoidCancelExecutorWired\(reply, \{\s*\n\s*role: String\(user\.role \?\? ""\),/.test(src) || !/permissionKey: "payment\.void",/.test(src)) {
+    problems.push(`POST /:id/void's requireVoidCancelExecutorWired gate is missing (sibling route regressed)`);
   }
 
   return problems;

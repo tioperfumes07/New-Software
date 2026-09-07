@@ -170,6 +170,11 @@ export async function registerVehicleDriverPairingRoutes(app: FastifyInstance) {
         started_at: string;
         ended_at: string | null;
         source: string;
+        load_id: string | null;
+        load_number: string | null;
+        trailer_id: string | null;
+        trailer_number: string | null;
+        driven_miles: number | null;
         total_count: number;
       }>(
         `
@@ -185,6 +190,11 @@ export async function registerVehicleDriverPairingRoutes(app: FastifyInstance) {
             a.started_at::text,
             a.ended_at::text,
             a.source,
+            history_load.id::text AS load_id,
+            history_load.load_number,
+            history_trailer.new_trailer_id::text AS trailer_id,
+            history_equipment.unit_number AS trailer_number,
+            history_miles.driven_miles,
             COUNT(*) OVER()::int AS total_count
           FROM telematics.vehicle_driver_assignments a
           JOIN mdata.units u ON u.id = a.unit_id
@@ -201,6 +211,38 @@ export async function registerVehicleDriverPairingRoutes(app: FastifyInstance) {
                                           AND pairing_history_dca.deactivated_at IS NULL
                                       )
                                     )
+          LEFT JOIN LATERAL (
+            SELECT candidate.id, candidate.load_number
+            FROM mdata.loads candidate
+            WHERE candidate.operating_company_id = a.operating_company_id
+              AND candidate.assigned_unit_id = a.unit_id
+              AND (
+                candidate.assigned_primary_driver_id = a.driver_id
+                OR candidate.assigned_secondary_driver_id = a.driver_id
+              )
+              AND candidate.created_at <= COALESCE(a.ended_at, now())
+            ORDER BY candidate.created_at DESC, candidate.id DESC
+            LIMIT 1
+          ) history_load ON true
+          LEFT JOIN LATERAL (
+            SELECT history_trailer_row.new_trailer_id
+            FROM dispatch.load_assignment_history history_trailer_row
+            WHERE history_trailer_row.operating_company_id = a.operating_company_id
+              AND history_trailer_row.load_id = history_load.id
+              AND history_trailer_row.new_trailer_id IS NOT NULL
+            ORDER BY history_trailer_row.assigned_at DESC, history_trailer_row.created_at DESC
+            LIMIT 1
+          ) history_trailer ON true
+          LEFT JOIN mdata.equipment history_equipment
+            ON history_equipment.id = history_trailer.new_trailer_id
+           AND history_equipment.operating_company_id = a.operating_company_id
+          LEFT JOIN LATERAL (
+            SELECT SUM(history_miles_row.driven_miles)::numeric AS driven_miles
+            FROM telematics.load_odometer_segments history_miles_row
+            WHERE history_miles_row.operating_company_id = a.operating_company_id
+              AND history_miles_row.load_id = history_load.id
+              AND history_miles_row.unit_id = a.unit_id
+          ) history_miles ON true
           WHERE ${filters.join(" AND ")}
           ORDER BY a.started_at DESC, a.created_at DESC
           LIMIT $${limitParam} OFFSET $${offsetParam}

@@ -4,6 +4,7 @@ import { z } from "zod";
 import { withCurrentUser } from "../auth/db.js";
 import { requireAuth } from "../auth/session-middleware.js";
 import { normalizeHistoryLimit } from "./vehicle-locations.service.js";
+import { getRealDrivenMilesSegmentStatus } from "../integrations/samsara/geofences/real-driven-miles.service.js";
 
 const latestQuerySchema = z.object({
   operating_company_id: z.string().uuid(),
@@ -30,6 +31,17 @@ function validationError(reply: FastifyReply, error: z.ZodError) {
 }
 
 export async function registerTelematicsPositionsRoutes(app: FastifyInstance) {
+  app.get("/api/v1/telematics/segments/status", { config: { rateLimit: { max: 60, timeWindow: "1 minute" } } }, async (req, reply) => {
+    const user = currentUser(req, reply);
+    if (!user) return;
+    const query = latestQuerySchema.safeParse(req.query ?? {});
+    if (!query.success) return validationError(reply, query.error);
+    return withCurrentUser(user.uuid, async (client) => {
+      await setScopedCompanyContext(client, user.uuid, query.data.operating_company_id);
+      return getRealDrivenMilesSegmentStatus(client, query.data.operating_company_id);
+    });
+  });
+
   app.get("/api/v1/telematics/positions/latest", { config: { rateLimit: { max: 60, timeWindow: "1 minute" } } }, async (req, reply) => {
     const user = currentUser(req, reply);
     if (!user) return;

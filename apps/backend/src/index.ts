@@ -100,6 +100,7 @@ import { registerLoadProfitabilityRoutes } from "./dispatch/load-profitability.r
 import { registerCancellationsReportRoutes } from "./dispatch/cancellations-report.routes.js";
 import { registerLoadCancellationsAnalyticsRoutes } from "./dispatch/load-cancellations-analytics.routes.js";
 import { registerLoadGeofenceTimelineRoutes } from "./dispatch/load-geofence-timeline.routes.js";
+import { registerLoadStopsRecordRoutes } from "./dispatch/load-stops-record.routes.js";
 import { registerTripPairingBoardRoutes } from "./dispatch/trip-pairing-board.routes.js";
 import { registerDriverCommunicationsRoutes } from "./drivers/communications.routes.js";
 import { registerDriverAdvancesRoutes } from "./drivers/advances.routes.js";
@@ -141,6 +142,7 @@ import { registerDriversMessagesRoutes } from "./drivers/messages.routes.js";
 import { registerDriversDocumentAlertsRoutes } from "./drivers/document-alerts.routes.js";
 import { initializeDocumentAlertEngineCron } from "./drivers/document-alerts.cron.js";
 import { registerGeofencesRoutes } from "./telematics/geofences.routes.js";
+import { registerStopsGeocodeBackfillRoutes } from "./telematics/stops-geocode-backfill.routes.js";
 import { registerDashcamOnDemandRoutes } from "./telematics/dashcam-on-demand.routes.js";
 import { registerTelematicsPositionsRoutes } from "./telematics/positions.routes.js";
 import { registerTourCloseRoutes } from "./dispatch/driver-pwa/tour-close.routes.js";
@@ -152,6 +154,7 @@ import { registerSettlementsBulkRoutes } from "./driver-finance/settlements-bulk
 import { registerPreSettlementsRoutes as registerC1PreSettlementsRoutes } from "./settlements/pre-settlements.routes.js";
 import { registerCustomerContractRoutes } from "./customer-contracts/customer-contract.routes.js";
 import { registerPreSettlementRoutes } from "./driver-finance/pre-settlement.routes.js";
+import { registerTourReadoutRoutes } from "./driver-finance/tour-readout.routes.js";
 import { registerDriverFinanceSettlementHtmlRoutes } from "./driver-finance/settlement-render.routes.js";
 import { registerDriverFinanceDriverBillsRoutes } from "./driver-finance/driver-bills.routes.js";
 import { registerDriverFinanceDriverBillsListRoutes } from "./driver-finance/driver-bills-list.routes.js";
@@ -355,6 +358,7 @@ import { registerForm425cExhibitsRoutes } from "./reports/form-425c/exhibits/rou
 import { registerTaxDocumentRoutes } from "./tax-documents/tax-documents.routes.js";
 import { registerListsHubRoutes } from "./lists/lists-hub.routes.js";
 import { registerListsCountsRoutes } from "./lists/lists-counts.routes.js";
+import { registerLocationsListRoutes } from "./lists/locations-list.routes.js";
 import { registerDriverCatalogDeprecatedRoutes } from "./lists/driver-catalogs.routes.js";
 import { registerNamesMasterRoutes } from "./lists/names-master.routes.js";
 import { registerDriversReferenceRoutes } from "./lists/drivers-reference.routes.js";
@@ -406,6 +410,7 @@ import { initializeQboCdcPollCron } from "./cron/qbo-cdc-poll.cron.js";
 import { initializeDepreciationAutopostCron } from "./cron/depreciation-autopost.cron.js";
 import { initializeBankDriftAlertsCron } from "./cron/bank-drift-alerts.cron.js";
 import { initializeCashFlowProjectionSnapshotCron } from "./cron/cash-flow-projection-snapshot.cron.js";
+import { initializeCashFlowRollingLedgerNotifyCron } from "./cron/cash-flow-rolling-ledger-notify.cron.js";
 import { initializeRecurringTemplatesCron } from "./cron/recurring-templates.cron.js";
 import { initializeRecurringBillGeneratorWorker, stopRecurringBillGeneratorWorker } from "./jobs/recurring-bill-generator-worker.js";
 import { initializeQboTokenRefreshCron } from "./cron/qbo-token-refresh-cron.js";
@@ -420,6 +425,7 @@ import { initializeSamsaraMasterSyncCron } from "./cron/samsara-master-sync.cron
 import { initializeSamsaraHosPullCron } from "./cron/samsara-hos-pull.cron.js";
 import { initializeSamsaraPositionsCron } from "./cron/samsara-positions-cron.js";
 import { initializeReeferHoursPollCron } from "./cron/reefer-hours-poll.cron.js";
+import { initializeRealDrivenMilesSegmentsCron } from "./cron/real-driven-miles-segments.cron.js";
 import { initializeFuelGpsMatchCron } from "./cron/fuel-gps-match.cron.js";
 import { initializeBankReconAutoMatchCron } from "./cron/bank-recon-auto-match.cron.js";
 import { initializeDraftCrewStatusSelfHealCron } from "./cron/draft-crew-status-selfheal.cron.js";
@@ -911,6 +917,7 @@ async function main() {
   await registerCancellationsReportRoutes(app);
   await registerLoadCancellationsAnalyticsRoutes(app);
   await registerLoadGeofenceTimelineRoutes(app);
+  await registerLoadStopsRecordRoutes(app);
   await registerTripPairingBoardRoutes(app);
   await registerDriverCommunicationsRoutes(app);
   await registerDriverAdvancesRoutes(app);
@@ -956,6 +963,7 @@ async function main() {
   await registerChatRoutes(app);
   await registerDriversDocumentAlertsRoutes(app);
   await registerGeofencesRoutes(app);
+  await registerStopsGeocodeBackfillRoutes(app);
   await registerDriverDaySummaryRoutes(app);
   await registerTelematicsHeatmapRoutes(app);
   await registerDashcamOnDemandRoutes(app);
@@ -965,6 +973,7 @@ async function main() {
   await registerDriverFinanceSettlementRoutes(app);
   await registerSettlementsBulkRoutes(app);
   await registerPreSettlementRoutes(app);
+  await registerTourReadoutRoutes(app);
   await registerC1PreSettlementsRoutes(app);
   await registerCustomerContractRoutes(app);
   await registerWeeklyCloseRoutes(app);
@@ -998,6 +1007,7 @@ async function main() {
   await registerOwnerTodaysAttentionRoutes(app);
   await registerAccountingRoleHomeRoutes(app);
   await registerBillGlDraftRoutes(app);
+  // ACC-51 posted-while-tour-open-report.routes.ts is autoload-mounted (default fp) — see DUPLICATE-ROUTE-BOOT-CRASH note below.
   await registerBillPaymentGlRoutes(app);
   await registerRelatedPartyLoanRoutes(app);
   await registerSafetyOfficerRoleHomeRoutes(app);
@@ -1189,6 +1199,7 @@ async function main() {
   await registerTaxDocumentRoutes(app);
   await registerListsHubRoutes(app);
   await registerListsCountsRoutes(app);
+  await registerLocationsListRoutes(app);
   await registerDriversReferenceRoutes(app);
   await registerOemPartsRoutes(app);
   await registerNamesMasterRoutes(app);
@@ -1294,6 +1305,15 @@ async function main() {
       app.log.info("[STARTUP] cash-flow-projection-snapshot cron initialized");
     } catch (error) {
       app.log.error({ err: error }, "[STARTUP] cash-flow-projection-snapshot cron failed");
+    }
+
+    try {
+      // CASH-FLOW-02 part (b) (owner order 2026-09-06 20:1xZ): a Rolling Ledger row overdue more
+      // than 3 days raises exactly one in-app notification, deduped by entity, never re-fired.
+      initializeCashFlowRollingLedgerNotifyCron(app);
+      app.log.info("[STARTUP] cash-flow-rolling-ledger-notify cron initialized");
+    } catch (error) {
+      app.log.error({ err: error }, "[STARTUP] cash-flow-rolling-ledger-notify cron failed");
     }
 
     try {
@@ -1425,6 +1445,13 @@ async function main() {
       app.log.info("[STARTUP] reefer-hours-poll-cron initialized");
     } catch (error) {
       app.log.error({ err: error }, "[STARTUP] reefer-hours-poll-cron failed");
+    }
+
+    try {
+      initializeRealDrivenMilesSegmentsCron(app);
+      app.log.info("[STARTUP] real-driven-miles-segments-cron initialized");
+    } catch (error) {
+      app.log.error({ err: error }, "[STARTUP] real-driven-miles-segments-cron failed");
     }
 
     try {

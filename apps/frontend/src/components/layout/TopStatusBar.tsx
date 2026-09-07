@@ -84,7 +84,11 @@ export function TopStatusBar({
 
   return (
     <div
-      className="flex max-w-[min(760px,94vw)] flex-nowrap items-center justify-center gap-x-2 rounded-full px-2 py-1 text-xs leading-snug"
+      // CUR-3 (row 51): the top status bar must render at the spec/PDF top-bar height of 26px
+      // (DISPATCH-BOARD-PREVIEW-2026-09-05.pdf). py-1 + 12px/leading-snug computes to ~24.5px, ~1.5px
+      // under spec after the GLB sweeps; the min-height token below restores it. Body type stays
+      // text-xs = 12px (GLOBAL-TYPE-SIZE-BASELINE), palette unchanged.
+      className="flex min-h-[26px] max-w-[min(760px,94vw)] flex-nowrap items-center justify-center gap-x-2 rounded-full px-2 py-1 text-xs leading-snug"
       style={{ backgroundColor: "#151A24", color: muted }}
       data-status-bar-desktop
     >

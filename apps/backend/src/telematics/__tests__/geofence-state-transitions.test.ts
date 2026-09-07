@@ -39,7 +39,7 @@ describe("geofence state transitions", () => {
         if (sql.includes("INSERT INTO geo.geofence_events")) {
           const eventKind = /'entered'/.test(sql) ? "entered" : null;
           void eventKind;
-          return { rows: [] };
+          return { rows: [], rowCount: 1 };
         }
         return { rows: [] };
       }),
@@ -72,5 +72,33 @@ describe("geofence state transitions", () => {
     await push("2026-05-23T21:00:00.000Z");
 
     expect(events).toEqual(["entered", "exited", "entered"]);
+  });
+
+  it("writes exactly one enter event for an inside position when the unit is outside", async () => {
+    let eventWrites = 0;
+    const client = {
+      query: vi.fn(async (sql: string) => {
+        if (sql.includes("FROM geo.geofences g")) return { rows: [{
+          geofence_id: "11111111-1111-1111-1111-111111111111",
+          vertices_json: [{ lng: -99.64, lat: 27.66 }, { lng: -99.62, lat: 27.66 }, { lng: -99.62, lat: 27.64 }, { lng: -99.64, lat: 27.64 }],
+          last_event_kind: "exited",
+        }] };
+        if (sql.includes("FROM mdata.loads l")) return { rows: [{ driver_id: null }] };
+        if (sql.includes("INSERT INTO geo.geofence_events")) {
+          eventWrites += 1;
+          return { rows: [], rowCount: 1 };
+        }
+        return { rows: [], rowCount: 0 };
+      }),
+    };
+    const result = await processGeofenceDetectionsForGpsPoint(client, {
+      operating_company_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      unit_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+      latitude: 27.65149,
+      longitude: -99.63094,
+      occurred_at: "2026-09-05T23:00:00.000Z",
+    });
+    expect(result.transitions_written).toBe(1);
+    expect(eventWrites).toBe(1);
   });
 });

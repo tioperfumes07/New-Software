@@ -26,7 +26,7 @@ describe("geofence detector tenant isolation", () => {
         if (sql.includes("FROM mdata.loads l")) {
           return { rows: [{ driver_id: null }] };
         }
-        return { rows: [] };
+        return { rows: [], rowCount: sql.includes("INSERT INTO geo.geofence_events") ? 1 : 0 };
       }),
     };
 

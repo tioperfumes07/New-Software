@@ -48,8 +48,14 @@ function verify(service, page, sidebar) {
   ]) {
     if (!page.includes(token)) errors.push(`page missing ${token}`);
   }
-  if (!sidebar.includes('{ label: "Company Settlements", to: "/reports/trip-profitability" }')) {
-    errors.push("sidebar does not name the period-grain Company Settlements surface");
+  // LST-F04 / SET-04 (#21051, 2026-09-06): the sidebar item now points at the REAL page
+  // /driver-finance/company-settlements (routes/manifest.tsx) instead of the /reports/trip-profitability
+  // stand-in. Pin the real route; the stand-in is forbidden so the sidebar can never lie again.
+  if (!sidebar.includes('{ label: "Company Settlements", to: "/driver-finance/company-settlements" }')) {
+    errors.push("sidebar does not name the period-grain Company Settlements surface (/driver-finance/company-settlements)");
+  }
+  if (sidebar.includes('{ label: "Company Settlements", to: "/reports/trip-profitability" }')) {
+    errors.push("sidebar still routes Company Settlements to the /reports/trip-profitability stand-in");
   }
   return errors;
 }

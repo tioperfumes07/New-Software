@@ -3,6 +3,7 @@ import fs from "node:fs";
 const backend = fs.readFileSync("apps/backend/src/maintenance/dashboard.routes.ts", "utf8");
 const fleetPage = fs.readFileSync("apps/frontend/src/pages/maintenance/FleetTablePage.tsx", "utf8");
 const dispatchApi = fs.readFileSync("apps/frontend/src/api/dispatch.ts", "utf8");
+const dispatchBoard = fs.readFileSync("apps/frontend/src/pages/dispatch/DispatchBoard.tsx", "utf8");
 const dispatchBackend = fs.readFileSync("apps/backend/src/dispatch/loads.routes.ts", "utf8");
 const condition = fs.readFileSync("apps/backend/src/maintenance/in-shop-condition.ts", "utf8");
 
@@ -18,7 +19,7 @@ function inShopRouteSlice(source) {
   return start >= 0 && end > start ? source.slice(start, end) : "";
 }
 
-function problems(candidateBackend = backend, candidateFleet = fleetPage, candidateDispatch = dispatchApi, candidateDispatchBackend = dispatchBackend, candidateCondition = condition) {
+function problems(candidateBackend = backend, candidateFleet = fleetPage, candidateDispatch = dispatchApi, candidateDispatchBackend = dispatchBackend, candidateCondition = condition, candidateBoard = dispatchBoard) {
   const route = routeSlice(candidateBackend);
   const inShopRoute = inShopRouteSlice(candidateBackend);
   const checks = [
@@ -41,7 +42,10 @@ function problems(candidateBackend = backend, candidateFleet = fleetPage, candid
     [candidateFleet.includes('`/api/v1/maintenance/fleet-table/rows?operating_company_id=${encodeURIComponent(operatingCompanyId)}`'), "Maintenance consumer"],
     [candidateFleet.includes("...(maintByUnit[r.id] ?? {})"), "Maintenance enrichment consumes complete feed"],
     [candidateFleet.includes("oos_reason: r.in_shop_reason") && candidateFleet.includes("oos_since: r.in_shop_since") && candidateFleet.includes("estimated_completion_date: r.eta_back"), "Maintenance renders authoritative condition fields"],
-    [candidateDispatch.includes("listDispatchInShopUnits") && candidateDispatch.includes("/api/v1/maintenance/fleet-table/rows"), "Dispatch in-shop consumer"],
+    [candidateDispatch.includes("listDispatchInShopUnits") && candidateDispatch.includes("/api/v1/maintenance/in-shop-units"), "Dispatch consumes narrow in-shop endpoint"],
+    [!candidateDispatch.includes('listDispatchInShopUnits(operatingCompanyId: string) {\n  return apiRequest<{ rows: DispatchInShopUnit[] }>(\n    `/api/v1/maintenance/fleet-table/rows'), "Dispatch does not reconstruct in-shop state from whole Fleet feed"],
+    [candidateDispatch.includes("work_order_id") && candidateDispatch.includes("work_order_display_id") && candidateDispatch.includes("opened_at") && candidateDispatch.includes("expected_ready_at") && candidateDispatch.includes("shop_or_vendor") && candidateDispatch.includes("days_down"), "Dispatch in-shop API type preserves six-field contract"],
+    [candidateBoard.includes('data-testid="dispatch-in-shop-details"') && candidateBoard.includes("Shop") && candidateBoard.includes("Opened") && candidateBoard.includes("ETA") && candidateBoard.includes("Days down"), "In-shop band renders Unit/WO/Shop/Opened/ETA/Days down"],
     [candidateCondition.includes("voided_at IS NULL") && candidateCondition.includes("status NOT IN ('complete', 'cancelled')"), "canonical open-work-order predicate"],
     [candidateDispatchBackend.includes('openWorkOrderPredicateSql("awaiting_wo")'), "awaiting feed uses canonical open-work-order predicate"],
     [/AND NOT EXISTS \([\s\S]{0,300}FROM maintenance\.work_orders awaiting_wo[\s\S]{0,260}awaiting_wo\.unit_id = u\.id[\s\S]{0,180}awaiting_wo\.operating_company_id = \$1::uuid/.test(candidateDispatchBackend), "awaiting feed excludes same-company open work orders"],
@@ -71,7 +75,12 @@ if (process.argv.includes("--selftest")) {
     [backend.replace('app.get("/api/v1/maintenance/in-shop-units"', 'app.get("/api/v1/maintenance/removed-in-shop-units"'), fleetPage, dispatchApi, dispatchBackend, condition],
     [backend.replaceAll('openWorkOrderPredicateSql("wo")', "'TRUE'"), fleetPage, dispatchApi, dispatchBackend, condition],
   ];
-  const escaped = extendedMutations.filter(([b, f, d, db, c]) => problems(b, f, d, db, c).length === 0);
+  extendedMutations.push(
+    [backend, fleetPage, dispatchApi.replace("/api/v1/maintenance/in-shop-units", "/api/v1/maintenance/fleet-table/rows"), dispatchBackend, condition, dispatchBoard],
+    [backend, fleetPage, dispatchApi.replace("days_down: number;", ""), dispatchBackend, condition, dispatchBoard],
+    [backend, fleetPage, dispatchApi, dispatchBackend, condition, dispatchBoard.replace('data-testid="dispatch-in-shop-details"', 'data-testid="dispatch-in-shop-summary"')],
+  );
+  const escaped = extendedMutations.filter(([b, f, d, db, c, board = dispatchBoard]) => problems(b, f, d, db, c, board).length === 0);
   if (escaped.length) throw new Error(`${escaped.length} planted defect(s) escaped`);
   console.log(`verify-maintenance-fleet-table-complete-status-feed selftest PASS — ${extendedMutations.length}/${extendedMutations.length} planted defects red`);
   process.exit(0);

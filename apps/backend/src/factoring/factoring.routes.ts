@@ -6,6 +6,7 @@ import { requireAuth } from "../auth/session-middleware.js";
 import { assertCompanyMembership } from "../_helpers/company-membership-guard.js";
 import { FACTORING_REPURCHASE_DEADLINE_DAYS } from "../accounting/factoring-posting/contract-config.js";
 import { resolveCanonicalActiveFactor } from "../home/factoring-balance-invoice-linkage.service.js";
+import { loadCostRollupLateral, LOAD_COST_ROLLUP_SELECT } from "../accounting/load-cost-rollup.sql.js";
 
 const companyQuerySchema = z.object({
   operating_company_id: z.string().uuid(),
@@ -175,6 +176,7 @@ export async function registerFactoringRoutes(app: FastifyInstance) {
               inv.invoice_id,
               inv.customer_id,
               inv.load_id,
+              ${LOAD_COST_ROLLUP_SELECT},
               COUNT(*) OVER()::int AS _total_count
             FROM views.factoring_recourse_at_risk rr
             LEFT JOIN LATERAL (
@@ -186,6 +188,7 @@ export async function registerFactoringRoutes(app: FastifyInstance) {
               ORDER BY i.created_at DESC
               LIMIT 1
             ) inv ON true
+            ${loadCostRollupLateral("inv.load_id", "rr.operating_company_id")}
             WHERE rr.operating_company_id = $1::uuid
               ${customerFilter}
               ${loadFilter}
@@ -230,14 +233,27 @@ export async function registerFactoringRoutes(app: FastifyInstance) {
               inv.invoice_display_id,
               inv.customer_id,
               inv.customer_name,
+              inv.load_id,
+              ${LOAD_COST_ROLLUP_SELECT},
               COUNT(*) OVER()::int AS _total_count
             FROM views.factoring_chargebacks_fees cf
             LEFT JOIN LATERAL (
               SELECT
                 i.id::text AS invoice_id,
                 i.display_id AS invoice_display_id,
-                i.customer_id::text AS customer_id,
-                c.customer_name
+                -- ACCT-F26015 (owner, 2026-09-07): this was i.customer_id::text, but customerFilter
+                -- below compares it against $N::uuid -- "operator does not exist: text = uuid",
+                -- 500ing this endpoint every time a customer_id filter was passed (caught live while
+                -- re-verifying the ACCT-F26014 payments.status fix on the same customer profile
+                -- page). Kept as uuid here, matching the filter own cast, same as the sibling
+                -- recourse-pipeline route LATERAL join (i.customer_id, no cast) just above.
+                i.customer_id,
+                c.customer_name,
+                -- ACCT-F26015b: drop ::text cast on source_load_id — loadCostRollupLateral
+                -- joins l.id (uuid) = inv.load_id, so a ::text here raises
+                -- "operator does not exist: uuid = text" (42883). Sibling recourse-pipeline
+                -- route above already keeps this as uuid (i.source_load_id, no cast).
+                i.source_load_id AS load_id
               FROM accounting.invoices i
               LEFT JOIN mdata.customers c
                 ON c.id = i.customer_id
@@ -248,6 +264,7 @@ export async function registerFactoringRoutes(app: FastifyInstance) {
               ORDER BY i.created_at DESC
               LIMIT 1
             ) inv ON true
+            ${loadCostRollupLateral("inv.load_id", "cf.operating_company_id")}
             WHERE cf.operating_company_id = $1::uuid
               ${customerFilter}
             ORDER BY cf.created_at DESC

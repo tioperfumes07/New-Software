@@ -57,18 +57,69 @@ export async function registerVendorRollupsRoutes(app: FastifyInstance) {
             [resolvedOperatingCompanyId]
           );
 
+          // VC-LIST-01 (owner ROUND 11): the Vendors list needs REAL money — Open balance (unpaid
+          // non-void bills), Spend MTD/YTD (bills + expenses), and Last activity (max of either).
+          // Root cause of the owner's "$0.00 open balance" is real for expense-only vendors: LOVES
+          // has 183 expenses ($67,003.86) and 0 bills, so open balance IS $0 — Spend is the real
+          // activity number. expenses.vendor_uuid is uuid, bills.vendor_uuid/vendor_id are text →
+          // cast the expense side to text so the FULL OUTER JOIN unifies both sources on one key.
+          // Backward-compatible: purchases_ytd_cents / purchases_total_cents / last_purchase_date /
+          // expense_count keep their EXPENSES-only meaning for existing consumers; spend_* and
+          // open_balance_cents are additive.
+          //
+          // VENDOR-BALANCE-TRUTH (owner order 2026-09-06, ROUND 14, inventory #15): open_balance_cents
+          // used to be derived HERE, independently, as a bare not-equal-to-paid status denylist (that would
+          // wrongly count a status='void' bill as "open" -- it checked b.voided_at but never
+          // b.revoked_at, the canonical bill-void marker per accounting/bills.service.ts's own
+          // voidBill/voidBillPayment) -- a SECOND, drift-prone open-balance computation alongside
+          // the canonical accounting.vendor_balances VIEW (which the Vendors list's split-pane
+          // detail panel already reads via listVendorBalances/GET /api/v1/accounting/vendor-balances,
+          // and which correctly uses an explicit open-status allowlist + excludes revoked_at). Two
+          // sources of truth for the same number is exactly the class of bug the owner flagged.
+          // Fixed by reading open_balance_cents FROM the canonical VIEW instead of re-deriving it --
+          // one read model, not two that can silently disagree the moment a void/revoked bill exists.
           return client.query(
-            `SELECT
-               e.vendor_uuid AS vendor_id,
-               COALESCE(SUM(e.total_amount_cents) FILTER (WHERE e.transaction_date >= $2::date), 0)::bigint AS purchases_ytd_cents,
-               COALESCE(SUM(e.total_amount_cents), 0)::bigint AS purchases_total_cents,
-               MAX(e.transaction_date) AS last_purchase_date,
-               COUNT(*)::integer AS expense_count
-             FROM accounting.expenses e
-             WHERE e.operating_company_id = $1::uuid
-               AND e.vendor_uuid IS NOT NULL
-               AND e.voided_at IS NULL
-             GROUP BY e.vendor_uuid`,
+            `WITH exp AS (
+               SELECT e.vendor_uuid::text AS vid,
+                 SUM(e.total_amount_cents) AS total,
+                 SUM(e.total_amount_cents) FILTER (WHERE e.transaction_date >= $2::date) AS ytd,
+                 SUM(e.total_amount_cents) FILTER (WHERE e.transaction_date >= date_trunc('month', now())::date) AS mtd,
+                 MAX(e.transaction_date) AS last_d,
+                 COUNT(*) AS cnt
+               FROM accounting.expenses e
+               WHERE e.operating_company_id = $1::uuid
+                 AND e.vendor_uuid IS NOT NULL
+                 AND e.voided_at IS NULL
+               GROUP BY e.vendor_uuid
+             ),
+             bil AS (
+               SELECT COALESCE(NULLIF(b.vendor_uuid, ''), b.vendor_id) AS vid,
+                 SUM(b.amount_cents) AS total,
+                 SUM(b.amount_cents) FILTER (WHERE b.bill_date >= $2::date) AS ytd,
+                 SUM(b.amount_cents) FILTER (WHERE b.bill_date >= date_trunc('month', now())::date) AS mtd,
+                 MAX(b.bill_date) AS last_d
+               FROM accounting.bills b
+               WHERE b.operating_company_id = $1::uuid
+                 AND b.voided_at IS NULL
+                 AND COALESCE(NULLIF(b.vendor_uuid, ''), b.vendor_id) IS NOT NULL
+               GROUP BY 1
+             )
+             SELECT
+               COALESCE(exp.vid, bil.vid) AS vendor_id,
+               COALESCE(exp.ytd, 0)::bigint AS purchases_ytd_cents,
+               COALESCE(exp.total, 0)::bigint AS purchases_total_cents,
+               exp.last_d AS last_purchase_date,
+               COALESCE(exp.cnt, 0)::integer AS expense_count,
+               (COALESCE(exp.total, 0) + COALESCE(bil.total, 0))::bigint AS spend_total_cents,
+               (COALESCE(exp.ytd, 0) + COALESCE(bil.ytd, 0))::bigint AS spend_ytd_cents,
+               (COALESCE(exp.mtd, 0) + COALESCE(bil.mtd, 0))::bigint AS spend_mtd_cents,
+               GREATEST(exp.last_d, bil.last_d) AS last_activity_date,
+               COALESCE(vb.balance_cents, 0)::bigint AS open_balance_cents
+             FROM exp
+             FULL OUTER JOIN bil ON exp.vid = bil.vid
+             LEFT JOIN accounting.vendor_balances vb
+               ON vb.operating_company_id = $1::uuid
+              AND vb.vendor_id = COALESCE(exp.vid, bil.vid)`,
             [resolvedOperatingCompanyId, yearStart]
           );
         });
@@ -79,6 +130,12 @@ export async function registerVendorRollupsRoutes(app: FastifyInstance) {
           purchases_total_cents: Number(row.purchases_total_cents),
           last_purchase_date: row.last_purchase_date,
           expense_count: row.expense_count,
+          // VC-LIST-01 additive fields.
+          spend_total_cents: Number(row.spend_total_cents),
+          spend_ytd_cents: Number(row.spend_ytd_cents),
+          spend_mtd_cents: Number(row.spend_mtd_cents),
+          last_activity_date: row.last_activity_date,
+          open_balance_cents: Number(row.open_balance_cents),
         }));
 
         return reply.send(rollups);

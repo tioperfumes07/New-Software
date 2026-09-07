@@ -249,9 +249,9 @@ const createDispatchLoadBodySchema = z.object({
   // LOADS-MILEAGE-INTEGER-TRUNCATION (migration 202613310000 widened the columns to numeric(10,1)):
   // AlwaysTrack carries tenths of a mile; multipleOf(0.1) matches the DB precision exactly instead
   // of forcing the caller to round to a whole mile.
-  miles_practical: z.number().min(0).multipleOf(0.1).nullable().optional(),
-  miles_shortest: z.number().min(0).multipleOf(0.1).nullable().optional(),
-  miles_deadhead: z.number().min(0).multipleOf(0.1).nullable().optional(),
+  miles_practical: z.number().min(0).multipleOf(0.1).optional(),
+  miles_shortest: z.number().min(0).multipleOf(0.1).optional(),
+  miles_deadhead: z.number().min(0).multipleOf(0.1).optional(),
   mileage_source: z
     .enum([
       "History",
@@ -275,7 +275,9 @@ const createDispatchLoadBodySchema = z.object({
   // Trip Pairing (Block 04): optional at the API for now (Phase 1, additive — no break for in-flight
   // clients); the wizard makes it REQUIRED on the UI, and a follow-up flips this to required once the
   // selector ships on all clients. NB starts a tour; TR/SB pass the tour_id to join.
-  trip_type: z.enum(["NB", "TR", "SB"]).optional(),
+  // TRIP-LOCAL-ENUM (owner order 2026-09-06): Laredo->Laredo = LOCAL, mdata.trip_type_enum
+  // migration 202613850000.
+  trip_type: z.enum(["NB", "TR", "SB", "LOCAL"]).optional(),
   tour_id: z.string().uuid().optional(),
   assigned_unit_id: z.string().uuid().optional(),
   // W-FIX-3b: persisted after load creation to dispatch.load_assignment_history.new_trailer_id.
@@ -407,7 +409,9 @@ const updateDispatchLoadBodySchema = z.object({
   miles_practical: z.number().min(0).multipleOf(0.1).nullable().optional(),
   miles_shortest: z.number().min(0).multipleOf(0.1).nullable().optional(),
   miles_deadhead: z.number().min(0).multipleOf(0.1).nullable().optional(),
-  trip_type: z.enum(["NB", "TR", "SB"]).optional(),
+  // TRIP-LOCAL-ENUM (owner order 2026-09-06): Laredo->Laredo = LOCAL, mdata.trip_type_enum
+  // migration 202613850000.
+  trip_type: z.enum(["NB", "TR", "SB", "LOCAL"]).optional(),
   // DISPATCH-LOAD-PATCH-COMMODITY-COLUMN-MISSING-500 (2026-08-27): commodity/cargo_weight_lbs/
   // reefer_setpoint_temp_f were REMOVED here because mdata.loads had never had these columns
   // (verified live, no migration ever added them), so accepting them fed update-load.service.ts's
@@ -901,7 +905,7 @@ export async function registerDispatchLoadRoutes(app: FastifyInstance) {
           LEFT JOIN mdata.customers c ON c.id = l.customer_id
                                 AND c.operating_company_id = l.operating_company_id
           LEFT JOIN LATERAL (
-            SELECT city, state, scheduled_arrival_at
+            SELECT city, state, scheduled_arrival_at, appointment_start_at
             FROM mdata.load_stops
             WHERE load_id = l.id AND stop_type = 'pickup'
               AND soft_deleted_at IS NULL
@@ -909,7 +913,7 @@ export async function registerDispatchLoadRoutes(app: FastifyInstance) {
             LIMIT 1
           ) sp ON true
           LEFT JOIN LATERAL (
-            SELECT city, state, scheduled_arrival_at
+            SELECT city, state, scheduled_arrival_at, appointment_start_at
             FROM mdata.load_stops
             WHERE load_id = l.id AND stop_type = 'delivery'
               AND soft_deleted_at IS NULL
@@ -957,6 +961,11 @@ export async function registerDispatchLoadRoutes(app: FastifyInstance) {
             sp.state AS pickup_state,
             sd.city AS delivery_city,
             sd.state AS delivery_state,
+            -- RT-FIX (lead, 2026-09-06): the Round Trips timeline positioned bars on created_at because the list
+            -- never carried the stop dates — every backfilled August load stacked on the day it was booked.
+            -- First pickup / last delivery appointment (or scheduled arrival), from the same sp/sd laterals.
+            COALESCE(sp.appointment_start_at, sp.scheduled_arrival_at) AS pickup_scheduled_at,
+            COALESCE(sd.appointment_start_at, sd.scheduled_arrival_at) AS delivery_scheduled_at,
             -- gap-21: Active Load → Invoice reverse linkage (read-only drill-through, §10 Linkage Law).
             -- Surfaces the load's most-recent non-void invoice so the dispatch board can show billing
             -- state per load. Pure display enrichment — no write / no GL posting. accounting.invoices is
@@ -1006,7 +1015,7 @@ export async function registerDispatchLoadRoutes(app: FastifyInstance) {
           LEFT JOIN mdata.loads ml ON ml.id = l.id
                                   AND ml.operating_company_id = l.operating_company_id
           LEFT JOIN LATERAL (
-            SELECT city, state, scheduled_arrival_at
+            SELECT city, state, scheduled_arrival_at, appointment_start_at
             FROM mdata.load_stops
             WHERE load_id = l.id AND stop_type = 'pickup'
               AND soft_deleted_at IS NULL
@@ -1014,7 +1023,7 @@ export async function registerDispatchLoadRoutes(app: FastifyInstance) {
             LIMIT 1
           ) sp ON true
           LEFT JOIN LATERAL (
-            SELECT city, state, scheduled_arrival_at
+            SELECT city, state, scheduled_arrival_at, appointment_start_at
             FROM mdata.load_stops
             WHERE load_id = l.id AND stop_type = 'delivery'
               AND soft_deleted_at IS NULL
@@ -2030,11 +2039,16 @@ export async function registerDispatchLoadRoutes(app: FastifyInstance) {
             ON l.assigned_unit_id = u.id
             AND l.operating_company_id = $1::uuid
             AND l.soft_deleted_at IS NULL
+            -- DSP-BAND-DUP (owner 2026-09-06): a truck is "occupied" only by an IN-FLIGHT load. Once a
+            -- load reaches delivered_pending_docs the truck has physically delivered and is FREE for the
+            -- next dispatch, so it must NOT count as an active load here — otherwise a truck with only a
+            -- delivered-pending-docs backlog (T171/T173/T156/T170/T163/T176) is dropped from Awaiting AND
+            -- excluded from the Booked band (delivered_pending_docs is terminal there), and vanishes. It
+            -- now surfaces ONCE in Awaiting. In-flight = assigned_not_dispatched/dispatched/in_transit.
             AND l.status IN (
               'assigned_not_dispatched'::mdata.load_status_enum,
               'dispatched'::mdata.load_status_enum,
-              'in_transit'::mdata.load_status_enum,
-              'delivered_pending_docs'::mdata.load_status_enum
+              'in_transit'::mdata.load_status_enum
             )
           -- The unit's DEFAULT driver (mdata.units.assigned_driver_id), so awaiting-truck rows can
           -- show Driver + HOS even with no load. (The old join used the load's driver, which is

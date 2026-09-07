@@ -52,6 +52,15 @@ describe("settlement-bill-payment.math", () => {
     expect(bucketRecoveryRoleKey(" fuel ")).toBe("fuel_advance_recovery");
   });
 
+  it("SETL-CLOSE-POST-A follow-up: 'company_vehicle_fuel' maps to the REGISTERED company_fuel_advance_expense role, never a phantom 'company_vehicle_fuel_recovery'", () => {
+    // company_fuel_advance_expense (5000 Fuel & Diesel) is the role the deduction-creation path
+    // already resolves 'company_vehicle_fuel' to at create time; this function's own naive
+    // `${type}_recovery` derivation had no matching alias, so the payrun-close consumption side
+    // derived 'company_vehicle_fuel_recovery' instead — a role never bound anywhere — and refused
+    // to preview any settlement carrying one of these deductions. Found live 2026-09-06 on S-13654.
+    expect(bucketRecoveryRoleKey("company_vehicle_fuel")).toBe("company_fuel_advance_expense");
+  });
+
   it("allocates deductions across bills oldest-first, capped at each gross; sum == min(D,G)", () => {
     // Blueprint worked example: bills 525,480,510 (=1515), deductions 275.
     const alloc = allocateDeductionsAcrossBills([52500, 48000, 51000], 27500);

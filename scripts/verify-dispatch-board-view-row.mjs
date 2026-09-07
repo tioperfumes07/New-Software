@@ -11,6 +11,7 @@ import { readFileSync } from "node:fs";
 
 const DISPATCH = "apps/frontend/src/pages/Dispatch.tsx";
 const KANBAN = "apps/frontend/src/components/dispatch/DispatchKanban.tsx";
+const BOARD = "apps/frontend/src/pages/dispatch/DispatchBoard.tsx";
 
 function auditDispatch(src) {
   const f = [];
@@ -27,6 +28,25 @@ function auditDispatch(src) {
   // actions. A regression would reintroduce `variant={view === "kanban"` on a Button.
   if (/<Button[^>]*variant=\{view === "kanban"/.test(src))
     f.push(`${DISPATCH}: the Kanban <Button> is back in the top banner — it belongs in the board-view row`);
+  // LB-CHROME-1 (LEAD ROUND 13, 2026-09-06 — Dispatch Board Preview PDF §1): measured live as TWO
+  // stacked control rows (this board-view row + DispatchBoard's own separate "Board view:
+  // List/Table/Assignment" card underneath). Re-pinned: the board-view row must carry a stable
+  // portal-target anchor (#dispatch-board-mode-slot) DispatchBoard renders its own List/Table/
+  // Assignment toggle into, so both groups land on the same line/height as ONE segmented toolbar
+  // instead of two.
+  if (!/id="dispatch-board-mode-slot"/.test(src))
+    f.push(`${DISPATCH}: the board-view row must carry the #dispatch-board-mode-slot portal anchor so DispatchBoard's List/Table/Assignment toggle renders on the SAME row (LB-CHROME-1)`);
+  return f;
+}
+
+function auditBoard(src) {
+  const f = [];
+  // The other half of the LB-CHROME-1 fix: DispatchBoard must actually portal into that anchor
+  // (falling back to its own card only when the anchor is absent, e.g. its own standalone tests).
+  if (!/getElementById\("dispatch-board-mode-slot"\)/.test(src))
+    f.push(`${BOARD}: must look up #dispatch-board-mode-slot and portal its Board view toggle there (LB-CHROME-1)`);
+  if (!/createPortal\(/.test(src))
+    f.push(`${BOARD}: must use createPortal to render the Board view toggle into the shared row when the anchor exists (LB-CHROME-1)`);
   return f;
 }
 
@@ -47,8 +67,9 @@ function main() {
   const selftest = process.argv.includes("--selftest");
   const dispatchSrc = readFileSync(DISPATCH, "utf8");
   const kanbanSrc = readFileSync(KANBAN, "utf8");
+  const boardSrc = readFileSync(BOARD, "utf8");
 
-  const failures = [...auditDispatch(dispatchSrc), ...auditKanban(kanbanSrc)];
+  const failures = [...auditDispatch(dispatchSrc), ...auditKanban(kanbanSrc), ...auditBoard(boardSrc)];
   if (failures.length) {
     console.error("FAIL verify-dispatch-board-view-row:");
     for (const x of failures) console.error(`  - ${x}`);
@@ -66,7 +87,22 @@ function main() {
       console.error("SELFTEST FAIL: reverting the lane header border did not trip the guard");
       process.exit(1);
     }
-    console.log("SELFTEST OK: guard trips on both mutations");
+    const mut3 = dispatchSrc.replace('id="dispatch-board-mode-slot"', 'id="nope"');
+    if (auditDispatch(mut3).length === 0) {
+      console.error("SELFTEST FAIL: removing the board-mode-slot anchor did not trip the guard");
+      process.exit(1);
+    }
+    const mut4 = boardSrc.replace(/getElementById\("dispatch-board-mode-slot"\)/, 'getElementById("nope")');
+    if (auditBoard(mut4).length === 0) {
+      console.error("SELFTEST FAIL: breaking DispatchBoard's anchor lookup did not trip the guard");
+      process.exit(1);
+    }
+    const mut5 = boardSrc.replace(/createPortal\(/g, "renderInline(");
+    if (auditBoard(mut5).length === 0) {
+      console.error("SELFTEST FAIL: removing createPortal did not trip the guard");
+      process.exit(1);
+    }
+    console.log("SELFTEST OK: guard trips on all mutations");
   }
 
   console.log("PASS verify-dispatch-board-view-row");

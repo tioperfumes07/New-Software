@@ -26,8 +26,11 @@ import { registerUnitsRoutes } from "./units.routes.js";
 import { registerVendorRoutes } from "./vendors.routes.js";
 import { registerVendorPaymentMethodRoutes } from "./vendor-payment-methods.routes.js";
 import { registerVendorRollupsRoutes } from "./vendor-rollups.routes.js";
+import { registerCustomerFinanceRollupRoutes } from "./customer-finance-rollup.routes.js";
+import { warmYardBiasCoordinates } from "./yard-location.service.js";
 
 export async function registerMdataRoutes(app: FastifyInstance) {
+  await warmYardBiasCoordinates();
   await registerDriverRoutes(app);
   await registerDriverLabelsRoutes(app);
   await registerDriverTagsRoutes(app);
@@ -45,6 +48,7 @@ export async function registerMdataRoutes(app: FastifyInstance) {
   await registerCustomerBulkRoutes(app);
   await registerCustomerFinancialSummaryRoutes(app);
   await registerCustomerInvoicesRoutes(app);
+  await registerCustomerFinanceRollupRoutes(app);
   await registerVendorRoutes(app);
   await registerVendorPaymentMethodRoutes(app);
   await registerVendorRollupsRoutes(app);

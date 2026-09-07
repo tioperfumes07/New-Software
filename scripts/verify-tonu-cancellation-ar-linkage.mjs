@@ -86,7 +86,7 @@ if (process.argv.includes("--selftest") || process.argv.includes("--self-test"))
       file: SVC,
       mutate: (text) =>
         text.replace(
-          /await client\.query\(\s*`\s*\n\s*UPDATE dispatch\.load_cancellations[\s\S]*?\[row\.rows\[0\]\?\.id, tonuInvoice\.invoiceId, tonuInvoice\.invoiceLineId, userId\]\s*\);/,
+          /const backlinkRes = await client\.query<\{ id: string \}>\(\s*`\s*\n\s*UPDATE dispatch\.load_cancellations[\s\S]*?\[cancellation\.id, tonuInvoice\.invoiceId, tonuInvoice\.invoiceLineId, userId, input\.operating_company_id\]\s*\);/,
           ""
         ),
     },

@@ -277,6 +277,76 @@ export async function registerLoadCostsBoardRoutes(app: FastifyInstance) {
       return { rows: result.rows, unmatched_bank_count: unmatchedBank, linkage: LOAD_COSTS_HUB_LINKAGE };
     });
   });
+
+  // LCB-REG (owner 2026-09-05, "the Documents tab is a note"). Real register of every document
+  // linked to a load on this board, from BOTH document mechanisms this repo has (hub item 11
+  // above, extended): docs.files (the newer generic uploader -- linked to a load either directly
+  // via dispatch_load_id, the driver/shipper-portal path, OR polymorphically via docs.file_links
+  // entity_type='load', the UploadZone path -- confirmed live, 2026-09-05: 0 overlap between the
+  // two, safe to UNION) and documents.attachments (the older receipt mechanism, entity_type
+  // expense/bill, joined back to its load). Read-only, company-scoped, capped like every other
+  // register on this page.
+  app.get(
+    "/api/v1/accounting/load-costs-board/documents",
+    { config: { rateLimit: { max: 60, timeWindow: "1 minute" } } },
+    async (req, reply) => {
+      const user = currentAuthUser(req, reply);
+      if (!user) return;
+      if (!["Owner", "Administrator", "Accountant", "Dispatcher", "SuperAdmin"].includes(String(user.role ?? ""))) {
+        return reply.code(403).send({ error: "forbidden" });
+      }
+      const parsed = companyQuerySchema.safeParse(req.query ?? {});
+      if (!parsed.success) return validationError(reply, parsed.error);
+
+      return withCompanyScope(String(user.uuid), parsed.data.operating_company_id, async (client) => {
+        const result = await client.query(
+          `
+            SELECT * FROM (
+              SELECT f.id::text, f.created_at AS date, f.dispatch_load_id::text AS load_id,
+                     COALESCE(fc.label, 'Document') AS type, f.original_filename AS filename,
+                     f.size_bytes::text, 'docs.files' AS source, NULL::text AS entity_type, NULL::text AS entity_id
+                FROM docs.files f
+                LEFT JOIN catalogs.file_categories fc ON fc.id = f.category_id
+               WHERE f.operating_company_id = $1::uuid AND f.deleted_at IS NULL
+                 AND f.upload_completed_at IS NOT NULL AND f.dispatch_load_id IS NOT NULL
+              UNION ALL
+              SELECT f.id::text, f.created_at AS date, fl.entity_id::text AS load_id,
+                     COALESCE(fc.label, 'Document') AS type, f.original_filename AS filename,
+                     f.size_bytes::text, 'docs.files' AS source, NULL::text AS entity_type, NULL::text AS entity_id
+                FROM docs.files f
+                JOIN docs.file_links fl ON fl.file_id = f.id AND fl.deleted_at IS NULL AND fl.entity_type = 'load'
+                LEFT JOIN catalogs.file_categories fc ON fc.id = f.category_id
+               WHERE f.operating_company_id = $1::uuid AND f.deleted_at IS NULL AND f.upload_completed_at IS NOT NULL
+              UNION ALL
+              SELECT a.id::text, a.uploaded_at AS date, e.load_id::text AS load_id,
+                     COALESCE(a.category, 'Receipt') AS type, a.filename,
+                     a.size_bytes::text, 'documents.attachments' AS source, a.entity_type, a.entity_id::text AS entity_id
+                FROM documents.attachments a
+                JOIN accounting.expenses e ON e.id = a.entity_id AND e.operating_company_id = $1::uuid
+               WHERE a.operating_company_id = $1::uuid AND a.is_deleted = false
+                 AND a.entity_type = 'expense' AND e.load_id IS NOT NULL
+              UNION ALL
+              SELECT a.id::text, a.uploaded_at AS date, bl_load.load_id::text AS load_id,
+                     COALESCE(a.category, 'Receipt') AS type, a.filename,
+                     a.size_bytes::text, 'documents.attachments' AS source, a.entity_type, a.entity_id::text AS entity_id
+                FROM documents.attachments a
+                JOIN LATERAL (
+                  SELECT bl.load_id FROM accounting.bill_lines bl
+                   WHERE bl.bill_id = a.entity_id AND bl.load_id IS NOT NULL
+                   ORDER BY bl.created_at ASC LIMIT 1
+                ) bl_load ON true
+               WHERE a.operating_company_id = $1::uuid AND a.is_deleted = false AND a.entity_type = 'bill'
+            ) docs
+            WHERE docs.load_id IS NOT NULL
+            ORDER BY docs.date DESC
+            LIMIT 500
+          `,
+          [parsed.data.operating_company_id]
+        );
+        return { rows: result.rows };
+      });
+    }
+  );
 }
 
 export default fp(async (app) => {

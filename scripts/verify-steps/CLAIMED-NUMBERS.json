@@ -1,33 +1,8 @@
 {
-  "10421": {
-    "claimed_at": "2026-09-05",
-    "claimed_by": "cc-1",
-    "purpose": "verify-je-debit-credit-columns"
-  },
-  "10423": {
-    "claimed_at": "2026-09-05",
+  "10791": {
+    "claimed_at": "2026-09-06",
     "claimed_by": "cc-2",
-    "purpose": "verify-google-reference-miles"
-  },
-  "10419": {
-    "claimed_at": "2026-09-05",
-    "claimed_by": "cc-2",
-    "purpose": "verify-booking-stop-geocode"
-  },
-  "10415": {
-    "claimed_at": "2026-09-05",
-    "claimed_by": "cc-2",
-    "purpose": "verify-dispatch-sheet-customer-po-number"
-  },
-  "10411": {
-    "claimed_at": "2026-09-05",
-    "claimed_by": "cc-2",
-    "purpose": "verify-book-load-geofence-status-surfaced"
-  },
-  "10407": {
-    "claimed_at": "2026-09-05",
-    "claimed_by": "cc-2",
-    "purpose": "verify-book-load-geofence-service-layer"
+    "purpose": "verify-round1621-rule-match-prefill"
   },
   "2426": {
     "claimed_at": "2026-08-31",
@@ -125,8 +100,8 @@
     "purpose": "verify-col-05-money-column-triad"
   },
   "2466": {
-    "claimed_by": "cursor/u6-tieout",
     "claimed_at": "2026-09-01T13:11:21.248Z",
+    "claimed_by": "cursor/u6-tieout",
     "file": "2466-verify-tieout-usmca-scope-pin.mjs"
   },
   "2912": {
@@ -167,7 +142,7 @@
   "2956": {
     "claimed_at": "2026-08-14",
     "claimed_by": "cursor",
-    "purpose": "verify-cursor-vertical-qbo-picker-modules (reports→accounting→… vertical)"
+    "purpose": "verify-cursor-vertical-qbo-picker-modules (reports\u2192accounting\u2192\u2026 vertical)"
   },
   "2957": {
     "claimed_at": "2026-08-09",
@@ -601,7 +576,7 @@
     "claimed_by": "cursor",
     "guard": "verify-fuel-office-create-modal",
     "lane": "cursor",
-    "note": "CLAIM-RESERVE: FuelPlanner History + Create modal → POST /api/v1/fuel/transactions",
+    "note": "CLAIM-RESERVE: FuelPlanner History + Create modal \u2192 POST /api/v1/fuel/transactions",
     "purpose": "verify-fuel-office-create-modal"
   },
   "3141": {
@@ -1081,6 +1056,11 @@
     "claimed_by": "cursor",
     "purpose": "verify-lists-detail-types-list-cap-le-200"
   },
+  "3348": {
+    "claimed_at": "2026-09-06",
+    "claimed_by": "cursor",
+    "purpose": "verify-settlements-module-one-readout"
+  },
   "3349": {
     "claimed_at": "2026-08-14",
     "claimed_by": "cc-1",
@@ -1101,6 +1081,11 @@
     "claimed_at": "2026-08-14",
     "claimed_by": "cc-1",
     "purpose": "verify-liability-required-honest-cluster-a-false-required"
+  },
+  "3354": {
+    "claimed_at": "2026-09-06",
+    "claimed_by": "cursor",
+    "purpose": "verify-settlements-module-two-card-detail"
   },
   "3357": {
     "claimed_at": "2026-08-14",
@@ -1819,7 +1804,7 @@
     "guard": "verify-safety-dot-compliance-hooks",
     "lane": "cursor",
     "name": "verify-safety-dot-compliance-hooks",
-    "note": "LV-SAFETY-DOT-COMPLIANCE-CRASH — hooks before early return",
+    "note": "LV-SAFETY-DOT-COMPLIANCE-CRASH \u2014 hooks before early return",
     "purpose": "verify-safety-dot-compliance-hooks"
   },
   "3658": {
@@ -1960,7 +1945,7 @@
     "claimed_at": "2026-08-17",
     "claimer": "cursor",
     "guard": "verify-sys-edi-picker-applicability",
-    "note": "SYS-EDI-PICKER-APPLICABILITY-THEATER — EDI wizard owes no picker_law"
+    "note": "SYS-EDI-PICKER-APPLICABILITY-THEATER \u2014 EDI wizard owes no picker_law"
   },
   "3706": {
     "band": "cursor-even",
@@ -2160,7 +2145,7 @@
     "claimed_at": "2026-08-18T03:15:00Z",
     "claimed_by": "cursor",
     "guard": "verify-print-opens-canonical-document",
-    "note": "CLAIM-RESERVE — Print opens wrapPdfDocument HTML (invoice/settlement/dispatch-sheet), not SPA window.print chrome"
+    "note": "CLAIM-RESERVE \u2014 Print opens wrapPdfDocument HTML (invoice/settlement/dispatch-sheet), not SPA window.print chrome"
   },
   "3793": "verify-bill-allocation-assets-limit-in-bounds",
   "3797": "verify-cash-advances-view-load-column-present",
@@ -2176,115 +2161,115 @@
     "claimed_at": "2026-08-18T03:35:00Z",
     "claimed_by": "cursor",
     "guard": "verify-bill-print-opens-letter-html",
-    "note": "CLAIM-RESERVE — Bill Print opens letter HTML (wrapPdfDocument), not SPA window.print"
+    "note": "CLAIM-RESERVE \u2014 Bill Print opens letter HTML (wrapPdfDocument), not SPA window.print"
   },
   "3832": {
     "claimed_at": "2026-08-18T03:40:00Z",
     "claimed_by": "cursor",
     "guard": "verify-bill-payment-print-letter",
-    "note": "CLAIM-RESERVE — Bill payment Print opens letter HTML, not SPA window.print"
+    "note": "CLAIM-RESERVE \u2014 Bill payment Print opens letter HTML, not SPA window.print"
   },
   "3834": {
     "claimed_at": "2026-08-18T03:50:00Z",
     "claimed_by": "cursor",
     "guard": "verify-expense-print-letter",
-    "note": "CLAIM-RESERVE — Expense Print opens letter HTML, not SPA window.print"
+    "note": "CLAIM-RESERVE \u2014 Expense Print opens letter HTML, not SPA window.print"
   },
   "3836": {
     "claimed_at": "2026-08-18T04:00:00Z",
     "claimed_by": "cursor",
     "guard": "verify-account-register-print-letter",
-    "note": "CLAIM-RESERVE — Account register Print opens letter HTML, not SPA window.print"
+    "note": "CLAIM-RESERVE \u2014 Account register Print opens letter HTML, not SPA window.print"
   },
   "3838": {
     "claimed_at": "2026-08-18T04:05:00Z",
     "claimed_by": "cursor",
     "guard": "verify-ap-aging-print-letter",
-    "note": "CLAIM-RESERVE — AP aging Print opens letter HTML, not SPA window.print"
+    "note": "CLAIM-RESERVE \u2014 AP aging Print opens letter HTML, not SPA window.print"
   },
   "3840": {
     "claimed_at": "2026-08-18T04:06:00Z",
     "claimed_by": "cursor",
     "guard": "verify-ar-aging-print-letter",
-    "note": "CLAIM-RESERVE — Reports AR aging Print opens letter HTML, not SPA window.print"
+    "note": "CLAIM-RESERVE \u2014 Reports AR aging Print opens letter HTML, not SPA window.print"
   },
   "3842": {
     "claimed_at": "2026-08-18T04:12:00Z",
     "claimed_by": "cursor",
     "guard": "verify-profit-loss-print-letter",
-    "note": "CLAIM-RESERVE — P&L Print opens letter HTML, not SPA window.print"
+    "note": "CLAIM-RESERVE \u2014 P&L Print opens letter HTML, not SPA window.print"
   },
   "3844": {
     "claimed_at": "2026-08-18T04:15:00Z",
     "claimed_by": "cursor",
     "guard": "verify-balance-sheet-print-letter",
-    "note": "CLAIM-RESERVE — Balance Sheet Print opens letter HTML, not SPA window.print"
+    "note": "CLAIM-RESERVE \u2014 Balance Sheet Print opens letter HTML, not SPA window.print"
   },
   "3846": {
     "claimed_at": "2026-08-18T04:16:00Z",
     "claimed_by": "cursor",
     "guard": "verify-trial-balance-print-letter",
-    "note": "CLAIM-RESERVE — Trial Balance Print opens letter HTML, not SPA window.print"
+    "note": "CLAIM-RESERVE \u2014 Trial Balance Print opens letter HTML, not SPA window.print"
   },
   "3848": {
     "claimed_at": "2026-08-18T04:20:00Z",
     "claimed_by": "cursor",
     "guard": "verify-cash-flow-statement-print-letter",
-    "note": "CLAIM-RESERVE — Cash Flow Statement Print opens letter HTML, not SPA window.print"
+    "note": "CLAIM-RESERVE \u2014 Cash Flow Statement Print opens letter HTML, not SPA window.print"
   },
   "3850": {
     "claimed_at": "2026-08-18T04:25:00Z",
     "claimed_by": "cursor",
     "guard": "verify-cash-flow-overview-print-letter",
-    "note": "CLAIM-RESERVE — Cash Flow Overview Print opens letter HTML, not SPA window.print"
+    "note": "CLAIM-RESERVE \u2014 Cash Flow Overview Print opens letter HTML, not SPA window.print"
   },
   "3852": {
     "claimed_at": "2026-08-18T04:35:00Z",
     "claimed_by": "cursor",
     "guard": "verify-reports-ap-aging-print-letter",
-    "note": "CLAIM-RESERVE — Reports AP Aging Print opens letter HTML, not SPA window.print"
+    "note": "CLAIM-RESERVE \u2014 Reports AP Aging Print opens letter HTML, not SPA window.print"
   },
   "3854": {
     "claimed_at": "2026-08-18T04:40:00Z",
     "claimed_by": "cursor",
     "guard": "verify-profit-per-truck-print-letter",
-    "note": "CLAIM-RESERVE — Profit Per Truck Print opens letter HTML, not SPA window.print"
+    "note": "CLAIM-RESERVE \u2014 Profit Per Truck Print opens letter HTML, not SPA window.print"
   },
   "3856": {
     "claimed_at": "2026-08-18T04:45:00Z",
     "claimed_by": "cursor",
     "guard": "verify-fuel-reconciliation-print-letter",
-    "note": "CLAIM-RESERVE — Fuel Reconciliation Print opens letter HTML, not SPA window.print"
+    "note": "CLAIM-RESERVE \u2014 Fuel Reconciliation Print opens letter HTML, not SPA window.print"
   },
   "3858": {
     "claimed_at": "2026-08-18T04:50:00Z",
     "claimed_by": "cursor",
     "guard": "verify-maintenance-cost-per-unit-print-letter",
-    "note": "CLAIM-RESERVE — Maintenance Cost Per Unit Print opens letter HTML, not SPA window.print"
+    "note": "CLAIM-RESERVE \u2014 Maintenance Cost Per Unit Print opens letter HTML, not SPA window.print"
   },
   "3860": {
     "claimed_at": "2026-08-18T04:55:00Z",
     "claimed_by": "cursor",
     "guard": "verify-settlement-summary-print-letter",
-    "note": "CLAIM-RESERVE — Settlement Summary Print opens letter HTML, not SPA window.print"
+    "note": "CLAIM-RESERVE \u2014 Settlement Summary Print opens letter HTML, not SPA window.print"
   },
   "3862": {
     "claimed_at": "2026-08-18T05:00:00Z",
     "claimed_by": "cursor",
     "guard": "verify-customer-profitability-print-letter",
-    "note": "CLAIM-RESERVE — Customer Profitability Print opens letter HTML, not SPA window.print"
+    "note": "CLAIM-RESERVE \u2014 Customer Profitability Print opens letter HTML, not SPA window.print"
   },
   "3864": {
     "claimed_at": "2026-08-18T05:05:00Z",
     "claimed_by": "cursor",
     "guard": "verify-management-report-package-print-letter",
-    "note": "CLAIM-RESERVE — Management Report Package Print opens letter HTML, not SPA window.print"
+    "note": "CLAIM-RESERVE \u2014 Management Report Package Print opens letter HTML, not SPA window.print"
   },
   "3866": {
     "claimed_at": "2026-08-18T05:10:00Z",
     "claimed_by": "cursor",
     "guard": "verify-finance-statements-print-letter",
-    "note": "CLAIM-RESERVE — Finance FinancialStatementsPage Print opens letter HTML, not SPA window.print"
+    "note": "CLAIM-RESERVE \u2014 Finance FinancialStatementsPage Print opens letter HTML, not SPA window.print"
   },
   "3868": {
     "claimed_at": "2026-08-18",
@@ -4359,6 +4344,46 @@
     "claimed_by": "cc-3",
     "purpose": "verify-wo-pdf-cost-breakdown-line-fallback"
   },
+  "8054": {
+    "claimed_at": "2026-09-05",
+    "claimed_by": "cursor",
+    "purpose": "verify-ldt-0-tabbar-header"
+  },
+  "8056": {
+    "claimed_at": "2026-09-05",
+    "claimed_by": "claude-lead (LDT reassigned by owner 2026-09-06 00:2xZ; was cursor)",
+    "purpose": "verify-ldt-1-costs-cards"
+  },
+  "8058": {
+    "claimed_at": "2026-09-05",
+    "claimed_by": "cursor",
+    "purpose": "verify-ldt-2-stops-record"
+  },
+  "8060": {
+    "claimed_at": "2026-09-05",
+    "claimed_by": "cursor",
+    "purpose": "verify-ldt-3-driver-pay"
+  },
+  "8062": {
+    "claimed_at": "2026-09-05",
+    "claimed_by": "cursor",
+    "purpose": "verify-ldt-4-factoring-money"
+  },
+  "8064": {
+    "claimed_at": "2026-09-05",
+    "claimed_by": "claude-lead (LDT reassigned by owner 2026-09-06; was cursor)",
+    "purpose": "verify-ldt-5-presettlement-readout"
+  },
+  "8066": {
+    "claimed_at": "2026-09-05",
+    "claimed_by": "claude-lead (LDT reassigned by owner 2026-09-06; was cursor)",
+    "purpose": "verify-ldt-6-settlement-frozen"
+  },
+  "8068": {
+    "claimed_at": "2026-09-05",
+    "claimed_by": "cursor",
+    "purpose": "verify-ldt-7-audit-english"
+  },
   "8120": {
     "claimed_at": "2026-08-24",
     "claimed_by": "cc-3",
@@ -4627,7 +4652,7 @@
   "9859": {
     "claimed_at": "2026-08-27",
     "claimed_by": "cc-3",
-    "note": "COLLISION RESOLVED 2026-08-28: cc-2's claim-reserve commit d837e234db (23:24:18) landed AFTER cc-3's file already merged on origin/main (a6801b12, earlier same session) with this exact number and a near-identical purpose (GET-only + no UPDATE/DELETE on _system.reconciliation_findings anywhere in the backend, table-wide not integration-scoped, so it already covers 'ledger' once that value exists). cc-2's reservation is superseded — see INBOX-CC-2.md for the redirect to 9863.",
+    "note": "COLLISION RESOLVED 2026-08-28: cc-2's claim-reserve commit d837e234db (23:24:18) landed AFTER cc-3's file already merged on origin/main (a6801b12, earlier same session) with this exact number and a near-identical purpose (GET-only + no UPDATE/DELETE on _system.reconciliation_findings anywhere in the backend, table-wide not integration-scoped, so it already covers 'ledger' once that value exists). cc-2's reservation is superseded \u2014 see INBOX-CC-2.md for the redirect to 9863.",
     "purpose": "verify-ledger-health-no-human-resolve"
   },
   "9863": {
@@ -4689,7 +4714,7 @@
   "9883": {
     "claimed_at": "2026-08-28",
     "claimed_by": "cc-2",
-    "note": "9881 was claimed first but is n%4=1 (ODD) — verify-verify-step-lane-band.mjs requires cc-2 to claim ≡3 (mod 4); 9883 is the correct number, 9881 stays reserved-but-unused",
+    "note": "9881 was claimed first but is n%4=1 (ODD) \u2014 verify-verify-step-lane-band.mjs requires cc-2 to claim \u22613 (mod 4); 9883 is the correct number, 9881 stays reserved-but-unused",
     "purpose": "verify-banking-factoring-timeline-no-silent-catch"
   },
   "9887": {
@@ -5151,8 +5176,8 @@
     "purpose": "verify-load-cancel-void-cascade"
   },
   "10186": {
-    "claimed_by": "cursor",
     "claimed_at": "2026-09-01",
+    "claimed_by": "cursor",
     "purpose": "verify-permission-model (owner-escalation: no lucia escape; Admin cannot assign Owner; allow_owner_bootstrap recovery)"
   },
   "10188": {
@@ -5161,8 +5186,8 @@
     "purpose": "list-search-builder"
   },
   "10189": {
-    "claimed_by": "cc-1",
     "claimed_at": "2026-09-01",
+    "claimed_by": "cc-1",
     "purpose": "verify-settlement-void-cascade (SETL-NO-VOID-PATH-01 + BANK-ORPHAN-01)"
   },
   "10190": {
@@ -5172,27 +5197,27 @@
   },
   "10192": {
     "claimed_at": "2026-08-31",
-    "purpose": "verify-accounting-toolbar-one-create",
-    "lane": "cursor"
+    "lane": "cursor",
+    "purpose": "verify-accounting-toolbar-one-create"
   },
   "10193": {
-    "claimed_by": "cc-1",
     "claimed_at": "2026-09-01",
+    "claimed_by": "cc-1",
     "purpose": "verify-inv-open-void-respects-void (INV-OPEN-VOID-01)"
   },
   "10197": {
-    "claimed_by": "cc-1",
     "claimed_at": "2026-09-01",
+    "claimed_by": "cc-1",
     "purpose": "verify-bank-orphan-backfill-authorized-path (BANK-ORPHAN-01 one-time backfill for the 4 pre-fix orphaned bank_transactions)"
   },
   "10201": {
-    "claimed_by": "cc-1",
     "claimed_at": "2026-09-01",
+    "claimed_by": "cc-1",
     "purpose": "verify-driver-bill-remint-screen (bills never auto-created remint screen, LAW-FIX-INSTANTLY item 8)"
   },
   "10205": {
-    "claimed_by": "cc-1",
     "claimed_at": "2026-09-01",
+    "claimed_by": "cc-1",
     "purpose": "verify-settlement-detail-identity-guard (SETL-SELECTION-BINDING reopened, CASCADE root-caused)"
   },
   "10206": {
@@ -5206,55 +5231,55 @@
     "purpose": "verify-driver-hub-overview-request-surfaces"
   },
   "10209": {
-    "claimed_by": "cc-1",
     "claimed_at": "2026-09-01",
+    "claimed_by": "cc-1",
     "purpose": "verify-three-dates-cleared-date (THREE-DATES-COVERAGE-GAP, owner ruling)"
   },
   "10210": {
-    "claimed_by": "cursor",
     "claimed_at": "2026-09-01",
+    "claimed_by": "cursor",
     "purpose": "verify-w8ben-no-fake-esign (WIR-04 blocked honesty)"
   },
   "10213": {
-    "claimed_by": "cc-1",
     "claimed_at": "2026-09-01",
+    "claimed_by": "cc-1",
     "purpose": "verify-negative-settlement-liability-posted (RULING B, owner ruling)"
   },
   "10217": {
-    "claimed_by": "cc-1",
     "claimed_at": "2026-09-01",
+    "claimed_by": "cc-1",
     "purpose": "verify-exp-posted-no-je-void-and-bulk (EXP-POSTED-NO-JE-01, owner ruling)"
   },
   "10218": {
-    "claimed_by": "cursor",
     "claimed_at": "2026-09-01",
-    "purpose": "verify-load-mark-invoiced-ui (completed_docs_received→invoiced live path)"
+    "claimed_by": "cursor",
+    "purpose": "verify-load-mark-invoiced-ui (completed_docs_received\u2192invoiced live path)"
   },
   "10220": "verify-lists-catalog-search-debounced",
   "10221": {
-    "claimed_by": "cc-1",
     "claimed_at": "2026-09-01",
+    "claimed_by": "cc-1",
     "purpose": "verify-settlement-header-backlink-written (repair duplicate 3909 claim collision)"
   },
   "10222": "verify-driver-pay-rate-create-writes-billing-table",
   "10224": {
-    "claimed_by": "cursor",
     "claimed_at": "2026-09-01",
+    "claimed_by": "cursor",
     "purpose": "verify-company-settlement-5753-pl (GO-19 slice 20)"
   },
   "10225": {
-    "claimed_by": "cc-1",
     "claimed_at": "2026-09-01",
+    "claimed_by": "cc-1",
     "purpose": "verify-no-sample-bank-transaction-writes (GO-19-02, BANK-F19470)"
   },
   "10229": {
-    "claimed_by": "cc-1",
     "claimed_at": "2026-09-02",
+    "claimed_by": "cc-1",
     "purpose": "verify-go19-accessorial-parent-pl-rollup (GO-19 slice 19: 4210/4220/4230/4240 parent_account_id under 4200 for USMCA P&L roll-up; UPDATE-only, no new account)"
   },
   "10230": {
-    "claimed_by": "cc-2",
     "claimed_at": "2026-09-02",
+    "claimed_by": "cc-2",
     "purpose": "verify-ui-design-system-ratchet (GO-21 J1: registers the guard shipped in PR #19572 as an actually-executed CI step, not just a script that exists)"
   },
   "10231": {
@@ -5265,7 +5290,7 @@
   "10232": {
     "claimed_at": "2026-09-02",
     "claimed_by": "cursor",
-    "purpose": "verify-no-hard-delete-document-number-tables (GO-18 Gap 5: MAX+1 generators in display-id.ts — never hard-delete those tables)"
+    "purpose": "verify-no-hard-delete-document-number-tables (GO-18 Gap 5: MAX+1 generators in display-id.ts \u2014 never hard-delete those tables)"
   },
   "10234": {
     "claimed_at": "2026-09-02",
@@ -5273,18 +5298,18 @@
     "purpose": "verify-worm-delete-trigger-coverage (GO-18 Gap 5 corrected: every display-id.ts MAX+1 table must carry trg_worm_refuse_delete)"
   },
   "10236": {
-    "claimed_by": "cc-1",
     "claimed_at": "2026-09-03",
+    "claimed_by": "cc-1",
     "purpose": "verify-settlement-display-id-advisory-lock (ACCT-F19367 regression guard: settlement + cash-advance-request display-id generators must keep pg_advisory_xact_lock)"
   },
   "10237": {
-    "claimed_by": "cc-2",
     "claimed_at": "2026-09-03",
+    "claimed_by": "cc-2",
     "purpose": "verify-accounting-subnav-click-reachability (GO-23 nav-dropdown-clip: every ACCOUNTING_SUB_NAV_ITEMS leaf href reachable by an actual click, not just declared -- regression guard for the HoverDropdownNav overflow-y clipping bug)"
   },
   "10238": {
-    "claimed_by": "cc-1",
     "claimed_at": "2026-09-03",
+    "claimed_by": "cc-1",
     "purpose": "verify-cash-advance-disbursement-method-parity (GO-21 B8: disbursement_method must be the same set across all 6 backend+frontend surfaces)"
   },
   "10240": {
@@ -5293,304 +5318,304 @@
     "purpose": "verify-table-header-and-date-column (owner 2026-09-03: ParityTable thead #14314F/#FFFFFF; date column ratchet; zero-sortable call sites)"
   },
   "10242": {
-    "claimed_by": "claude",
     "claimed_at": "2026-09-03",
+    "claimed_by": "claude",
     "purpose": "verify-driver-pay-rate-override-reason-wired (GO-21 B5: driver_pay_rate_override_reason must stay wired end-to-end from CREATE schema through the INSERT/in-memory patch to the frontend send, or a typed per-load override rate is silently discarded again)"
   },
   "10243": {
-    "claimed_by": "cc-2",
     "claimed_at": "2026-09-03",
+    "claimed_by": "cc-2",
     "purpose": "verify-book-load-money-and-controls (CC-2-INSTRUCTIONS-09-02-2026.txt tasks 1-5: negative accessorial reaches charge lines uncapped, linehaul/fuel surcharge still clamp but raise a field error instead of silently zeroing, Invoice total binds to customerInvoiceTotal not sectionTotal alone; tasks 19-20: MoneyInput/NumberInput are h-7 with tabular-nums)"
   },
   "10244": {
-    "claimed_by": "cursor",
     "claimed_at": "2026-09-03",
+    "claimed_by": "cursor",
     "purpose": "verify-load-costs-board-manifest (PASTE-ALL-SEATS-2026-09-03 Packet A: element manifest guard for /accounting/load-costs board)"
   },
   "10246": {
-    "claimed_by": "cursor",
     "claimed_at": "2026-09-03",
+    "claimed_by": "cursor",
     "purpose": "verify-load-costs-tab-manifest (PASTE-ALL-SEATS-2026-09-03 Packet B: element manifest guard for load detail Costs tab)"
   },
   "10247": {
-    "claimed_by": "cc-2",
     "claimed_at": "2026-09-03",
+    "claimed_by": "cc-2",
     "purpose": "verify-dispatch-overview-units-kpi-full-drill (PASTE-ALL-SEATS-2026-09-03 Packet E: Dispatch Load-board KPI drill-through -- the Units available/Units needing return tiles' own panel must render every counted row, not a PANEL_ROW_LIMIT-sliced preview)"
   },
   "10248": {
-    "claimed_by": "cursor",
     "claimed_at": "2026-09-03",
+    "claimed_by": "cursor",
     "purpose": "verify-fleet-oos-columns-manifest (PASTE-ALL-SEATS-2026-09-03 Packet C: element manifest guard for OOS/in-shop columns)"
   },
   "10249": {
-    "claimed_by": "claude",
     "claimed_at": "2026-09-03",
+    "claimed_by": "claude",
     "purpose": "verify-settlement-floor-override-modal-wired (25-task #10, CC-1-INSTRUCTIONS-09-02-2026.txt: NET_PAY_FLOOR_BREACH termination-override modal wired into PayRunClosePanel)"
   },
   "10251": {
-    "claimed_by": "cc-2",
     "claimed_at": "2026-09-03",
+    "claimed_by": "cc-2",
     "purpose": "verify-load-costs-board-trailer-unit-columns (live-confirmed HTTP 500 on GET /api/v1/accounting/load-costs-board -- l.trailer_id does not exist on mdata.loads, u.operating_company_id does not exist on mdata.units; pins the fix to the same pattern loads.routes.ts already uses)"
   },
   "10253": {
-    "claimed_by": "claude",
     "claimed_at": "2026-09-03",
+    "claimed_by": "claude",
     "purpose": "verify-expense-unit-id-mandatory (GO-19-1b: G1/G2/G3 unit_id mandatory on new accounting.expenses rows)"
   },
   "10257": {
-    "claimed_by": "claude",
     "claimed_at": "2026-09-03",
+    "claimed_by": "claude",
     "purpose": "verify-lane-mileage-merge-and-rescore (GO-19-2b Section 0: merge duplicate lane-key variants before run-count+relative-spread confidence rescore, practical_min/max stay literal NULL)"
   },
   "10261": {
-    "claimed_by": "claude",
     "claimed_at": "2026-09-03",
+    "claimed_by": "claude",
     "purpose": "verify-mileage-g1-g5-live (GO-19-2b Section 8: G1-G5 live guards on catalogs.lane_mileage/mdata.loads short-miles/mileage_source/St.Miles invariants)"
   },
   "10265": {
-    "claimed_by": "claude",
     "claimed_at": "2026-09-03",
+    "claimed_by": "claude",
     "purpose": "verify-mileage-service-null-not-zero (GO-19-2b Section 6: mileage.service.ts provider-miss returns NULL+reason, never 0, never fabricates a point_mileage row)"
   },
   "10267": {
-    "claimed_by": "cc-2",
     "claimed_at": "2026-09-03",
+    "claimed_by": "cc-2",
     "purpose": "verify-bank-recon-loadtransaction-excludes-voided (BANK-F9998 F2 BLOCKER: accounting/bank-recon/match.service.ts's loadTransaction never filtered bt.voided_at -- a voided/duplicate bank_transactions row was still matchable/postable through the Match drawer)"
   },
   "10269": {
-    "claimed_by": "claude",
     "claimed_at": "2026-09-03",
+    "claimed_by": "claude",
     "purpose": "verify-deadhead-pay-line-renders-on-settlement (25-task #12: SettlementDetailPage.tsx never filtered settlement_lines for line_type='deadhead_pay' -- not its own row, not folded into Earnings, silently absent from both the display and the client-side gross total)"
   },
   "10271": {
-    "claimed_by": "cc-2",
     "claimed_at": "2026-09-03",
+    "claimed_by": "cc-2",
     "purpose": "verify-bank-feed-live-tieout-selftest-wiring (BANK-F10000: pre-existing guard already asserted review_state=matched requires a matched_*_id but was never wired into any verify-step, so it never ran in CI -- caught 126 USMCA rows in that exact orphaned state, reset live)"
   },
   "10273": {
-    "claimed_by": "claude",
     "claimed_at": "2026-09-03",
+    "claimed_by": "claude",
     "purpose": "verify-presettlement-auto-assign-at-creation (owner ruling 2026-09-03: assignment is automatic at load creation, closing is human-confirmed -- book-load.service.ts's presettlement linking was opt-in (input.addToOpenPresettlement, defaulted false in BookLoadModalV4.tsx) and suggest-only (never called confirmPresettlementLink); now unconditional and auto-confirming)"
   },
   "10277": {
-    "claimed_by": "claude",
     "claimed_at": "2026-09-03",
+    "claimed_by": "claude",
     "purpose": "verify-cash-advance-reversal-guard-fires (CASH-ADV-F9930-REVERSE-GUARD-NEVER-BLOCKS, filed 2026-08-28: the reversal route's settlement-usage guard queried the nonexistent settlement_lines.liability_id column wrapped in a .catch swallowing to cnt=0 -- never blocked a reversal, ever; now blocks on driver_liabilities.paid_to_date > 0, the correct grain)"
   },
   "10279": {
-    "claimed_by": "cc-2",
     "claimed_at": "2026-09-03",
+    "claimed_by": "cc-2",
     "purpose": "verify-no-new-deleted-at-columns (VOID-COLUMN-CONVENTION-LAW-2026-09-03: never add deleted_at to a new table -- voided_at/deactivated_at/revoked_at are the only three void-marker conventions, ratchet baseline 15 migration files defining a deleted_at column)"
   },
   "10281": {
-    "claimed_by": "claude",
     "claimed_at": "2026-09-03",
+    "claimed_by": "claude",
     "purpose": "verify-liability-balance-syncs-at-settlement-close (item 6/GO-22 B7: closeSettlementPayRun's advance-recovery loop only ever updated driver_advances.outstanding_balance -- the sibling driver_finance.driver_liabilities row was never synced, staying frozen forever and blinding CASH-ADV-F9930's paid_to_date-based reversal guard to the real recovery path)"
   },
   "10283": {
-    "claimed_by": "cc-2",
     "claimed_at": "2026-09-03",
+    "claimed_by": "cc-2",
     "purpose": "verify-bank-recon-variance-je-always-balanced (BANK-F9998 F8: structural balanced-JE proof for the variance-match posting path -- two posting legs always share one magnitude on opposite sides, provably balanced for any variance amount; does not enable live Confirm, that stays Tier-1/owner-reserved)"
   },
   "10285": {
-    "claimed_by": "claude",
     "claimed_at": "2026-09-03",
+    "claimed_by": "claude",
     "purpose": "verify-cancellation-voids-expenses-and-advances (SET-09: cancelling a load did not void the load's expenses, did not release bank matches, and did not reverse advances/liabilities -- expenses now void via executeVoidCancel which releases bank matches for free via postVoidReversal's BANK-ORPHAN-01; advances reverse via a new shared reverseDriverAdvanceInClientTx, gated on paid_to_date)"
   },
   "10287": {
-    "claimed_by": "cc-2",
     "claimed_at": "2026-09-03",
+    "claimed_by": "cc-2",
     "purpose": "verify-health-financial-checks (ACC-18: adds --selftest + CI wiring to a guard that already existed but never ran; also covers the new ObservabilityPage healthz-checks UI section)"
   },
   "10289": {
-    "claimed_by": "claude",
     "claimed_at": "2026-09-03",
+    "claimed_by": "claude",
     "purpose": "RESTORED 2026-09-04 -- this entry was correctly claimed and merged (#20205/#20206) but its registry row was silently dropped from CLAIMED-NUMBERS.json by a later concurrent merge, discovered while claiming 10293. verify-cc3-ddl-handoff-retention-leave-safety (CC-3 DDL handoff: drivers.retention_scores had only SELECT/INSERT for ih35_app, no UPDATE/DELETE; catalogs.driver_leave_balances and safety.driver_safety_scores had no way to void a duplicate row -- migration 202613620001 grants the full CRUD set and adds deactivated_at per the VOID-COLUMN CONVENTION law). The guard file itself (scripts/verify-cc3-ddl-handoff-retention-leave-safety.mjs) was never lost -- only this tracking row was."
   },
   "10291": {
-    "claimed_by": "cc-2",
     "claimed_at": "2026-09-04",
+    "claimed_by": "cc-2",
     "purpose": "verify-ledger-integrity-savepoint-isolation-and-registry (ACC-19: guards the per-detector SAVEPOINT/ROLLBACK-TO-SAVEPOINT/RELEASE-SAVEPOINT isolation fix in runLedgerIntegrityTick against regressing back to transaction-poisoning, and guards the detector array against silently losing a registered check)"
   },
   "10293": {
-    "claimed_by": "claude",
     "claimed_at": "2026-09-04",
+    "claimed_by": "claude",
     "purpose": "verify-driver-bill-linked-to-settlement-at-creation (SET-02: a driver bill minted at booking was never linked into its settlement's settlement_lines at creation -- appendSettlementLineFromDriverBillIfMissing was only ever called lazily later, from the pre-settlement view route, the bookended-settlement service, or payrun close)"
   },
   "10295": {
-    "claimed_by": "cc-2",
     "claimed_at": "2026-09-04",
+    "claimed_by": "cc-2",
     "purpose": "verify-bank-match-no-double-match-all-six-kinds (BANKING-MATCH-FLOW-AUDIT Q4/F4 matched-state guard: proves fetchLedgerCandidates excludes an already-matched document across all 6 ledger_entry_kind sources -- payment, bill_payment, transfer, je, bill, expense -- not just the original bill/expense-only pair)"
   },
   "10297": {
-    "claimed_by": "claude",
     "claimed_at": "2026-09-04",
+    "claimed_by": "claude",
     "purpose": "verify-cash-flow-independent-of-proforma-timing (SET-03, formalizing the owner's live-verified ruling to the ten-point completion standard: cash-flow already dates projected income off scheduled delivery for loads with no proforma yet, so moving the proforma mint to booking time would not change the forecast -- both prior locked rulings (never mint at book, never mint before rate is known) stand unchanged)"
   },
   "10299": {
-    "claimed_by": "cc-2",
     "claimed_at": "2026-09-04",
+    "claimed_by": "cc-2",
     "purpose": "verify-money-text-component-adoption-ratchet (GLB-05: publishes the canonical MoneyText display component + a frozen-baseline ratchet against new hand-rolled toLocaleString(..., {style:'currency'}) money formatting app-wide; baseline measured after converting 6 files to the canonical formatUsdCents this session)"
   },
   "10301": {
-    "claimed_by": "claude",
     "claimed_at": "2026-09-04",
+    "claimed_by": "claude",
     "purpose": "verify-broker-advance-never-driver-liability-never-invoice-face (SET-24: a broker-sent load advance is a partial payment against that load's receivable, netting into accounting.invoices.broker_advance_applied_cents -- an existing, live, never-written column -- never a driver_finance.* write, never a reduction of the invoice face)"
   },
   "10303": {
-    "claimed_by": "cc-2",
     "claimed_at": "2026-09-04",
+    "claimed_by": "cc-2",
     "purpose": "verify-recon-session-unmatch-resets-review-state (ACC-20: the session-scoped unmatch route in reconciliation.routes.ts cleared all 6 matched_*_id pointers but never reset review_state back to 'for_review', leaving the row stuck at 'matched' with nothing matched -- an orphaned state that would not re-surface in the for-review queue)"
   },
   "10305": {
-    "claimed_by": "claude",
     "claimed_at": "2026-09-04",
+    "claimed_by": "claude",
     "purpose": "verify-invoice-display-id-shape-matches-db-constraint (SET-25: the owner could not create an invoice on his first real load -- accounting.invoices' load_number-shaped display_id, plain digits per GO-10 REV-B L3, was rejected by invoices_display_id_check, which only accepted two dead YYYYMMDD-prefixed formats + INV-YYYY-NNNNN. Migration 202613650001 widened the constraint; this guard proves the code-side INVOICE_DISPLAY_ID_PATTERN validator agrees with the live constraint on every accepted and rejected shape, and that resolveInvoiceDisplayId/resolvePaymentDisplayId/resolveBillDisplayId all validate shape BEFORE returning, not after the DB rejects it.)"
   },
   "10307": {
-    "claimed_by": "cc-2",
     "claimed_at": "2026-09-04",
+    "claimed_by": "cc-2",
     "purpose": "verify-bank-transactions-direction-uses-is-credit (BANK-F10005 amendment, owner-ordered: banking.bank_transactions.amount_cents's sign runs OPPOSITE is_credit on this table -- a schema-level trap, not a one-off; guards that every deposit/withdrawal direction query reads is_credit, never sign(amount_cents))"
   },
   "10309": {
-    "claimed_by": "cc-1",
     "claimed_at": "2026-09-04",
+    "claimed_by": "cc-1",
     "purpose": "GUARD-INTEGRITY (owner order 2026-09-04): wires scripts/verify-driver-bill-miles-basis-numeric.mjs (DRV-BILL-MILES-INTEGER) into scripts/verify-steps/ so verify:pre-commit/CI actually runs it going forward -- the guard existed and passed at merge time (PR #20280) but was never discoverable by the CI aggregator (which only readdirSync's scripts/verify-steps/), a real gap this claim fixes."
   },
   "10311": {
-    "claimed_by": "cc-2",
     "claimed_at": "2026-09-04",
+    "claimed_by": "cc-2",
     "purpose": "verify-matched-state-requires-matched-id (owner-ordered: banking.bank_transactions.review_state = 'matched' must require at least one matched_*_id non-null -- guards every UPDATE that sets review_state to 'matched' also sets a matched_*_id column in the same statement; DB-level CHECK constraint routed to CC-1, migration authority required)"
   },
   "10313": {
-    "claimed_by": "cc-1",
     "claimed_at": "2026-09-04",
+    "claimed_by": "cc-1",
     "purpose": "GUARD-INTEGRITY (owner order 2026-09-04): wires scripts/verify-miles-shortest-never-autofilled-from-catalog.mjs (MILES-SHORTEST-HOLDS-ALWAYSTRACK-BLEND) into scripts/verify-steps/, same gap as 10309."
   },
   "10315": {
-    "claimed_by": "cc-2",
     "claimed_at": "2026-09-04",
-    "purpose": "verify-seat-surface-ownership (owner-dictated §0b, verbatim table -- Rule 6: transcribe, never invent. Fails a PR when a commit touches a path outside the author seat's surface unless the commit body carries SURFACE-BREACH-AUTHORIZED: <owning seat> <reason>. Cited for weeks as the enforcement mechanism in the law doc + 4 bus docs; 0 files implemented it until this PR.)"
+    "claimed_by": "cc-2",
+    "purpose": "verify-seat-surface-ownership (owner-dictated \u00a70b, verbatim table -- Rule 6: transcribe, never invent. Fails a PR when a commit touches a path outside the author seat's surface unless the commit body carries SURFACE-BREACH-AUTHORIZED: <owning seat> <reason>. Cited for weeks as the enforcement mechanism in the law doc + 4 bus docs; 0 files implemented it until this PR.)"
   },
   "10317": {
-    "claimed_by": "cc-1",
     "claimed_at": "2026-09-04",
+    "claimed_by": "cc-1",
     "purpose": "GUARD-INTEGRITY (owner order 2026-09-04): wires scripts/verify-lane-mileage-short-over-practical-constraint-dropped.mjs (LANE-MILEAGE-LIVE-CONSTRAINTS-BLOCK-OWNER-RULING) into scripts/verify-steps/, same gap as 10309."
   },
   "10321": {
-    "claimed_by": "cc-1",
     "claimed_at": "2026-09-04",
+    "claimed_by": "cc-1",
     "purpose": "GUARD-INTEGRITY (owner order 2026-09-04): wires scripts/verify-load-costs-tab-advance-received-wired.mjs (SET-15) into scripts/verify-steps/, same gap as 10309. Also wires the already-claimed-but-never-installed 10305 (verify-invoice-display-id-shape-matches-db-constraint, SET-25) in the same PR."
   },
   "10325": {
-    "claimed_by": "cc-1",
     "claimed_at": "2026-09-04",
+    "claimed_by": "cc-1",
     "purpose": "verify-lane-mileage-short-miles-never-from-alwaystrack-blend (LANE-MILEAGE-SHORT-MILES-REGRESSION, owner order 2026-09-04, URGENT, owner's own error). Guards that catalogs.lane_mileage.short_miles is never populated from the AlwaysTrack CSV's own short_miles column (St. Miles = Loaded + Empty, the shortest+deadhead blend) in either import script (seed-lane-mileage.mjs, merge-and-rescore-lane-mileage.mjs), and that no live lane has short_miles populated or short_miles>practical_miles. Wired into scripts/verify-steps/ in the same PR that adds the guard -- not a second orphaned guard."
   },
   "10329": {
-    "claimed_by": "cc-1",
     "claimed_at": "2026-09-04",
+    "claimed_by": "cc-1",
     "purpose": "verify-usmca-driver-settlement-routing-unreachable (LOAD-COSTS-COMPLETE item (3), owner ruling 2026-09-04). Guards that resolveEconomicRouting (cash-advance-create.ts) can never resolve to 'driver_settlement' for USMCA -- the USMCA force-check must be the FIRST statement in the function, before any purpose switch or explicit-override check, and the create flow's call site must still pass companyId through. Wired into scripts/verify-steps/ in the same PR."
   },
   "10333": {
-    "claimed_by": "cc-1",
     "claimed_at": "2026-09-04",
+    "claimed_by": "cc-1",
     "purpose": "verify-broker-advance-driver-disbursement-never-driver-liability (LOAD-COSTS-COMPLETE item (2), owner ruling 2026-09-04). Guards that applyBrokerAdvanceToDriverBillInClientTx never references driver_finance.driver_liabilities/driver_advances/settlement_lines, requires category='driver_pay', posts through journal-entries.service (never a raw INSERT INTO accounting.journal_entries), and caps the disbursed amount at the driver_bill's remaining undisbursed balance."
   },
   "10337": {
-    "claimed_by": "cc-1",
     "claimed_at": "2026-09-04",
+    "claimed_by": "cc-1",
     "purpose": "verify-pre-settlement-empty-state-not-404 (LOAD-COSTS-COMPLETE money item (8), owner order 2026-09-04: 'Pre-Settlement returns HTTP 404 for the ordinary empty state. Return 200.'). Guards that GET /api/v1/driver-finance/pre-settlements/by-driver/:driverId returns the honest { settlement: null, lines: [] } for a driver with no open pre-settlement (never a raw 404), while keeping the schema_absent case (a real config gap) distinct so it never collapses back into the same 404 branch."
   },
   "10338": {
-    "claimed_by": "cursor",
     "claimed_at": "2026-09-04",
+    "claimed_by": "cursor",
     "purpose": "verify-planner-bars-wired-from-loads (GO-23 owner order 2026-09-04: dispatch planners render empty because TruckPlanner.tsx and SafetyDriverSchedulerGrid.tsx pass bars: []). Guards that both planner surfaces compute bars from real load/assignment data for the selected date range instead of hardcoding an empty array."
   },
   "10340": {
-    "claimed_by": "cursor",
     "claimed_at": "2026-09-04",
-    "purpose": "verify-planner-grid-styling (GO-23 PR2 owner order 2026-09-04: Book/Driver/Unit frozen columns get outlines, Available/0% overlay removed from Timeline, RSV text removed from Truck Planner, keyboard/drag horizontal scroll works, selected day range fits the viewport, empty cells show '—')."
+    "claimed_by": "cursor",
+    "purpose": "verify-planner-grid-styling (GO-23 PR2 owner order 2026-09-04: Book/Driver/Unit frozen columns get outlines, Available/0% overlay removed from Timeline, RSV text removed from Truck Planner, keyboard/drag horizontal scroll works, selected day range fits the viewport, empty cells show '\u2014')."
   },
   "10341": {
-    "claimed_by": "cc-1",
     "claimed_at": "2026-09-04",
-    "purpose": "verify-load-costs-board-column-contract (spec 09-04-2026-Claude-Coder-1-Load-Costs-Board-19-Columns.md §5.1). Asserts all 19 owner-exact column keys are present, in order, on LoadCostsBoardPage.tsx, and that route_crew/costs/margin/category are gone from the default (visible) set."
+    "claimed_by": "cc-1",
+    "purpose": "verify-load-costs-board-column-contract (spec 09-04-2026-Claude-Coder-1-Load-Costs-Board-19-Columns.md \u00a75.1). Asserts all 19 owner-exact column keys are present, in order, on LoadCostsBoardPage.tsx, and that route_crew/costs/margin/category are gone from the default (visible) set."
   },
   "10342": {
-    "claimed_by": "cursor",
     "claimed_at": "2026-09-04",
-    "purpose": "verify-planner-design-system (GO-23 PR3 owner order 2026-09-04: apply GLOBAL-TYPE-SIZE-BASELINE.md to dispatch planner surfaces — navy #14314F active tabs/buttons, 28px clickable boxes, 12px body, 2px radius, centered column headers, baseline border/text colors)."
+    "claimed_by": "cursor",
+    "purpose": "verify-planner-design-system (GO-23 PR3 owner order 2026-09-04: apply GLOBAL-TYPE-SIZE-BASELINE.md to dispatch planner surfaces \u2014 navy #14314F active tabs/buttons, 28px clickable boxes, 12px body, 2px radius, centered column headers, baseline border/text colors)."
   },
   "10343": {
-    "claimed_by": "cursor",
     "claimed_at": "2026-09-04",
+    "claimed_by": "cursor",
     "purpose": "verify-planner-design-ruling-09-04 (owner 2026-09-04: dispatch planner headers are light #EEF2F6 / #E4EAF1 with centered regular #1F2937 ink, no aggressive navy table headers, 1px #C7D2DC column rules, no hardcoded colours in components)."
   },
   "10345": {
-    "claimed_by": "cc-1",
     "claimed_at": "2026-09-04",
-    "purpose": "verify-load-costs-board-excludes-drafts (spec §5.2). Asserts the load-costs-board route's SQL WHERE predicate excludes status='draft' unconditionally and cancelled by default."
+    "claimed_by": "cc-1",
+    "purpose": "verify-load-costs-board-excludes-drafts (spec \u00a75.2). Asserts the load-costs-board route's SQL WHERE predicate excludes status='draft' unconditionally and cancelled by default."
   },
   "10349": {
-    "claimed_by": "cc-1",
     "claimed_at": "2026-09-04",
-    "purpose": "verify-load-costs-cost-split-foots (spec §5.3, live USMCA data). Asserts Late Fee + Lumper + Fuel + R&M + Other equals the non-void expense+bill total for every load on the live board, and that the SQL contains no clamp (GREATEST(0,...)) capable of masking a footing failure."
+    "claimed_by": "cc-1",
+    "purpose": "verify-load-costs-cost-split-foots (spec \u00a75.3, live USMCA data). Asserts Late Fee + Lumper + Fuel + R&M + Other equals the non-void expense+bill total for every load on the live board, and that the SQL contains no clamp (GREATEST(0,...)) capable of masking a footing failure."
   },
   "10353": {
-    "claimed_by": "cc-1",
     "claimed_at": "2026-09-04",
-    "purpose": "verify-load-costs-no-zero-for-unknown-mileage (spec §5.4). Asserts no COALESCE(...,0) on any mileage or empty-pay column (short_miles, rate_loaded_cents, empty_miles, rate_empty_cents, deadhead_pay_cents) in the load-costs-board route SQL, and that the frontend renders them blank, not 0, when null."
+    "claimed_by": "cc-1",
+    "purpose": "verify-load-costs-no-zero-for-unknown-mileage (spec \u00a75.4). Asserts no COALESCE(...,0) on any mileage or empty-pay column (short_miles, rate_loaded_cents, empty_miles, rate_empty_cents, deadhead_pay_cents) in the load-costs-board route SQL, and that the frontend renders them blank, not 0, when null."
   },
   "10357": {
-    "claimed_by": "cc-1",
     "claimed_at": "2026-09-04",
-    "purpose": "verify-load-costs-on-time-requires-appointment (spec §5.5 / §2.2). Asserts the fourth serviceStatus() branch exists (delivered with no scheduled appointment renders 'Delivered — no appointment on file', never 'On Time')."
+    "claimed_by": "cc-1",
+    "purpose": "verify-load-costs-on-time-requires-appointment (spec \u00a75.5 / \u00a72.2). Asserts the fourth serviceStatus() branch exists (delivered with no scheduled appointment renders 'Delivered \u2014 no appointment on file', never 'On Time')."
   },
   "10359": {
-    "claimed_by": "cc-2",
     "claimed_at": "2026-09-05",
+    "claimed_by": "cc-2",
     "purpose": "verify-acc13-no-test-accounts-in-usmca-coa (ACC-13, docs/bus/OWNER-DEFECT-REGISTER-2026-09-03.md). Static half (CI-safe, no DB): asserts catalogs.accounts' create route rejects a test/sample/demo-named account for USMCA outright via looksLikeSampleDataName()+USMCA_COMPANY_ID. Live half (manual, DATABASE_URL-gated, same convention as verify-gl-invariants.sql): re-counts active test/sample-named USMCA accounts, expects 0 -- 22 pre-existing ones (all $0 balance, 0 postings) were archived live 2026-09-05."
   },
   "10361": {
-    "claimed_by": "cc-1",
     "claimed_at": "2026-09-04",
+    "claimed_by": "cc-1",
     "purpose": "verify-coa-role-values-registered-in-check-constraint. Prevents the detention_pay_expense-class drift found 2026-09-04 (a role admitted into resolver.service.ts's COA_ROLE_VALUES/CoaRole union but never widened into the live accounting.chart_of_accounts_roles_role_check DB CHECK constraint, so designating it would fail INSERT even though the TS type accepts it). Asserts every value in COA_ROLE_VALUES appears in the highest-numbered db/migrations/*.sql file that widens chart_of_accounts_roles_role_check."
   },
   "10363": {
-    "claimed_by": "cc-2",
     "claimed_at": "2026-09-05",
+    "claimed_by": "cc-2",
     "purpose": "verify-acc15-no-test-units-in-usmca (ACC-15, docs/bus/OWNER-DEFECT-REGISTER-2026-09-03.md). Static half only (no DB): asserts mdata.units' create route (units.routes.ts) rejects a test/sample/demo-named unit for USMCA outright via looksLikeSampleDataName()+USMCA_COMPANY_ID, mirroring the ACC-13 accounts.routes.ts fix -- createUnitBodySchema had no is_sample_data field at all and no name-detection guard, unlike vendors.routes.ts's own looksLikeSampleDataName call."
   },
   "10365": {
-    "claimed_by": "cc-1",
     "claimed_at": "2026-09-05",
-    "purpose": "verify-cost-category-picker-includes-cogs (spec 09-04-2026-Claude-Coder-1-LOAD-COSTS-COMPLETE-VERTICAL.md §1.2). Guards that LoadDetailCostsTab.tsx's category filter matches account_type against the exact set (Expense/OtherExpense/CostOfGoodsSold), never a free-text regex like the stale '/cost of goods/i' (with spaces) that never matched the real 'CostOfGoodsSold' spelling and excluded 10 of 34 real USMCA cost accounts including 5000 Fuel & Diesel."
+    "claimed_by": "cc-1",
+    "purpose": "verify-cost-category-picker-includes-cogs (spec 09-04-2026-Claude-Coder-1-LOAD-COSTS-COMPLETE-VERTICAL.md \u00a71.2). Guards that LoadDetailCostsTab.tsx's category filter matches account_type against the exact set (Expense/OtherExpense/CostOfGoodsSold), never a free-text regex like the stale '/cost of goods/i' (with spaces) that never matched the real 'CostOfGoodsSold' spelling and excluded 10 of 34 real USMCA cost accounts including 5000 Fuel & Diesel."
   },
   "10367": {
-    "claimed_by": "cc-2",
     "claimed_at": "2026-09-05",
-    "purpose": "verify-dispatch-board-preview-contract (L.4a, LEAD RESET 12:45Z surrender, docs/design/DESIGN-CONTRACT-DISPATCH-BOARD-2026-09-05.md §A). Static guard: no dispatch board column hidden by default (BRD-25 removed), the 5 named group bands (Assignment/Hours of service/Load/Telemetry/Status) present in the PDF's order, \"location\" column header renamed \"Live loc\", drag reorder/resize still wired, headers left-aligned via className."
+    "claimed_by": "cc-2",
+    "purpose": "verify-dispatch-board-preview-contract (L.4a, LEAD RESET 12:45Z surrender, docs/design/DESIGN-CONTRACT-DISPATCH-BOARD-2026-09-05.md \u00a7A). Static guard: no dispatch board column hidden by default (BRD-25 removed), the 5 named group bands (Assignment/Hours of service/Load/Telemetry/Status) present in the PDF's order, \"location\" column header renamed \"Live loc\", drag reorder/resize still wired, headers left-aligned via className."
   },
   "10369": {
-    "claimed_by": "cc-1",
     "claimed_at": "2026-09-05",
-    "purpose": "verify-fuel-advance-account-bound-by-role (spec §1.2, owner ruling: 'bind the fuel account by role, never by name'). Guards that LoadDetailCostsTab.tsx resolves the fuel-advance debit account via accounting.chart_of_accounts_roles (role company_fuel_advance_expense, via listCoaRoles), never via a /fuel/i name match that could resolve to an asset receivable instead of the expense account."
+    "claimed_by": "cc-1",
+    "purpose": "verify-fuel-advance-account-bound-by-role (spec \u00a71.2, owner ruling: 'bind the fuel account by role, never by name'). Guards that LoadDetailCostsTab.tsx resolves the fuel-advance debit account via accounting.chart_of_accounts_roles (role company_fuel_advance_expense, via listCoaRoles), never via a /fuel/i name match that could resolve to an asset receivable instead of the expense account."
   },
   "10371": {
-    "claimed_by": "cc-2",
     "claimed_at": "2026-09-05",
+    "claimed_by": "cc-2",
     "purpose": "verify-additive-only (L.4g, LEAD RESET 12:45Z surrender, docs/LAW.md L379 breach guard owner-ordered 05:30Z). Snapshots sidebar entries/labels, route path= count, Dispatch board + HOS_COLUMNS + Load Costs board column keys, Load Costs tab labels to docs/guards/additive-baseline.json; fails on any shrink. Separately ratchets a repo-wide count of the BRD-25 pattern (literal defaultHidden:true / a real DEFAULT_VISIBLE_* declaration) so it can only shrink, never grow. OWNER-REMOVE escape hatch regenerates the baseline."
   },
   "10373": {
-    "claimed_by": "cc-1",
     "claimed_at": "2026-09-05",
-    "purpose": "verify-no-gl-account-picked-by-name (spec §1.2: 'audit every other account pick on a money path -- grep for account_name inside a .find( or .filter(. Every hit is this defect.'). Scoped to LoadDetailCostsTab.tsx this pass: asserts no .find(...) resolves a specific GL account by a NAME match."
+    "claimed_by": "cc-1",
+    "purpose": "verify-no-gl-account-picked-by-name (spec \u00a71.2: 'audit every other account pick on a money path -- grep for account_name inside a .find( or .filter(. Every hit is this defect.'). Scoped to LoadDetailCostsTab.tsx this pass: asserts no .find(...) resolves a specific GL account by a NAME match."
   },
   "10377": {
-    "claimed_by": "cc-1",
     "claimed_at": "2026-09-05",
-    "purpose": "verify-load-with-crew-is-not-draft (spec §1.1, owner step 1 of the 2026-09-05 strict-sequence order). Named exactly as the owner requested and wired into scripts/verify-steps/, formalizing (never-delete-only-add) the equivalent WIZ-STATUS-01 check already sitting unwired in scripts/verify-edit-load-assigned-driver-not-draft.mjs. Asserts update-load.service.ts advances a load ending an edit with a committed driver/team from draft -> assigned_not_dispatched (never dispatched)."
+    "claimed_by": "cc-1",
+    "purpose": "verify-load-with-crew-is-not-draft (spec \u00a71.1, owner step 1 of the 2026-09-05 strict-sequence order). Named exactly as the owner requested and wired into scripts/verify-steps/, formalizing (never-delete-only-add) the equivalent WIZ-STATUS-01 check already sitting unwired in scripts/verify-edit-load-assigned-driver-not-draft.mjs. Asserts update-load.service.ts advances a load ending an edit with a committed driver/team from draft -> assigned_not_dispatched (never dispatched)."
   },
   "10378": {
     "claimed_at": "2026-09-05",
@@ -5605,12 +5630,12 @@
   "10383": {
     "claimed_at": "2026-09-05",
     "claimed_by": "cc-2",
-    "purpose": "verify-banking-toolbar-uniform-height (owner order 2026-09-05, CODER-SEQUENCE-NUMBERED-2026-09-05.md CC-2 §5, B.2: 'one 28px toolbar height for ALL controls incl Money in/out; type = multi-select (checkboxes/chips, server-side); date range visible on landing'). Asserts the banking transactions toolbar has zero h-8/h-9 height literals, the transaction-type filter is multi-select (checkboxes), and the date range renders unconditionally rather than behind a click."
+    "purpose": "verify-banking-toolbar-uniform-height (owner order 2026-09-05, CODER-SEQUENCE-NUMBERED-2026-09-05.md CC-2 \u00a75, B.2: 'one 28px toolbar height for ALL controls incl Money in/out; type = multi-select (checkboxes/chips, server-side); date range visible on landing'). Asserts the banking transactions toolbar has zero h-8/h-9 height literals, the transaction-type filter is multi-select (checkboxes), and the date range renders unconditionally rather than behind a click."
   },
   "10387": {
     "claimed_at": "2026-09-05",
     "claimed_by": "cc-2",
-    "purpose": "verify-banking-suggest-matches-wired (owner order 2026-09-05, CODER-SEQUENCE-NUMBERED-2026-09-05.md CC-2 §6, B.1: 'banking matcher: suggest exact cents +-5d to expenses/bills ... suggested_* + confidence; POST /banking/transactions/suggest; Accept->match never auto-post'). Asserts the bulk suggest route reuses the existing findCandidates matcher (no duplicate matching algorithm), never posts/persists a match itself, and the frontend suggestion badge opens the existing Match drawer rather than accepting/posting directly."
+    "purpose": "verify-banking-suggest-matches-wired (owner order 2026-09-05, CODER-SEQUENCE-NUMBERED-2026-09-05.md CC-2 \u00a76, B.1: 'banking matcher: suggest exact cents +-5d to expenses/bills ... suggested_* + confidence; POST /banking/transactions/suggest; Accept->match never auto-post'). Asserts the bulk suggest route reuses the existing findCandidates matcher (no duplicate matching algorithm), never posts/persists a match itself, and the frontend suggestion badge opens the existing Match drawer rather than accepting/posting directly."
   },
   "10391": {
     "claimed_at": "2026-09-05",
@@ -5620,7 +5645,7 @@
   "10395": {
     "claimed_at": "2026-09-05",
     "claimed_by": "cc-2",
-    "purpose": "verify-dispatch-top-bar-single-primary-action (L.4b, DESIGN-CONTRACT-DISPATCH-BOARD-2026-09-05.md §B, OWNER-ISSUE-INVENTORY-2026-09-05.md #8, surrendered Cursor -> CC-2 14:00Z). Asserts Home/Live/Loads-history never conditionally render variant=\"primary\" (the double-filled-button bug alongside + Book Load), the board-view toolbar is role=\"group\" with exactly Kanban/List/Round Trips (no duplicate \"Trip Pairing\", already a DispatchSubnav nav item), and the existing Home/Live/Loads-history test-ids survive."
+    "purpose": "verify-dispatch-top-bar-single-primary-action (L.4b, DESIGN-CONTRACT-DISPATCH-BOARD-2026-09-05.md \u00a7B, OWNER-ISSUE-INVENTORY-2026-09-05.md #8, surrendered Cursor -> CC-2 14:00Z). Asserts Home/Live/Loads-history never conditionally render variant=\"primary\" (the double-filled-button bug alongside + Book Load), the board-view toolbar is role=\"group\" with exactly Kanban/List/Round Trips (no duplicate \"Trip Pairing\", already a DispatchSubnav nav item), and the existing Home/Live/Loads-history test-ids survive."
   },
   "10399": {
     "claimed_at": "2026-09-05",
@@ -5632,6 +5657,426 @@
     "claimed_by": "cc-2",
     "purpose": "verify-planner-grid-sortable-frozen-columns (owner order 2026-09-05, item 3 'Planners lists: server-paginated + sortable + landing filter + export'). Landing filter + export were already shipped (verify-planners-lists-parity.mjs); this covers sortable: PlannerGrid's shared Name/Status frozen-column headers are now click-to-sort, and Driver/Truck/Loads planners all supply plain-text sortKey/statusSortKey. server-paginated deliberately not attempted -- coordination note filed to Cascade on the architecture mismatch (a calendar/timeline grid needs the full roster on screen per visible date range, not a paginated page of it)."
   },
+  "10407": {
+    "claimed_at": "2026-09-05",
+    "claimed_by": "cc-2",
+    "purpose": "verify-book-load-geofence-service-layer"
+  },
+  "10411": {
+    "claimed_at": "2026-09-05",
+    "claimed_by": "cc-2",
+    "purpose": "verify-book-load-geofence-status-surfaced"
+  },
+  "10415": {
+    "claimed_at": "2026-09-05",
+    "claimed_by": "cc-2",
+    "purpose": "verify-dispatch-sheet-customer-po-number"
+  },
+  "10419": {
+    "claimed_at": "2026-09-05",
+    "claimed_by": "cc-2",
+    "purpose": "verify-booking-stop-geocode"
+  },
+  "10421": {
+    "claimed_at": "2026-09-05",
+    "claimed_by": "cc-1",
+    "purpose": "verify-je-debit-credit-columns"
+  },
+  "10423": {
+    "claimed_at": "2026-09-05",
+    "claimed_by": "cc-2",
+    "purpose": "verify-google-reference-miles"
+  },
+  "10425": {
+    "claimed_at": "2026-09-05",
+    "claimed_by": "cc-1",
+    "purpose": "verify-load-stop-legs-and-vendor-driver-id"
+  },
+  "10427": {
+    "claimed_at": "2026-09-05",
+    "claimed_by": "cc-2",
+    "purpose": "verify-parity-table-footer-follows-columns"
+  },
+  "10429": {
+    "claimed_at": "2026-09-05",
+    "claimed_by": "cc-1",
+    "purpose": "verify-vendor-statements-activity-tabs"
+  },
+  "10433": {
+    "claimed_at": "2026-09-06",
+    "claimed_by": "cc-1",
+    "purpose": "verify-open-tour-posts-nothing"
+  },
+  "10435": {
+    "claimed_at": "2026-09-06",
+    "claimed_by": "cc-2",
+    "purpose": "verify-load-costs-page-registers"
+  },
+  "10437": {
+    "claimed_at": "2026-09-06",
+    "claimed_by": "cc-1",
+    "purpose": "verify-acc-51-lists-receipt-and-hold"
+  },
+  "10441": {
+    "claimed_at": "2026-09-06",
+    "claimed_by": "claude",
+    "purpose": "verify-round-trips-bar-dates (RT-FIX: Round Trips bars span first pickup -> last delivery, never created_at; Load board default restored per GO-RT-01; dispatch loads list carries pickup_scheduled_at/delivery_scheduled_at)"
+  },
+  "10445": {
+    "claimed_at": "2026-09-06",
+    "claimed_by": "claude",
+    "purpose": "verify-load-costs-tour-tabs (LDT-TABS: Load costs board Pre-Settlement = open tours + Close, Settlement = closed tours; GET /api/v1/driver-finance/tours from the one tour readout)"
+  },
+  "10447": {
+    "claimed_at": "2026-09-06",
+    "claimed_by": "cc-2",
+    "purpose": "verify-appointments-required-on-book (DSP-49: Book Load requires a pickup appointment on the first pickup and a delivery appointment on the last delivery, both frontend Controller-gated and backend-rejected)"
+  },
+  "10449": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-load-costs-load-page (LDT-PAGE: /accounting/load-costs/:loadId renders the approved load page \u2014 breadcrumb, shared header stats, tab row \u2014 via LoadDetailDrawer mode=page; board links point at it)"
+  },
+  "10451": {
+    "claimed_at": "2026-09-06",
+    "claimed_by": "cc-2",
+    "purpose": "verify-driver-bill-rate-per-mile-not-blended (CC-3 finding: driver_bills.rate_per_mile_cents must be a real resolved rate, never round(loaded+deadhead totalCents / loaded-only milesBasis))"
+  },
+  "10453": {
+    "claimed_at": "2026-09-06",
+    "claimed_by": "claude",
+    "purpose": "verify-bank-fee-recovery-role-bound (ROUND 9 BANK-FEE-ROLE: 'bank_fee_recovery' role admitted by chart_of_accounts_roles CHECK + bound live to USMCA account 6300 Bank Service Charges & Wire Fees)"
+  },
+  "10457": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-source-document-ref-backfill (ROUND 10: driver_finance.driver_settlements.source_document_ref column + backfill of the 10 signed-settlement-number KEEP rows from docs/audit/TOUR-SPLIT-PLAN-2026-09-06.md \u00a71, through a real service function, never raw SQL/DELETE)"
+  },
+  "10459": {
+    "claimed_by": "cc-2",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-stops-appt-fix-backfill-safe (ROUND 10 STOPS-APPT-FIX: appointment_start_at backfill from scheduled_arrival_at for the 48 dispatched + 13508 loads only, never cancelled, via the safe surgical PATCH route, --apply gated on a non-empty LEAD_APPROVAL_QUOTE)"
+  },
+  "10461": {
+    "claimed_by": "claude-lead",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-load-costs-register-fetch (REG-400: registers page GET /expenses at its 200 cap, surface fetch errors instead of 'No transactions found'; Load costs top-row tab in Accounting nav)"
+  },
+  "10462": {
+    "claimed_by": "cursor",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-vendors-customers-list-standard (VC-LIST-01: Vendors + Customers lists as ParityTable with real Open balance/Spend from bills+expenses rollup and invoice-based A/R; owner ROUND 11 even lane)"
+  },
+  "10464": {
+    "claimed_by": "cursor",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-orphan-guard-batch (GUARD-WIRE-93 ROUND 12: wire the 93 orphan guards that pass standalone into CI so verify:guard-wired census drops 107->14; both registry-batch guards green. The 14 ENV-CENSUS-FAIL guards stay unwired/OPEN until their owning seat fixes the defect. Cursor EVEN lane, Rule 25/37)"
+  },
+  "10465": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-reg-parse-data-backfill (ROUND 11 REG-PARSE-DATA: accounting.expenses.merchant_address/source_settlement_ref columns + backfill through a real service, never raw UPDATE; vendor_document_number cleaned to receipt-no-only; expense_lines.description cleaned to item-only)"
+  },
+  "10467": {
+    "claimed_by": "cc-2",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-deliver-seed-40 (DELIVER-SEED-40 owner order: safety shape of scripts/ops/deliver-seeded-usmca-loads.ts -- owner hand-list held, real delivered_at evidence required and correctly formatted, both real transitions fired through the real route, --apply never the default)"
+  },
+  "10469": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-no-duplicate-seed-deductions wiring (DED-DUP guard merged in #20917 as an orphan; verify:guard-wired reddened main/locked-guards; step runs --selftest + static half)"
+  },
+  "10473": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-no-future-dated-seed-expenses wiring (EXP-DATE guard merged in #20917 as an orphan; verify:guard-wired reddened main/locked-guards; step runs --selftest + static half)"
+  },
+  "10477": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-banking-categorize-boxes (BANK-DESIGN-1 owner 2026-09-06: two .ldt-card.strong boxes in the Banking categorize row, match candidates as one Date \u00b7 Description \u00b7 Type \u00b7 Amount \u00b7 Gap register, Load-costs palette)"
+  },
+  "10481": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-census-orphans-wired (ENV-CENSUS-ROOT root fix: ONE step that RUNS every verify-*.mjs that was merged without CI wiring \u2014 107 on main after #20932 reverted the mass exemption \u2014 so verify:guard-wired reports 0 orphan and every still-failing guard is named in CI instead of hidden)"
+  },
+  "10483": {
+    "claimed_by": "cc-2",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-load-bookended-settlement-reuse-checks-lines (MEGA-TOUR-RULING, CC-1: openLoadBookendedSettlement's reuse query must accept a settlement with a live settlement_lines->driver_bills trace even when its first_load_id anchor is cancelled)"
+  },
+  "10485": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-load-costs-drawer-wide wiring (census money rows sub-item #5, ENV-CENSUS-FAIL-08: LoadDetailDrawer.tsx Costs tab must use the wide drawer class so the 12-column Load Costs register is not crammed behind horizontal scroll)"
+  },
+  "10489": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-broker-advance-never-driver-liability-never-invoice-face wiring (census money rows sub-item #1: guard tightened to assert the real invariant -- no CREATE of a driver liability/advance -- instead of banning every driver_finance reference, which wrongly flagged the owner-approved LOAD-COSTS-COMPLETE item (2) read-only driver_bills paydown)"
+  },
+  "10493": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-banking-match-qbo-engine (BANK-MATCH-QBO owner 2026-09-06: match candidates scored on the payee name, QuickBooks Find match filters Show/Payee/Date/Amount, Payee \u00b7 Ref no. \u00b7 Description \u00b7 Open balance columns, 90/20-day window)"
+  },
+  "10497": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-trip-type-local-enum (TRIP-LOCAL-ENUM owner order 2026-09-06: mdata.trip_type_enum gains 'LOCAL' after 'SB' -- pins the enum value in the migration + the dispatch load PATCH schema + Trip Pairing board legend/type chip so none can silently drop it)"
+  },
+  "10501": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-cash-flow-closed-settlement-expected-expense (CASH-FLOW-01 root cause #1, owner order 2026-09-06 ROUND 14: closed, unpaid driver_finance.driver_settlements were never Expected Expenses because the status predicate omitted 'closed', the real terminal status settlements-load-bookended.service.ts writes)"
+  },
+  "10505": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-invoice-dates-from-real-delivery (CASH-FLOW-01 root cause #2: invoice issue_date/due_date must derive from the load's real delivery-stop date, not the mint wall-clock moment, both at mint time (from-load.ts) and in the audited backfill/correction service)"
+  },
+  "10509": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-cash-flow-avp-actuals-honest-unavailable (CASH-FLOW-01 root cause #3, LAW \u00a78 zero is a claim: Actual vs Projected must render \"N of M bank lines categorized -- actuals unavailable\" instead of a bare $0 when 0 bank_transactions are categorized company-wide)"
+  },
+  "10513": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-vendor-balance-single-read-model (VENDOR-BALANCE-TRUTH owner order 2026-09-06, inventory #15: vendor-rollups.routes.ts derived open_balance_cents independently via a bare status<>'paid' bill denylist -- a second, drift-prone computation alongside the canonical accounting.vendor_balances VIEW already used by the Vendors list detail panel; now reads open_balance_cents from that one canonical read model)"
+  },
+  "10514": {
+    "claimed_by": "cascade",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-cv-transaction-columns (CV-TRANSACTION-COLUMNS inv #46: Vendors.tsx:462-467 + Customers.tsx:974-976 rendered em-dash for Load # \u00b7 Settlement # \u00b7 Truck # \u00b7 Pick-up \u00b7 Delivery \u00b7 Loaded miles; backend read model now joins mdata.loads / driver_finance.driver_settlements / mdata.units and frontend renders real data, sortable, in the gear)"
+  },
+  "10515": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-parity-expand-toggle-box (B1 EXPAND-BOX, owner CONSOLIDATED 2026-09-06 item 4: ParityTable expand-toggle 24x24/glyph 12px/no border -> 28x28/1px var(--ldt-rule) border/radius 4/glyph 16px/hover var(--ldt-accent-soft)/aria-expanded, one shared component so every register gets it)"
+  },
+  "10516": {
+    "claimed_by": "cursor",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-list-page-size-all (VC-10 / VC-LIST-02, owner CONSOLIDATED 2026-09-06 18:30Z item 2: SidebarPagination page-size options were [25,50,100,250] with no All and Vendors/Customers held the sidebar page size in a bare useState(50) that reset on reload -> add an All option (ALL_PAGE_SIZE sentinel) on both master-detail lists and persist the chosen size via useListPageSizePref)"
+  },
+  "10517": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-settlement-detail-kpi-grid (SETL-DETAIL-01 guard, existed since PR #21001 but was never wired into package.json or a verify-step -- wiring it now, plus the SETL-KPI-CENTS-01 fix it now also pins)"
+  },
+  "10518": {
+    "claimed_by": "cursor",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-company-settlements-page (SET-04 / L.6, owner CONSOLIDATED 2026-09-06 18:30Z item 7: /driver-finance/company-settlements FE page for accounting.company_settlements -- ParityTable list + waterfall Invoiced - Quick Pay - Driver Salary - Additional Pay - Fuel - Company Expenses = Net Revenue per doc 5784, Load-Costs/.ldt palette; sidebar points at the real page)"
+  },
+  "10519": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-banking-register-columns (B2 BANK-REGISTER-COLUMNS, owner CONSOLIDATED 2026-09-06 18:30Z item 3: Check No./Vendor on by default; Memo/Category/Match status/Reference/Posted JE as 5 new real, gear-toggleable columns on BankingTransactionsDesignView.tsx main register)"
+  },
+  "10520": {
+    "claimed_by": "cursor",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-load-costs-settlement-legs-columns (ROUND 16.1, owner 2026-09-06 20:2xZ: /accounting/load-costs Settlement/Pre-Settlement tour register Legs column renders one nowrap line of type-colored EntityLink leg pills (count + '+N more'), money cells nowrap auto-fit, mmmDd dates capped, driver ellipsis, company 'not opened' pill; ParityColumn maxWidth/headerTitle; backend legs[] projection)"
+  },
+  "10521": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-settlement-detail-reference (SETL-DETAIL-01 guard, existed since PR #21001 but was never wired into package.json or a verify-step -- wiring it now)"
+  },
+  "10525": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-expense-number-never-null (INV-13, owner CONSOLIDATED item 5: no expense-mint path, including cash-advances/lumper-cash-advance-split.ts, may write a NULL expense_number on any USMCA expense)"
+  },
+  "10529": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-vendor-open-balance-includes-expenses (VC-01, owner CONSOLIDATED item 4: spend totals include both expenses and bills, last_activity_date is always a real transaction date never vendor.updated_at; Open Balance stays bills-only by design -- accounting.expenses has no open/unpaid state, verified live)"
+  },
+  "10533": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-invoice-issue-date-from-load (INV-03, owner CONSOLIDATED item 1: invoice issue_date resolves the source load's real pickup-stop date instead of defaulting to companyBusinessDate()) -- renumbered from 10517 after a duplicate-key collision with another session's claim (see #21030). RESTORED 2026-09-06 20:0xZ after PR #21034/#21035 (BANK-RULES-USMCA) overwrote this key's purpose text with theirs via a second, non-conflicting claim on the SAME key -- their guard is the actual duplicate file and has been renumbered to 10539 in this commit; this entry's original purpose is the correct, currently-wired one (file scripts/verify-steps/10533-verify-invoice-issue-date-from-load.mjs has been live on main since #21019/#21030, never moved)."
+  },
+  "10537": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-invoice-due-date-from-terms (INV-06, owner CONSOLIDATED item 3: audited backfill of the 39+ sent invoices whose due_date was stamped from the mint moment instead of invoice_date + customer terms, through the real recomputeInvoiceDatesFromDelivery service, never raw UPDATE) -- renumbered from 10521 after a duplicate-key collision with another session's claim"
+  },
+  "10539": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-bank-rules-usmca-seed (BANK-RULES-USMCA lead 2026-09-06: suggestion engine falls back to the raw bank description -- description_normalized was NULL on all 364 USMCA lines -- plus the USMCA bank-rule seed through POST /api/v1/banking/rules + refresh-suggestion, dry-run by default) -- RENUMBERED from 10533 2026-09-06 20:0xZ: 10533 was already claimed+wired for verify-invoice-issue-date-from-load since #21019/#21030; this claim (#21034, cc-1-band 10533 mistakenly used for a banking/cc-2-lane guard) collided on the same key and its file has been git-mv'd to 10539-verify-bank-rules-usmca-seed.mjs, content byte-identical, no logic change."
+  },
+  "10541": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-settlement-add-deduction-wired (SET-01 first half: settlement detail +Add deduction button had no onClick at all; wired to the same shared CreateSettlementDeductionDrawer the driver-profile queue uses, driver preset to the settlement own driver)"
+  },
+  "10545": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-settlement-reopen-disabled-not-hidden (SET-13: Reopen control was hidden entirely behind paymentState+role checks; LAW-EDITABLE-BY-PERMISSION-ALWAYS-TRACEABLE requires disabled+reason, never hidden)"
+  },
+  "10547": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-banking-toolbar-single-search (B4 BANK-TOOLBAR-ONE first slice, owner CONSOLIDATED 2026-09-06 18:30Z item 4: BankingTransactionsDesignView main register had 2 competing search boxes -- the page own Filter by description Combobox AND ParityTable native UniversalListToolbar search -- suppressed via suppressToolbarSearch, same defect class as LV-WORK-ORDERS-CONSOLE-DUPLICATE-SEARCH)"
+  },
+  "10549": {
+    "claimed_by": "cc-3",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-close-creates-company-settlement (CC-3, ROUND 16.2, #21052) -- this key previously held CC-1's verify-cash-flow-rolling-ledger claim (CASH-FLOW-02); #21052's file scripts/verify-steps/10549-verify-close-creates-company-settlement.mjs shipped WITHOUT registering a claim here (a real process gap -- verify-verify-step-claimed-on-main.mjs did not catch it, worth investigating why), producing a genuine duplicate-number FILE collision with CC-1's already-merged 10549-verify-cash-flow-rolling-ledger.mjs. Resolved by renumbering CC-1's file to 10573 (this file's number is untouched, is real, is CC-3's) -- see 10573 below."
+  },
+  "10553": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-tour-settlement-company-link (ROUND 16.2 item 3: company settlement number was dead text on TourSettlementTab; now a real EntityLink to CompanySettlementsPage via a query-param deep link)"
+  },
+  "10573": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-cash-flow-rolling-ledger (CASH-FLOW-02, owner order 2026-09-06 20:1xZ: rolling A/R+A/P ledger with real dates -- expected income automatically from loads/invoices/factoring, expected expenses from bills/driver pay/driver bills/unmatched expenses/loan schedule -- carry-forward until paid/matched, day grid with running cash from the live bank balance) -- 4th renumber of this session (10517 -> 10541 -> 10545 -> 10549 -> 10573, each collision with a different concurrent session), jumping a +20 buffer past the current max this time since single-digit gaps keep getting claimed within minutes. NOTE FOR THE LEAD: this collided FIVE times in about 90 minutes across at least 3 different concurrent sessions/lanes (cc-1 itself, a settlement lane, and CC-3) -- CLAIMED-NUMBERS.json as one shared JSON file, edited blind by many concurrent sessions with no lock, is now a real operational bottleneck, not a one-off fluke. Recommend a systemic fix (per-number files under scripts/verify-steps/, or a DB-backed atomic claim) before the next high-concurrency session."
+  },
+  "10592": {
+    "claimed_by": "cursor",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-settlements-company-driver-side-by-side (ROUND 16.3, owner 2026-09-06 20:3xZ: /settlements gets a Company & Driver tab with two half-width cards side by side -- LEFT driver settlement, RIGHT company settlement waterfall -- 50/50 at >=1280px stacked below, both reading getTourReadout + getCompanySettlementReport, no raw table, PDF via openPrintableDocument; plus a Company settlements register tab). Cursor EVEN lane; +19 buffer past current max 10573 per the concurrency note above."
+  },
+  "10593": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-one-void-convention (INV-09/ACC-08, owner CONSOLIDATED 2026-09-06 18:30Z item 6: locks the accounting.bills voided_at/revoked_at sync-trigger invariant live-reconfirmed correct on 09-05 and again today -- the broader 4-table naming-consistency question stays filed as an owner-decision-needed item, not guessed)"
+  },
+  "10594": {
+    "claimed_by": "cursor",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-factoring-layout-tabs-first"
+  },
+  "10596": {
+    "claimed_by": "cursor",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-factoring-register-shared-manifest"
+  },
+  "10597": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-anomaly-detector-distinct-orderby (ROUND 16.4: detectDvirMajorOpen + detectInactiveDriverAssignment threw 42P10 SELECT DISTINCT/ORDER BY mismatch, cascading current-transaction-is-aborted across every rule/company; fixed + SAVEPOINT-isolated both loops)"
+  },
+  "10598": {
+    "claimed_by": "cursor",
+    "claimed_at": "2026-09-07",
+    "purpose": "verify-factoring-vendor-mirror-sync"
+  },
+  "10600": {
+    "claimed_by": "cursor",
+    "claimed_at": "2026-09-07",
+    "purpose": "verify-live-board-includes-delivered-pending-docs"
+  },
+  "10605": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-claim-helper-stagger"
+  },
+  "10609": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-settlement-list-accrual (SET-05: pins the SET-ACCRUAL fix in settlements.routes.ts -- both list-query blocks must show line-derived accrual for pre-close settlements, never a stale /bin/zsh header; live half checks real USMCA data)"
+  },
+  "10613": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-no-duplicate-settlement-deductions (SET-24: driver_finance.driver_reimbursements had 7 live duplicate groups/14 rows never swept, same seed-backfill-loop-ran-twice signature as the earlier deductions dedup -- voided via a scoped WORM-audited UPDATE, guard covers both tables)"
+  },
+  "10625": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-health-deep-financial-checks (INV-11/ACC-18/ACC-19, owner CONSOLIDATED 2026-09-06 18:30Z item 7: /health/deep runs only infra checks -- postgres/redis/r2/plaid/qbo -- zero financial checks; adds real A/R tie-out, A/P tie-out, trial balance, bank control account, and JE debit=credit checks, each naming itself and failing loudly)"
+  },
+  "10633": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-close-post-a-item2-historical-advances"
+  },
+  "10641": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-set24-correction-dry-run"
+  },
+  "10645": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-customer-finance-cost-rollup"
+  },
+  "10653": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-reimbursement-reversal-routes-to-expense"
+  },
+  "10657": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-dispatch-planner-active-driver-scope"
+  },
+  "10681": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-banking-match-panel-layout-and-datepicker-boxinbox"
+  },
+  "10693": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-banking-home-virtual-tile-routing"
+  },
+  "10701": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-07",
+    "purpose": "verify-company-settlement-itemized-by-load"
+  },
+  "10705": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-07",
+    "purpose": "verify-fleet-sample-data-quarantine"
+  },
+  "10707": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-06",
+    "purpose": "verify-dispatch-planner-safety-entitylink"
+  },
+  "10711": {
+    "claimed_at": "2026-09-06",
+    "claimed_by": "cc-2",
+    "purpose": "verify-banking-toolbar-single"
+  },
+  "10729": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-07",
+    "purpose": "verify-factoring-submit-queue-uses-authoritative-assignment"
+  },
+  "10741": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-07",
+    "purpose": "verify-customers-vendors-sample-data-quarantine"
+  },
+  "10765": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-07",
+    "purpose": "verify-customer-activity-load-number-join"
+  },
+  "10777": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-07",
+    "purpose": "verify-factoring-chargebacks-fees-customer-uuid-cast"
+  },
+  "10781": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-07",
+    "purpose": "verify-vendor-customer-merge"
+  },
   "_band": {
     "cc-1": "n%4===1",
     "cc-2": "n%4===3",
@@ -5640,7 +6085,7 @@
     "locked": "2026-08-04",
     "note": "Supersedes 2026-07-28 odd/even-only. Claim-before-write required."
   },
-  "_how_to_claim": "MOD-4 BANDS + CLAIM-BEFORE-WRITE (owner-locked 2026-08-04; credit CC-2): Cursor = EVEN; CC-1 = ≡1 (mod 4) via claude|/cc-1|/cc1; CC-2 = ≡3 (mod 4) via cc-2|/cc2. Reserve first: merge a claim-only PR (chore/claim-reserve* or chore/claimed-regen* with CLAIM-RESERVE/CLAIMED-REGEN) that adds only the number here; THEN author scripts/verify-steps/NNNN-*.mjs on a feature PR. CI fails if a new step file is not already claimed on origin/main (except one-time 2400 self-bootstrap). Never claim another lane's residue. Never renumber after collisions.",
+  "_how_to_claim": "MOD-4 BANDS + CLAIM-BEFORE-WRITE (owner-locked 2026-08-04; credit CC-2): Cursor = EVEN; CC-1 = \u22611 (mod 4) via claude|/cc-1|/cc1; CC-2 = \u22613 (mod 4) via cc-2|/cc2. Reserve first: merge a claim-only PR (chore/claim-reserve* or chore/claimed-regen* with CLAIM-RESERVE/CLAIMED-REGEN) that adds only the number here; THEN author scripts/verify-steps/NNNN-*.mjs on a feature PR. CI fails if a new step file is not already claimed on origin/main (except one-time 2400 self-bootstrap). Never claim another lane's residue. Never renumber after collisions.",
   "_note": "CLAIMED verify-step numbers. Every PR adding a verify-step MUST add its number here IN THE SAME COMMIT. Two agents claiming the same number then CONFLICT IN GIT instead of silently agreeing and reddening main afterwards.",
   "_why": "Six collisions on 2026-07-26 alone. Convention-based allocation cannot see a concurrent claimant on another branch: the clash only appears at merge, AFTER both PRs went green, and then reds every branch cut from main. A registry converts an invisible race into a merge conflict, which is where it belongs.",
   "claimed": {
@@ -6915,7 +7360,7 @@
       "claimed_at": "2026-08-31",
       "claimed_by": "cursor",
       "file": "2424-verify-one-load-one-open-invoice.mjs",
-      "purpose": "REV E gate — one load maps to at most one open TMS invoice"
+      "purpose": "REV E gate \u2014 one load maps to at most one open TMS invoice"
     },
     "2501": "2501-verify-disp-wire-02-driver-bill.mjs",
     "2505": "2505-verify-disp-wire-05-revrec-latch.mjs",
@@ -7010,12 +7455,12 @@
     "2773": {
       "lane": "cc-1",
       "script": "scripts/verify-no-hold-language-in-active-blocks.mjs",
-      "why": "CC-1 ADOPTS a CC-3-authored guard so it actually RUNS. The _band map partitions every integer among cursor/cc-1/cc-2 and leaves CC-3 no residue class, so CC-3 could not claim a compliant number and parked both guards in .guard-exempt.json — registered, on disk, enforcing nothing. Squatting another lane's band would have been the collision claim-before-write exists to prevent; adopting into CC-1's band is the honest fix."
+      "why": "CC-1 ADOPTS a CC-3-authored guard so it actually RUNS. The _band map partitions every integer among cursor/cc-1/cc-2 and leaves CC-3 no residue class, so CC-3 could not claim a compliant number and parked both guards in .guard-exempt.json \u2014 registered, on disk, enforcing nothing. Squatting another lane's band would have been the collision claim-before-write exists to prevent; adopting into CC-1's band is the honest fix."
     },
     "2777": {
       "lane": "cc-1",
       "script": "scripts/verify-no-patch-or-defer-language.mjs",
-      "why": "CC-1 ADOPTS a CC-3-authored guard so it actually RUNS. The _band map partitions every integer among cursor/cc-1/cc-2 and leaves CC-3 no residue class, so CC-3 could not claim a compliant number and parked both guards in .guard-exempt.json — registered, on disk, enforcing nothing. Squatting another lane's band would have been the collision claim-before-write exists to prevent; adopting into CC-1's band is the honest fix."
+      "why": "CC-1 ADOPTS a CC-3-authored guard so it actually RUNS. The _band map partitions every integer among cursor/cc-1/cc-2 and leaves CC-3 no residue class, so CC-3 could not claim a compliant number and parked both guards in .guard-exempt.json \u2014 registered, on disk, enforcing nothing. Squatting another lane's band would have been the collision claim-before-write exists to prevent; adopting into CC-1's band is the honest fix."
     },
     "2781": "2781-verify-bill-vendor-entity-consistent.mjs",
     "2785": "2785-verify-driver-vendor-no-uuid-fallback.mjs",
@@ -7069,19 +7514,19 @@
     "2910": "2910-verify-driver-ap-vendor-reverse-link.mjs",
     "2911": "CC-2 FAIL-BM1 verify-match-candidate-row-selects",
     "2912": "2912-verify-settlement-debt-view-not-stub.mjs",
-    "2913": "CC-2 verify-no-zero-rate-invoice-create (#4989; package.json wiring was forbidden per DoD §4)",
+    "2913": "CC-2 verify-no-zero-rate-invoice-create (#4989; package.json wiring was forbidden per DoD \u00a74)",
     "2914": "2914-verify-driver-active-30d-activity.mjs",
-    "2915": "CC-2 verify-parity-table-sort-toggle-contract (re-land: package.json wiring forbidden per DoD §4)",
+    "2915": "CC-2 verify-parity-table-sort-toggle-contract (re-land: package.json wiring forbidden per DoD \u00a74)",
     "2916": "2916-verify-load-detail-driver-pay-bills.mjs",
-    "2917": "CC-2 verify-combobox-id-label-binding (re-land: package.json wiring forbidden per DoD §4)",
-    "2919": "CC-2 verify-book-load-sample-data-wiring (re-land: package.json wiring forbidden per DoD §4)",
-    "2921": "CC-2 verify-complaint-create-contract (re-land: package.json wiring forbidden per DoD §4)",
-    "2923": "CC-2 verify-complaint-insert-notnull-columns (re-land: package.json wiring forbidden per DoD §4)",
-    "2925": "CC-2 verify-book-load-single-submit (re-land: package.json wiring forbidden per DoD §4)",
-    "2927": "CC-2 verify-book-stop-city-required (re-land: package.json wiring forbidden per DoD §4)",
-    "2929": "CC-2 verify-settlement-payment-events-honest (re-land: package.json wiring forbidden per DoD §4)",
-    "2931": "CC-2 verify-load-create-paths-tag-sample-data (re-land: package.json wiring forbidden per DoD §4)",
-    "2933": "CC-2 verify-trip-pairing-driver-from-load (re-land: package.json wiring forbidden per DoD §4)",
+    "2917": "CC-2 verify-combobox-id-label-binding (re-land: package.json wiring forbidden per DoD \u00a74)",
+    "2919": "CC-2 verify-book-load-sample-data-wiring (re-land: package.json wiring forbidden per DoD \u00a74)",
+    "2921": "CC-2 verify-complaint-create-contract (re-land: package.json wiring forbidden per DoD \u00a74)",
+    "2923": "CC-2 verify-complaint-insert-notnull-columns (re-land: package.json wiring forbidden per DoD \u00a74)",
+    "2925": "CC-2 verify-book-load-single-submit (re-land: package.json wiring forbidden per DoD \u00a74)",
+    "2927": "CC-2 verify-book-stop-city-required (re-land: package.json wiring forbidden per DoD \u00a74)",
+    "2929": "CC-2 verify-settlement-payment-events-honest (re-land: package.json wiring forbidden per DoD \u00a74)",
+    "2931": "CC-2 verify-load-create-paths-tag-sample-data (re-land: package.json wiring forbidden per DoD \u00a74)",
+    "2933": "CC-2 verify-trip-pairing-driver-from-load (re-land: package.json wiring forbidden per DoD \u00a74)",
     "2935": "CC-2 verify-loaded-miles-written-on-book",
     "2937": "CC-2 verify-money-creates-supply-sample-flag",
     "2939": "CC-2 verify-settle-due-kpi-fails-open (NO-WINDOW FAIL-S2)",
@@ -7162,12 +7607,12 @@
     },
     "3642": {
       "guard": "verify-driver-archive-implies-inactive",
-      "note": "LV-DRIVER-ARCHIVED-NOT-DEACTIVATED — archived drivers must not stay status=Active / deactivated_at NULL",
+      "note": "LV-DRIVER-ARCHIVED-NOT-DEACTIVATED \u2014 archived drivers must not stay status=Active / deactivated_at NULL",
       "owner": "cursor"
     },
     "3644": {
       "guard": "verify-vendor-bill-create-no-double-submit",
-      "note": "Bill create path is re-submittable — FE in-flight lock + stable Idempotency-Key per drawer session",
+      "note": "Bill create path is re-submittable \u2014 FE in-flight lock + stable Idempotency-Key per drawer session",
       "owner": "cursor"
     },
     "3645": {
@@ -7623,5 +8068,110 @@
       "1445-verify-expense-category-picker-canonical.mjs"
     ]
   },
-  "total_claimed": 1050
+  "total_claimed": 1063,
+  "10517-DUPLICATE-RENUMBERED-TO-10533": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-06",
+    "purpose": "STALE -- this number collided with another session's verify-settlement-detail-kpi-grid claim (same JSON file, two non-conflicting text insertions -- neither PR touched the other's byte range, so git merged both). Renumbered to 10533-verify-invoice-issue-date-from-load.mjs. Kept here (renamed key) instead of deleted so this entry is never silently reused."
+  },
+  "10521-DUPLICATE-RENUMBERED-TO-10537": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-06",
+    "purpose": "STALE -- collided with another session's verify-settlement-detail-reference claim, same cause as 10517 above. Renumbered to 10537-verify-invoice-due-date-from-terms.mjs."
+  },
+  "10789": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-07",
+    "purpose": "verify-settlement-lines-backfill-resolves-accounts"
+  },
+  "10797": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-07",
+    "purpose": "verify-escrow-deduction-alias-retyped"
+  },
+  "10801": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-07",
+    "purpose": "verify-planner-scroll-not-wheel-trapped"
+  },
+  "10809": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-07",
+    "purpose": "verify-payrun-close-excludes-voided-deductions"
+  },
+  "10813": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-07",
+    "purpose": "verify-rolling-ledger-queries-parallel"
+  },
+  "10821": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-07",
+    "purpose": "verify-no-duplicate-settlement-lines"
+  },
+  "10829": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-07",
+    "purpose": "verify-payrun-close-requires-load-activity"
+  },
+  "10833": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-07",
+    "purpose": "verify-cash-flow-row-adjustments-seq-grant"
+  },
+  "10602": {
+    "claimed_by": "cursor",
+    "claimed_at": "2026-09-07",
+    "purpose": "verify-paritytable-row-height"
+  },
+  "10604": {
+    "claimed_by": "cursor",
+    "claimed_at": "2026-09-07",
+    "purpose": "verify-table-header-no-navy-override"
+  },
+  "10606": {
+    "claimed_by": "cursor",
+    "claimed_at": "2026-09-07",
+    "purpose": "verify-navy-not-black-no-raw-hex"
+  },
+  "10837": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-07",
+    "purpose": "verify-invoice-copies-export-safe"
+  },
+  "10841": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-07",
+    "purpose": "verify-driver-vendor-financial-identity-invariant"
+  },
+  "10845": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-07",
+    "purpose": "verify-revrec-two-event-posting-contract-documented"
+  },
+  "10849": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-07",
+    "purpose": "verify-cash-advance-close-time-three-way-routing"
+  },
+  "10853": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-07",
+    "purpose": "verify-expense-reimbursable-company-expense-flags"
+  },
+  "10857": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-07",
+    "purpose": "verify-capitalized-repair-registers-fixed-asset"
+  },
+  "10861": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-07",
+    "purpose": "verify-coa-roles-and-bank-accounts-uniqueness"
+  },
+  "10865": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-07",
+    "purpose": "verify-transp-ar-control-opening-balance-integrity (TRANSP-AR-CONTROL-NEGATIVE-BALANCE, docs/audit/GUARD-WORKORDERS.md). Read-only live-data integrity guard: TRANSP ar_control GL account nets to -$961,983.52; traced live to a single owner-entered opening-balance JE line (2025-01-01, QBO Balance Sheet 12/31/2024 signed-actual, matches docs/specs/qbo-parity/OPENING-BALANCE-TIEOUT-CEREMONY-2026-07-04.md exactly) -- NOT a posting-side defect; TMS live posting engine nets $0 outside that one line. Guard locks the opening line against silent edits (void-not-delete) and tripwires any future non-opening ar_control movement beyond $10,000."
+  }
 }

@@ -57,10 +57,10 @@ async function maybePostTransferGl(
   }
 }
 
-type AccountKind = "bank" | "cc" | "coa";
-type TransferType = "bank_to_bank" | "cc_payment" | "cash_deposit" | "owner_contribution" | "owner_distribution";
+export type AccountKind = "bank" | "cc" | "coa";
+export type TransferType = "bank_to_bank" | "cc_payment" | "cash_deposit" | "owner_contribution" | "owner_distribution" | "petty_cash_funding";
 
-type TransferInput = {
+export type TransferInput = {
   operatingCompanyId: string;
   transferType: TransferType;
   fromAccountId: string;
@@ -157,7 +157,7 @@ type DbClient = {
 };
 
 /** Insert + balance bump + audit on an existing client/txn. Caller commits, then may call maybePostTransferGl. */
-async function insertTransferInClient(client: DbClient, input: TransferInput, userId: string): Promise<TransferRow> {
+export async function insertTransferInClient(client: DbClient, input: TransferInput, userId: string): Promise<TransferRow> {
   const fromOwned = await validateAccountOwnership(client, input.operatingCompanyId, input.fromAccountId, input.fromAccountKind);
   const toOwned = await validateAccountOwnership(client, input.operatingCompanyId, input.toAccountId, input.toAccountKind);
   if (!fromOwned || !toOwned) throw new Error("transfer_account_not_accessible");

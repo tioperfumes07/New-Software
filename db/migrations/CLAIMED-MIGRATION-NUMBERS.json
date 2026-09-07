@@ -8,6 +8,66 @@
   "_how_to_claim": "Open a claim-only PR (chore/claim-migration-YYYYMMDDHHMM-*) that adds the timestamp to 'claimed' below; merge to origin/main; THEN author the .sql file on a feature branch. CI fails if a new db/migrations/*.sql timestamp is not already claimed on origin/main. Same-lane intra-branch collisions are prevented because the registry is merged before the migration file exists.",
   "_why": "202612350000 was claimed twice by two concurrently-open CC-1 branches. The migration lane-band guard (HH 00\u201311 / 12\u201323) only prevents inter-lane collisions; it cannot see two unmerged branches in the same lane. A registry merged before authorship converts the invisible race into a git conflict.",
   "claimed": {
+    "202613950000": {
+      "claimed_by": "claude",
+      "claimed_at": "2026-09-07",
+      "purpose": "GUARD-WORKORDERS CHART-OF-ACCOUNTS-ROLES-NO-UNIQUE-PER-COMPANY-ROLE (routed=CC-1/Cursor, filed 2026-08-30) + its sibling banking.bank_accounts.ledger_account_id uniqueness gap noted still-open in the same board's BANK-ECON-05 closure note: partial unique index on accounting.chart_of_accounts_roles(operating_company_id, role) WHERE is_active=true, and on banking.bank_accounts(operating_company_id, ledger_account_id) WHERE deactivated_at IS NULL AND ledger_account_id IS NOT NULL. Live-verified before claiming: the 14 duplicate coa-roles groups named in the board row already resolved to exactly 1 active row each (someone deactivated the extras since 2026-08-30) and 0 bank_accounts currently share a ledger_account_id among active rows -- both indexes are safe to add with zero data cleanup required."
+    },
+    "202613940000": {
+      "claimed_by": "claude",
+      "claimed_at": "2026-09-07",
+      "purpose": "GUARD-WORKORDERS DEPRECIATION-REGISTER-DEFERRED-VS-NEVER-DEFER (routed=CC-1, filed 2026-09-01): additive accounting.fixed_assets.capitalized_from_work_order_id uuid NULL FK to maintenance.work_orders(id) + partial unique index WHERE NOT NULL -- a WO-close severe repair >= $7,000 (capitalize-threshold.ts) already posts the GL debit to the fixed_asset_default account (maintenance-posting/poster.service.ts) but never creates a corresponding accounting.fixed_assets register row, so the capitalized cost never enters the depreciation schedule/autopost engine. This column lets the new register-write be idempotent per WO."
+    },
+    "202613910000": {
+      "claimed_by": "claude-3",
+      "claimed_at": "2026-09-07",
+      "purpose": "SET-24 / ROUND 16.24 item 9: partial unique index on driver_finance.settlement_lines (settlement_id, line_type, description, amount) WHERE is_active=true AND line_type <> 'reimbursement' -- blocks a duplicate deduction/earnings/etc line from ever being materialized twice again (the exact historical-backfill-loop-ran-twice class of bug DED-DUP/SET-24 already found and voided at the source, but never prevented at the settlement_lines layer itself). reimbursement excluded from the index for now -- live active duplicates there are the already-identified SET-24 $172.44 overpayment, pending the owner's reimbursement_reversal correction; tightening the index to cover reimbursement too is a follow-up once that correction lands."
+    },
+    "202613890000": {
+      "claimed_by": "claude-3",
+      "claimed_at": "2026-09-06",
+      "purpose": "SET-24 GL ROUTING (owner ROUND 16.13 ruling): additive driver_finance.driver_settlement_deductions.reversed_reimbursement_id uuid NULL FK to driver_finance.driver_reimbursements(id) -- explicit both-ways link for the new 'reimbursement_reversal' deduction_type so its GL account resolves per-row to the voided reimbursement's own expense account (reimbursement_expense role), never the generic other_recovery/7200 route."
+    },
+    "202613850000": {
+      "claimed_by": "claude",
+      "claimed_at": "2026-09-06",
+      "purpose": "TRIP-LOCAL-ENUM (owner order 2026-09-06): additive ALTER TYPE mdata.trip_type_enum ADD VALUE 'LOCAL' (after 'SB') -- Laredo->Laredo trips (one live load today: 13544) have no trip-type value today"
+    },
+    "202613840000": {
+      "claimed_by": "claude",
+      "claimed_at": "2026-09-06",
+      "purpose": "LEDGER-NAME-01 (ROUND 13): additive, no-op re-declaration of accounting.broker_advances (CREATE TABLE IF NOT EXISTS, identical shape to the live table) carrying an updated CANONICAL-CHECK comment that explicitly names driver_finance.driver_advances and quotes the owner 2026-09-04 ruling that broker advances never touch driver_finance -- resolves verify-no-duplicate-financial-ledger's collision without editing the already-applied 202613630001"
+    },
+    "202613830000": {
+      "claimed_by": "claude",
+      "claimed_at": "2026-09-06",
+      "purpose": "ROUND 11 REG-PARSE-DATA: additive accounting.expenses.merchant_address text + source_settlement_ref text -- durable structured fields to replace the seed's composite memo string (lib/expense-memo.ts parses it for display today; this migration is the durable-data half)"
+    },
+    "202613820000": {
+      "claimed_by": "claude",
+      "claimed_at": "2026-09-06",
+      "purpose": "ROUND 10 SOURCE-DOCUMENT-REF: additive driver_finance.driver_settlements.source_document_ref text NULL column -- durable home for the signed settlement number (5769-5787, TOUR-SPLIT-PLAN-2026-09-06.md) alongside the generated display_id (docs/audit/migration-drafts/SOURCE-DOCUMENT-REF-migration-draft.sql)"
+    },
+    "202613810000": {
+      "claimed_by": "claude",
+      "claimed_at": "2026-09-06",
+      "purpose": "ROUND 9 BANK-FEE-ROLE: widen accounting.chart_of_accounts_roles.role CHECK to admit 'bank_fee_recovery' (SETL-DED-UI/SETL-DED-GL wire_fee/ach_fee deduction recovery, docs/audit/migration-drafts/BANK-FEE-RECOVERY-COA-ROLE-CHECK-WIDEN-migration-draft.sql)"
+    },
+    "202613810001": {
+      "claimed_by": "claude",
+      "claimed_at": "2026-09-06",
+      "purpose": "ROUND 9 BANK-FEE-ROLE: seed accounting.chart_of_accounts_roles for USMCA binding 'bank_fee_recovery' -> account 6300 Bank Service Charges & Wire Fees (live-verified id de553cc4-160c-4dec-8256-dfb28e9d4989), depends on 202613810000 (docs/audit/migration-drafts/BANK-FEE-RECOVERY-USMCA-SEED-migration-draft.sql)"
+    },
+    "202613800000": {
+      "claimed_by": "claude",
+      "claimed_at": "2026-09-06",
+      "purpose": "ACC-50 (LAW \u00a72, ROUND 5): additive posting_hold_reason text column on accounting.expenses and accounting.bills -- open-tour-posts-nothing gate needs somewhere to record WHY a document is held unposted"
+    },
+    "202613780000": {
+      "claimed_by": "claude",
+      "claimed_at": "2026-09-05",
+      "purpose": "ACC-MIG (lead handoff, CC-2 DSP-48 forward-ref): create mdata.load_stop_legs (load_id, operating_company_id, leg_index, leg_kind, from_stop_id, to_stop_id, google_reference_miles numeric(9,1), google_reference_fetched_at timestamptz), FORCED RLS company-scope + lucia bypass, ih35_app grants -- google-reference-miles.service.ts already writes to this exact table/column shape degrade-safe pending this migration"
+    },
     "202613720001": {
       "claimed_by": "cc-1",
       "claimed_at": "2026-09-04",
@@ -16,12 +76,12 @@
     "202613740001": {
       "claimed_by": "cc-1",
       "claimed_at": "2026-09-04",
-      "purpose": "LOAD-COSTS-COMPLETE-VERTICAL spec 09-04-2026 §1.2: widen accounting.chart_of_accounts_roles_role_check to admit two role values -- 'company_fuel_advance_expense' (NEW, so the fuel-advance account can be bound by role instead of name-matched, per owner ruling 'the fuel advance from us to the driver is a company expense... bind by role, never by name') and 'detention_pay_expense' (a real, currently-live drift found while investigating: already a first-class CoaRole in resolver.service.ts's COA_ROLE_VALUES since DWELL-01-D3, 2026-08-30, but never added to the live DB CHECK constraint -- designating it today would fail the INSERT). DROP+ADD CONSTRAINT, full reproduced superset, idempotent, matching the 202612811700 pattern."
+      "purpose": "LOAD-COSTS-COMPLETE-VERTICAL spec 09-04-2026 \u00a71.2: widen accounting.chart_of_accounts_roles_role_check to admit two role values -- 'company_fuel_advance_expense' (NEW, so the fuel-advance account can be bound by role instead of name-matched, per owner ruling 'the fuel advance from us to the driver is a company expense... bind by role, never by name') and 'detention_pay_expense' (a real, currently-live drift found while investigating: already a first-class CoaRole in resolver.service.ts's COA_ROLE_VALUES since DWELL-01-D3, 2026-08-30, but never added to the live DB CHECK constraint -- designating it today would fail the INSERT). DROP+ADD CONSTRAINT, full reproduced superset, idempotent, matching the 202612811700 pattern."
     },
     "202613750001": {
       "claimed_by": "cc-1",
       "claimed_at": "2026-09-04",
-      "purpose": "LOAD-COSTS-COMPLETE-VERTICAL spec 09-04-2026 §1.2: seed accounting.chart_of_accounts_roles for USMCA, role='company_fuel_advance_expense' -> catalogs.accounts id 353fbd5b-d39c-4709-ac19-60cae52018f7 (account 5000 'Fuel & Diesel', CostOfGoodsSold, postable, active), resolved by org.companies.code='USMCA' (never a hardcoded UUID), idempotent ON CONFLICT (operating_company_id, role) WHERE is_active DO UPDATE, matching the 202612880000 pattern. Depends on 202613740001 landing first (the CHECK-widen)."
+      "purpose": "LOAD-COSTS-COMPLETE-VERTICAL spec 09-04-2026 \u00a71.2: seed accounting.chart_of_accounts_roles for USMCA, role='company_fuel_advance_expense' -> catalogs.accounts id 353fbd5b-d39c-4709-ac19-60cae52018f7 (account 5000 'Fuel & Diesel', CostOfGoodsSold, postable, active), resolved by org.companies.code='USMCA' (never a hardcoded UUID), idempotent ON CONFLICT (operating_company_id, role) WHERE is_active DO UPDATE, matching the 202612880000 pattern. Depends on 202613740001 landing first (the CHECK-widen)."
     },
     "202613760001": {
       "claimed_by": "cc-1",
@@ -86,7 +146,7 @@
     "202613611500": {
       "claimed_by": "cursor",
       "claimed_at": "2026-09-03",
-      "purpose": "usmca_customer_mojibake_and_active (repair Latin-1 UTF-8 names; NCC México reactivate; align status with deactivated_at)"
+      "purpose": "usmca_customer_mojibake_and_active (repair Latin-1 UTF-8 names; NCC M\u00e9xico reactivate; align status with deactivated_at)"
     },
     "202613480001": {
       "claimed_by": "cc-1",
@@ -760,12 +820,32 @@
     "202613612300": {
       "claimed_by": "cursor",
       "claimed_at": "2026-09-03",
-      "purpose": "company_settlements WORM — trg_worm_refuse_delete on accounting.company_settlements + accounting.company_settlement_driver_settlements (ratchet 91->93)"
+      "purpose": "company_settlements WORM \u2014 trg_worm_refuse_delete on accounting.company_settlements + accounting.company_settlement_driver_settlements (ratchet 91->93)"
     },
     "202613640001": {
       "claimed_by": "claude",
       "claimed_at": "2026-09-04",
-      "purpose": "FLT-08 unit evidence categories — seed registration, IFTA, Form 2290 and title document types for the canonical shared uploader; require expiry where compliance is date-bound"
+      "purpose": "FLT-08 unit evidence categories \u2014 seed registration, IFTA, Form 2290 and title document types for the canonical shared uploader; require expiry where compliance is date-bound"
+    },
+    "202613881200": {
+      "claimed_by": "cursor",
+      "claimed_at": "2026-09-06",
+      "purpose": "WORM trigger for accounting.cash_flow_row_adjustments (added in 202613860000 without WORM protection). Idempotent CREATE TRIGGER IF NOT EXISTS via DO block. RG-16 guard sweep."
+    },
+    "202613900200": {
+      "claimed_by": "claude",
+      "claimed_at": "2026-09-06",
+      "purpose": "Petty Cash account feature (owner request 2026-09-06): additive is_petty_cash boolean on banking.bank_accounts + petty_cash_funding transfer_type CHECK + PETTY_CASH_CHECK_TRANSFER_ENABLED feature flag (default OFF). When a check is generated and the flag is ON, the check amount posts a transfer from the source bank account to the petty cash account."
+    },
+    "202613920000": {
+      "claimed_by": "claude",
+      "claimed_at": "2026-09-07",
+      "purpose": "ROUND 16.24 item 3: GRANT USAGE/SELECT on accounting.cash_flow_row_adjustments_seq_seq to ih35_app -- migration 202613870000 added the seq bigserial column but never granted its implicit sequence, so every roll-over/hide write has been failing live with 42501 permission denied since that migration landed (live-reproduced this session)."
+    },
+    "202613930000": {
+      "claimed_by": "claude",
+      "claimed_at": "2026-09-07",
+      "purpose": "ROUND 16.26 item SET-14: two independent boolean flags on accounting.expenses -- is_reimbursable (owed back to the driver) and is_company_expense (a direct company cost) -- additive, default false, no backfill of existing rows (forward-guarantee pattern already established in this file for is_sample_data/unit_id)."
     }
   },
   "202613590001": {
@@ -777,5 +857,20 @@
     "claimed_by": "claude",
     "claimed_at": "2026-09-03",
     "purpose": "GO-19-2b Section 5: catalogs.point_mileage table (coordinate-keyed reference mileage, entity-neutral like lane_mileage -- computed once by the self-hosted OSM routing engine, reused forever)"
+  },
+  "202613800100": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-06",
+    "purpose": "LDT-5: driver_finance.driver_settlements.settlement_model backfill 'load_bookended' for settlements created by the presettlement link (first_load_id set, model NULL) -- root cause of 'No active pre-settlement found' (pre-settlement.routes.ts filters settlement_model='load_bookended'; confirmPresettlementLink never set it; 15/15 open USMCA settlements NULL on Neon 2026-09-06 01:5xZ)"
+  },
+  "202613860000": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-06",
+    "purpose": "CASH-FLOW-02 owner refinement (2026-09-06 20:2x/20:5xZ): additive catalogs.cash_flow_adjustment_reasons (seeded reason catalog: customer paying late / factor hold / dispute / short-pay / late delivery / breakdown / other) + accounting.cash_flow_row_adjustments (append-only roll-over-with-reason + audited hide-from-snapshot ledger for Rolling Ledger rows)"
+  },
+  "202613870000": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-06",
+    "purpose": "additive: accounting.cash_flow_row_adjustments gains a bigserial seq column. Found live-testing 202613860000's own read-model overlay: two adjustments on the same row created inside ONE transaction share an identical now() timestamp (frozen per-transaction in Postgres), making the DISTINCT ON ... ORDER BY created_at DESC latest-adjustment-wins tie-break non-deterministic. seq is monotonic regardless of transaction timing; the overlay query re-orders on it instead."
   }
 }

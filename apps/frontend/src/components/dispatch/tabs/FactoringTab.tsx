@@ -1,20 +1,26 @@
 /**
- * FactoringTab — standalone drawer child component.
+ * FactoringTab — standalone drawer child component (LDT-4 rewrite).
  * Mount in any load-detail drawer by passing loadId + operatingCompanyId.
  * Does NOT import from LoadDetailDrawer.tsx.
  *
- * Lifecycle displayed:
- *   NOT_FACTORED → PACKET_READY → SUBMITTED → ADVANCE_RECEIVED → RESERVE_RELEASED → CHARGED_BACK
- *
- * PACKET_READY is derived: load.status in delivered+ AND notes carry IH35_FACTORING_PACKAGE_V1::{"generated_at":"…"}
+ * LDT-4 step bar: Pro forma → In transit → POD → Submitted → Advance received → Reserve released
+ * The money card: invoice face · broker advance applied · amount purchased · advance % · reserve % ·
+ *   fee % · net cash — all from the Faro vendor terms (factor profile) + factoring_advances rows.
+ * Packet card: real attachment chips (rate con, BOL, POD, invoice PDF) — no "upload under Documents tab" text.
+ * Submit disabled until POD; chargebacks listed only when driver-caused and approved.
  * Submission reuses existing accounting factoring-advances batch API (Block-24/25 poster untouched).
  */
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLoad } from "../../../api/loads";
-import { listInvoices, listFactoringCandidateInvoices } from "../../../api/accounting";
-import { listAllFiles } from "../../../api/docs";
+import {
+  listInvoices,
+  listFactoringCandidateInvoices,
+  listBrokerAdvances,
+  listFactoringAdvances,
+} from "../../../api/accounting";
+import { getDownloadUrl, type DocsFile } from "../../../api/docs";
 import { createFactor, listFactors } from "../../../api/factoring";
 import { apiRequest } from "../../../api/client";
 import { Button } from "../../Button";
@@ -24,11 +30,30 @@ import { userFacingApiError } from "../../../lib/api-error-message";
 import { EntityLink } from "../../shared/EntityLink";
 import { EntityLinkOrTombstone } from "../../shared/EntityLinkOrTombstone";
 import { QueryErrorNote } from "./QueryErrorNote";
+import { formatMoneyCents } from "../constants";
+import { useLoadDocuments } from "./useLoadDocuments";
+
+// ─── .ldt-* palette (GLOBAL-TYPE-SIZE-BASELINE tokens) ────────────────────────
+
+// LDT-4 DESIGN (lead 2026-09-06): the tab's styles live in styles/tokens-load-detail.css (.ldt-stages / .ldt-chip) — an inline
+// <style> here redefined .ldt-card / .ldt-ch for every tab that mounted after Factoring (measured live 04:1xZ: flat cards).
+
 
 // ─── constants ───────────────────────────────────────────────────────────────
 
 const PACKET_PREFIX = "IH35_FACTORING_PACKAGE_V1::";
-const DELIVERABLE_STATUSES = ["delivered", "invoiced", "paid", "closed"] as const;
+
+/** Load statuses from in_transit onward (factoring "In transit" step). */
+const TRANSIT_STATUSES = [
+  "in_transit", "at_delivery", "delivered", "delivered_pending_docs",
+  "completed_docs_received", "invoiced", "paid", "closed",
+] as const;
+
+/** Load statuses from delivered onward (factoring "POD" precondition). */
+const DELIVERED_STATUSES = [
+  "delivered", "delivered_pending_docs", "completed_docs_received",
+  "invoiced", "paid", "closed",
+] as const;
 
 type PacketMeta = {
   generated_at: string | null;
@@ -41,11 +66,7 @@ type PacketMeta = {
 function parseMeta(notes: string | null | undefined): { meta: PacketMeta; visibleNotes: string } {
   const raw = String(notes ?? "");
   const empty: PacketMeta = {
-    generated_at: null,
-    approved_at: null,
-    emailed_at: null,
-    uploaded_at: null,
-    invoice_id: null,
+    generated_at: null, approved_at: null, emailed_at: null, uploaded_at: null, invoice_id: null,
   };
   if (!raw.startsWith(PACKET_PREFIX)) return { meta: empty, visibleNotes: raw };
   const nl = raw.indexOf("\n");
@@ -72,68 +93,89 @@ function serializeMeta(meta: PacketMeta, visibleNotes: string): string {
   return `${PACKET_PREFIX}${JSON.stringify(meta)}\n${visibleNotes.trim()}`.trim();
 }
 
-// ─── status helpers ───────────────────────────────────────────────────────────
+// ─── step bar (LDT-4) ─────────────────────────────────────────────────────────
 
-type FactoringStage =
-  | "NOT_FACTORED"
-  | "PACKET_READY"
+type FactoringStep =
+  | "PRO_FORMA"
+  | "IN_TRANSIT"
+  | "POD"
   | "SUBMITTED"
   | "ADVANCE_RECEIVED"
-  | "RESERVE_RELEASED"
-  | "CHARGED_BACK";
+  | "RESERVE_RELEASED";
 
-function deriveStage(
-  loadStatus: string,
-  meta: PacketMeta,
-  invoiceFactoringStatus?: string | null,
-): FactoringStage {
-  const fs = invoiceFactoringStatus ?? "not_factored";
-  if (fs === "released") return "RESERVE_RELEASED";
-  if (fs === "recourse_returned") return "CHARGED_BACK";
-  if (fs === "advanced" || fs === "reserve_held" || fs === "collected") return "ADVANCE_RECEIVED";
-  if (fs === "submitted") return "SUBMITTED";
-  if (meta.generated_at && DELIVERABLE_STATUSES.includes(loadStatus as never)) return "PACKET_READY";
-  return "NOT_FACTORED";
-}
-
-const STAGE_ORDER: FactoringStage[] = [
-  "NOT_FACTORED",
-  "PACKET_READY",
-  "SUBMITTED",
-  "ADVANCE_RECEIVED",
-  "RESERVE_RELEASED",
+const STEP_ORDER: FactoringStep[] = [
+  "PRO_FORMA", "IN_TRANSIT", "POD", "SUBMITTED", "ADVANCE_RECEIVED", "RESERVE_RELEASED",
 ];
 
-const STAGE_LABELS: Record<FactoringStage, string> = {
-  NOT_FACTORED: "Not Factored",
-  PACKET_READY: "Packet Ready",
+const STEP_LABELS: Record<FactoringStep, string> = {
+  PRO_FORMA: "Pro forma",
+  IN_TRANSIT: "In transit",
+  POD: "POD",
   SUBMITTED: "Submitted",
-  ADVANCE_RECEIVED: "Advance Received",
-  RESERVE_RELEASED: "Reserve Released",
-  CHARGED_BACK: "Charged Back",
+  ADVANCE_RECEIVED: "Advance received",
+  RESERVE_RELEASED: "Reserve released",
 };
 
-const STAGE_COLORS: Record<FactoringStage, string> = {
-  NOT_FACTORED: "bg-gray-100 text-gray-600 border-gray-200",
-  PACKET_READY: "bg-slate-100 text-slate-700 border-slate-300",
-  SUBMITTED: "bg-slate-100 text-slate-700 border-slate-200",
-  ADVANCE_RECEIVED: "bg-slate-100 text-slate-700 border-slate-200",
-  RESERVE_RELEASED: "bg-slate-100 text-slate-700 border-slate-200",
-  CHARGED_BACK: "bg-red-50 text-red-700 border-red-200",
-};
+function deriveStep(
+  loadStatus: string,
+  hasPod: boolean,
+  invoiceFactoringStatus?: string | null,
+): FactoringStep {
+  const fs = invoiceFactoringStatus ?? "not_factored";
+  if (fs === "released") return "RESERVE_RELEASED";
+  // recourse_returned: advance was received then charged back — step bar stays at ADVANCE_RECEIVED
+  if (fs === "advanced" || fs === "reserve_held" || fs === "collected" || fs === "recourse_returned") return "ADVANCE_RECEIVED";
+  if (fs === "submitted") return "SUBMITTED";
+  if (hasPod && DELIVERED_STATUSES.includes(loadStatus as never)) return "POD";
+  if (TRANSIT_STATUSES.includes(loadStatus as never)) return "IN_TRANSIT";
+  return "PRO_FORMA";
+}
 
-// ─── checklist item ───────────────────────────────────────────────────────────
+// ─── small presentational helpers ─────────────────────────────────────────────
 
-function CheckItem({ label, ok, note }: { label: string; ok: boolean; note?: ReactNode }) {
+function PacketChip({ label, file }: { label: string; file?: DocsFile | null }) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
+
+  const handleClick = async () => {
+    if (!file || loading) return;
+    setLoading(true);
+    setError(false);
+    try {
+      const res = await getDownloadUrl(file.id);
+      window.open(res.presigned_url, "_blank");
+    } catch {
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const testId = `factoring-chip-${label.toLowerCase().replace(/\s+/g, "-")}`;
+
+  if (!file) {
+    return (
+      <span className="ldt-pill warn" data-testid={testId}>none on file</span>
+    );
+  }
+
   return (
-    <div className="flex items-start gap-2 text-xs">
-      <span className={`mt-0.5 text-xs leading-none ${ok ? "text-slate-700" : "text-gray-300"}`}>
-        {ok ? "✓" : "○"}
-      </span>
-      <div>
-        <span className={ok ? "text-gray-800" : "text-gray-400"}>{label}</span>
-        {note ? <span className="ml-1 text-xs text-gray-400">{note}</span> : null}
-      </div>
+    <button type="button" onClick={handleClick} disabled={loading} className="ldt-chip" data-testid={testId}>
+      <span>✓</span>
+      <span>{label}</span>
+      <span className="max-w-[140px] truncate text-gray-500">{file.original_filename}</span>
+      {error ? <span className="text-red-600">!</span> : null}
+    </button>
+  );
+}
+
+function MoneyRow({
+  label, value, sub,
+}: { label: string; value: string; sub?: string | null }) {
+  return (
+    <div className="ldt-row">
+      <span>{label}{sub ? <span className="ldt-sub">{sub}</span> : null}</span>
+      <span className="ldt-m">{value}</span>
     </div>
   );
 }
@@ -156,24 +198,13 @@ export function FactoringTab({ loadId, operatingCompanyId, canEdit, onPacketUpda
   const [selectedFactorId, setSelectedFactorId] = useState("");
   const [showAddFactorModal, setShowAddFactorModal] = useState(false);
   const [addForm, setAddForm] = useState({
-    name: "",
-    advance_rate: "0.95",
-    fee_rate: "0.025",
-    reserve_rate: "0.10",
-    recourse_days: "90",
+    name: "", advance_rate: "0.95", fee_rate: "0.025", reserve_rate: "0.10", recourse_days: "90",
   });
 
   // load (shared React Query key — deduped with drawer)
   const loadQ = useLoad(loadId, operatingCompanyId);
   const load = loadQ.data;
-
-  // documents for this load
-  const docsQ = useQuery({
-    queryKey: ["factoring-tab", "docs", operatingCompanyId, loadId],
-    queryFn: () => listAllFiles({ operating_company_id: operatingCompanyId, entity_type: "load", entity_id: loadId }),
-    enabled: Boolean(operatingCompanyId && loadId),
-  });
-  const docs = docsQ.data?.files ?? [];
+  const currency = load?.currency_code ?? "USD";
 
   // invoice linked to this load
   const invoicesQ = useQuery({
@@ -181,15 +212,15 @@ export function FactoringTab({ loadId, operatingCompanyId, canEdit, onPacketUpda
     queryFn: () => listInvoices(operatingCompanyId, { source_load_id: loadId, limit: 1 }),
     enabled: Boolean(operatingCompanyId && loadId),
   });
-  const linkedInvoice = useMemo(() => {
-    return invoicesQ.data?.invoices?.[0] ?? null;
-  }, [invoicesQ.data]);
+  const linkedInvoice = useMemo(() => invoicesQ.data?.invoices?.[0] ?? null, [invoicesQ.data]);
 
-  // invoice docs (for PDF link)
-  const invoiceDocsQ = useQuery({
-    queryKey: ["factoring-tab", "invoice-docs", operatingCompanyId, linkedInvoice?.id],
-    queryFn: () => listAllFiles({ operating_company_id: operatingCompanyId, entity_type: "invoice", entity_id: linkedInvoice!.id }),
-    enabled: Boolean(operatingCompanyId && linkedInvoice?.id),
+  // documents for this load — SHARED READ (useLoadDocuments). LDT-D Documents tab and
+  // LDT-2 Stops tab consume the same hook + query key, so BOL/POD chips never drift.
+  const { packetDocuments, isError: docsLoadError, refetch: refetchDocs } = useLoadDocuments({
+    operatingCompanyId,
+    loadId,
+    invoiceId: linkedInvoice?.id,
+    enabled: Boolean(operatingCompanyId && loadId),
   });
 
   // active factors for submission
@@ -219,24 +250,48 @@ export function FactoringTab({ loadId, operatingCompanyId, canEdit, onPacketUpda
     [candidateQ.data],
   );
 
-  // ── derived state ──────────────────────────────────────────────────────────
-
-  const { meta, visibleNotes: _visibleNotes } = useMemo(
-    () => parseMeta(load?.notes),
-    [load?.notes],
+  // broker advances for this load (money card: "broker advance applied")
+  const brokerAdvancesQ = useQuery({
+    queryKey: ["factoring-tab", "broker-advances", operatingCompanyId, loadId],
+    queryFn: () => listBrokerAdvances(operatingCompanyId, { load_id: loadId }),
+    enabled: Boolean(operatingCompanyId && loadId),
+  });
+  const brokerAdvanceTotalCents = useMemo(
+    () => (brokerAdvancesQ.data?.rows ?? []).filter((r) => !r.voided_at).reduce((s, r) => s + Number(r.amount_cents), 0),
+    [brokerAdvancesQ.data],
   );
 
-  const isDeliverable = DELIVERABLE_STATUSES.includes((load?.status ?? "") as never);
-  const stage = deriveStage(load?.status ?? "", meta, linkedInvoice?.factoring_status);
+  // factoring advance for this load (money card: amount purchased, rates, net cash)
+  const factoringAdvanceQ = useQuery({
+    queryKey: ["factoring-tab", "factoring-advance", operatingCompanyId, loadId],
+    queryFn: () => listFactoringAdvances(operatingCompanyId, { load_id: loadId, limit: 1 }),
+    enabled: Boolean(operatingCompanyId && loadId),
+  });
+  const factoringAdvance = factoringAdvanceQ.data?.rows?.[0] ?? null;
 
-  const hasRateConf = docs.some((f) => f.category_code === "rate_confirmation");
-  const hasBol = docs.some((f) => f.category_code === "bol");
-  const hasPod = docs.some((f) => f.category_code === "pod");
+  // ── derived state ──────────────────────────────────────────────────────────
+
+  const { meta, visibleNotes: _visibleNotes } = useMemo(() => parseMeta(load?.notes), [load?.notes]);
+
+  const isDeliverable = DELIVERED_STATUSES.includes((load?.status ?? "") as never);
+  const hasRateConf = Boolean(packetDocuments.rateCon);
+  const hasBol = Boolean(packetDocuments.bol);
+  const hasPod = Boolean(packetDocuments.pod);
   const hasInvoice = Boolean(linkedInvoice);
-  const hasInvoicePdf = Boolean((invoiceDocsQ.data?.files ?? []).find((f) => f.mime_type.includes("pdf")));
   const packetComplete = hasRateConf && hasBol && hasPod && hasInvoice;
 
+  const step = deriveStep(load?.status ?? "", hasPod, linkedInvoice?.factoring_status);
+  const stepIndex = STEP_ORDER.indexOf(step);
   const isFactorIdSet = selectedFactorId !== "";
+
+  // specific docs for packet chips — from the SHARED READ (packetDocuments)
+  const rateConfFile = packetDocuments.rateCon;
+  const bolFile = packetDocuments.bol;
+  const podFile = packetDocuments.pod;
+  const invoicePdfFile = packetDocuments.invoicePdf;
+
+  // net cash = advance_amount_cents - factor_fee_cents
+  const netCashCents = (factoringAdvance?.advance_amount_cents ?? 0) - (factoringAdvance?.factor_fee_cents ?? 0);
 
   // ── mutations ──────────────────────────────────────────────────────────────
 
@@ -270,10 +325,7 @@ export function FactoringTab({ loadId, operatingCompanyId, canEdit, onPacketUpda
       };
       await apiRequest(`/api/v1/dispatch/loads/${loadId}`, {
         method: "PATCH",
-        body: {
-          operating_company_id: operatingCompanyId,
-          notes: serializeMeta(nextMeta, _visibleNotes),
-        },
+        body: { operating_company_id: operatingCompanyId, notes: serializeMeta(nextMeta, _visibleNotes) },
       });
     },
     onSuccess: () => {
@@ -288,16 +340,10 @@ export function FactoringTab({ loadId, operatingCompanyId, canEdit, onPacketUpda
   const approveMutation = useMutation({
     mutationFn: async () => {
       if (!load) throw new Error("Load not loaded");
-      const nextMeta: PacketMeta = {
-        ...meta,
-        approved_at: new Date().toISOString(),
-      };
+      const nextMeta: PacketMeta = { ...meta, approved_at: new Date().toISOString() };
       await apiRequest(`/api/v1/dispatch/loads/${loadId}`, {
         method: "PATCH",
-        body: {
-          operating_company_id: operatingCompanyId,
-          notes: serializeMeta(nextMeta, _visibleNotes),
-        },
+        body: { operating_company_id: operatingCompanyId, notes: serializeMeta(nextMeta, _visibleNotes) },
       });
     },
     onSuccess: () => {
@@ -314,15 +360,12 @@ export function FactoringTab({ loadId, operatingCompanyId, canEdit, onPacketUpda
       // Reuse existing factoring batch create + submit (Block-24/25 poster untouched)
       const batch = await apiRequest<{ id: string }>("/api/v1/factoring/batches", {
         method: "POST",
-        body: {
-          operating_company_id: operatingCompanyId,
-          invoice_ids: [linkedInvoice.id],
-        },
+        body: { operating_company_id: operatingCompanyId, invoice_ids: [linkedInvoice.id] },
       });
-      await apiRequest(`/api/v1/factoring/batches/${encodeURIComponent(batch.id)}/submit?operating_company_id=${encodeURIComponent(operatingCompanyId)}`, {
-        method: "POST",
-        body: {},
-      });
+      await apiRequest(
+        `/api/v1/factoring/batches/${encodeURIComponent(batch.id)}/submit?operating_company_id=${encodeURIComponent(operatingCompanyId)}`,
+        { method: "POST", body: {} },
+      );
     },
     onSuccess: () => {
       pushToast("Invoice submitted to FARO batch", "success");
@@ -347,359 +390,355 @@ export function FactoringTab({ loadId, operatingCompanyId, canEdit, onPacketUpda
   // ── render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-4 text-xs">
-      {/* Exact Leaves load.drawer.factoring:customer — customer_id was used for invoice queries only. */}
-      {load.customer_id ? (
-        <div className="text-xs text-slate-600" data-testid="factoring-tab-customer-entitylink">
-          Customer:{" "}
-          <EntityLinkOrTombstone
-            kind="customer"
-            id={load.customer_id}
-            name={load.customer_name ?? null}
-            noun="Customer"
-          />
-        </div>
-      ) : null}
-      {/* Status badge + stepper */}
-      <div className="rounded-sm border border-gray-200 bg-gray-50 p-3">
-        <div className="mb-2 flex items-center gap-2">
-          <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Factoring Status</span>
-          <span className={`rounded-sm border px-2 py-0.5 text-xs font-semibold ${STAGE_COLORS[stage]}`}>
-            {STAGE_LABELS[stage]}
-          </span>
-        </div>
-        {/* stepper */}
-        <div className="flex flex-wrap gap-1">
-          {(stage === "CHARGED_BACK" ? [...STAGE_ORDER, "CHARGED_BACK" as FactoringStage] : STAGE_ORDER).map(
-            (s, idx) => {
-              const isActive = s === stage;
-              const isPast = STAGE_ORDER.indexOf(stage) > idx || stage === "CHARGED_BACK";
+    <>
+      <div className="space-y-4 text-xs">
+        {/* Exact Leaves load.drawer.factoring:customer — customer_id was used for invoice queries only. */}
+        {load.customer_id ? (
+          <div className="text-xs text-slate-600" data-testid="factoring-tab-customer-entitylink">
+            Customer:{" "}
+            <EntityLinkOrTombstone kind="customer" id={load.customer_id} name={load.customer_name ?? null} noun="Customer" />
+          </div>
+        ) : null}
+
+        {/* ── Step bar (LDT-4) ─────────────────────────────────────────────── */}
+        {/* LDT-4 DESIGN (owner 2026-09-06 04:2xZ, render § Factoring): the stages are ONE segmented bar across the card —
+            the reached stages filled, the current one dark, the rest outlined — not a row of small chips. */}
+        <div className="ldt-card">
+          <div className="ldt-stages" data-testid="factoring-stages">
+            {STEP_ORDER.map((s, idx) => {
+              const cls = idx === stepIndex ? "ldt-stage now" : idx < stepIndex ? "ldt-stage done" : "ldt-stage";
               return (
-                <div
-                  key={s}
-                  className={`flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-medium ${
-                    isActive
-                      ? STAGE_COLORS[s]
-                      : isPast
-                      ? "bg-gray-200 text-gray-500"
-                      : "bg-gray-100 text-gray-300"
-                  }`}
-                >
-                  {isActive ? "▶ " : isPast ? "✓ " : ""}
-                  {STAGE_LABELS[s]}
+                <div key={s} className={cls} data-testid={`factoring-step-${s.toLowerCase()}`}>
+                  {idx === 0 && linkedInvoice ? `${STEP_LABELS[s]} ${linkedInvoice.display_id ?? ""} · ${formatMoneyCents(linkedInvoice.total_cents ?? null, currency)}` : STEP_LABELS[s]}
                 </div>
               );
-            },
-          )}
-        </div>
-        {/* LINK-F5171/LINK-F5179 — reverse_link: this tab's own packet-stage lifecycle is derived
-        locally from load.notes; the canonical dispatch factoring queue (with its own doc-presence
-        checks across every load) never linked back from here. */}
-        <EntityLink
-          kind="factoring_queue_load"
-          id={loadId}
-          label="View in Dispatch Factoring Queue →"
-          data-testid="factoring-tab-view-in-dispatch-queue"
-          className="mt-2 inline-block text-xs font-medium text-slate-700 hover:underline"
-        />
-        {/* LINK-F5171/LINK-F5180 — reverse_link: factoring:home.recourse_pipeline. */}
-        <EntityLink
-          kind="factoring_recourse_load"
-          id={loadId}
-          label="View in Recourse Pipeline →"
-          data-testid="factoring-tab-view-in-recourse-pipeline"
-          className="mt-2 ml-3 inline-block text-xs font-medium text-slate-700 hover:underline"
-        />
-        {/* LINK-F5171/LINK-F5181 — reverse_link: factoring:submit.queue. */}
-        <EntityLink
-          kind="factoring_submit_queue_load"
-          id={loadId}
-          label="View in Submission Queue →"
-          data-testid="factoring-tab-view-in-submission-queue"
-          className="mt-2 ml-3 inline-block text-xs font-medium text-slate-700 hover:underline"
-        />
-        {linkedInvoice?.factoring_advance_id ? (
-          <>
-            {/* LINK-F5171/LINK-F5184 — reverse_link: factoring:accounting.list — this load's own
-            advance batch, direct detail drill. */}
+            })}
+          </div>
+
+          {/* Reverse links — kept from original (Rule 07: never delete) */}
+          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
             <EntityLink
-              kind="factoring_advance"
-              id={linkedInvoice.factoring_advance_id}
-              label="View Advance Batch →"
-              data-testid="factoring-tab-view-advance-batch"
-              className="mt-2 ml-3 inline-block text-xs font-medium text-slate-700 hover:underline"
+              kind="factoring_queue_load"
+              id={loadId}
+              label="View in Dispatch Factoring Queue →"
+              data-testid="factoring-tab-view-in-dispatch-queue"
+              className="text-xs font-medium text-slate-700 hover:underline"
             />
-            {/* LINK-F5171/LINK-F5184 — reverse_link: factoring:banking.entry — Banking (Faro) tab
-            filtered to this load's advance(s). */}
-            <Link
-              to={`/banking/factoring?load_id=${encodeURIComponent(loadId)}`}
-              data-testid="factoring-tab-view-banking-entry"
-              className="mt-2 ml-3 inline-block text-xs font-medium text-slate-700 hover:underline"
-            >
-              View in Banking (Faro) →
-            </Link>
-          </>
-        ) : null}
-      </div>
-
-      {/* Document checklist */}
-      <div className="rounded-sm border border-gray-200 p-3">
-        <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Packet Checklist</div>
-        <div className="space-y-1.5">
-          {/* DSP-MONEY-F7283 — docsQ failure used to silently default `docs` to [], indistinguishable
-          from a genuine empty document set: hasRateConf/hasBol/hasPod all read false and the operator
-          saw "Upload under Documents tab" for documents that may actually already exist. */}
-          <CheckItem
-            label="Rate Confirmation"
-            ok={hasRateConf}
-            note={docsQ.isError ? <QueryErrorNote label="documents" onRetry={() => docsQ.refetch()} /> : hasRateConf ? undefined : "Upload under Documents tab"}
-          />
-          <CheckItem
-            label="Bill of Lading (BOL)"
-            ok={hasBol}
-            note={docsQ.isError ? <QueryErrorNote label="documents" onRetry={() => docsQ.refetch()} /> : hasBol ? undefined : "Upload under Documents tab"}
-          />
-          <CheckItem
-            label="Proof of Delivery (POD)"
-            ok={hasPod}
-            note={docsQ.isError ? <QueryErrorNote label="documents" onRetry={() => docsQ.refetch()} /> : hasPod ? undefined : "Driver PWA or upload under Documents tab"}
-          />
-          {/* DSP-MONEY-F7283 — invoicesQ failure used to silently default linkedInvoice to null,
-          showing "Create invoice from Overview tab" even when a real linked invoice exists. */}
-          <CheckItem
-            label="Invoice"
-            ok={hasInvoice}
-            note={
-              invoicesQ.isError ? (
-                <QueryErrorNote label="invoice" onRetry={() => invoicesQ.refetch()} />
-              ) : hasInvoice && linkedInvoice?.id ? (
-                <EntityLinkOrTombstone kind="invoice" id={linkedInvoice.id} name={linkedInvoice.display_id} noun="Invoice" className="text-slate-700 hover:underline" data-testid="load-factoring-invoice-link" />
-              ) : (
-                "Create invoice from Overview tab"
-              )
-            }
-          />
-          {hasInvoice ? (
-            <CheckItem
-              label="Invoice PDF"
-              ok={hasInvoicePdf}
-              note={invoiceDocsQ.isError ? <QueryErrorNote label="invoice documents" onRetry={() => invoiceDocsQ.refetch()} /> : hasInvoicePdf ? undefined : "Generate from Invoice page"}
+            <EntityLink
+              kind="factoring_recourse_load"
+              id={loadId}
+              label="View in Recourse Pipeline →"
+              data-testid="factoring-tab-view-in-recourse-pipeline"
+              className="text-xs font-medium text-slate-700 hover:underline"
             />
-          ) : null}
-        </div>
-        {!isDeliverable ? (
-          <p className="mt-2 text-[11px] text-slate-700">
-            Packet assembles once load status is delivered or later.
-          </p>
-        ) : null}
-      </div>
-
-      {/* Timestamps */}
-      {(meta.generated_at || meta.approved_at || meta.emailed_at || meta.uploaded_at) ? (
-        <div className="rounded-sm border border-gray-200 p-3 text-xs text-gray-600">
-          {meta.generated_at ? (
-            <div>Assembled: {new Date(meta.generated_at).toLocaleString()}</div>
-          ) : null}
-          {meta.approved_at ? (
-            <div>Approved: {new Date(meta.approved_at).toLocaleString()}</div>
-          ) : null}
-          {meta.emailed_at ? (
-            <div>Emailed to FARO: {new Date(meta.emailed_at).toLocaleString()}</div>
-          ) : null}
-          {meta.uploaded_at ? (
-            <div>Uploaded to portal: {new Date(meta.uploaded_at).toLocaleString()}</div>
-          ) : null}
-        </div>
-      ) : null}
-
-      {/* Actions */}
-      {canEdit ? (
-        <div className="space-y-2">
-          {/* Stage: NOT_FACTORED → mark packet ready */}
-          {stage === "NOT_FACTORED" && isDeliverable && (
-            <div className="rounded-sm border border-slate-300 bg-slate-100 p-3">
-              <p className="mb-2 text-xs text-slate-700">
-                {/* DSP-MONEY-F7283 — packetComplete is derived from docsQ/invoicesQ; a fetch failure
-                on either used to silently read as "documents missing" instead of "can't verify yet". */}
-                {docsQ.isError || invoicesQ.isError
-                  ? "Couldn't verify document completeness — see checklist above and retry before relying on this."
-                  : packetComplete
-                  ? "All documents present. Mark packet ready for dispatcher approval."
-                  : "Some documents are missing (see checklist). You can still mark ready and upload missing docs later."}
-              </p>
-              <Button
-                size="sm"
-                onClick={() => markReadyMutation.mutate()}
-                loading={markReadyMutation.isPending}
-              >
-                Mark Packet Ready
-              </Button>
-            </div>
-          )}
-
-          {/* Stage: PACKET_READY → dispatcher approves */}
-          {stage === "PACKET_READY" && !meta.approved_at && (
-            <div className="rounded-sm border border-slate-200 bg-slate-100 p-3">
-              <p className="mb-2 text-xs font-medium text-slate-700">
-                Dispatcher approval required before submitting to FARO.
-              </p>
-              <Button
-                size="sm"
-                onClick={() => approveMutation.mutate()}
-                loading={approveMutation.isPending}
-              >
-                Approve for FARO Submission
-              </Button>
-            </div>
-          )}
-
-          {/* Stage: PACKET_READY + approved → submit to FARO */}
-          {stage === "PACKET_READY" && meta.approved_at && !submitOpen && (
-            <div className="rounded-sm border border-slate-200 bg-slate-100 p-3">
-              <p className="mb-2 text-xs text-slate-700">
-                Packet approved on {new Date(meta.approved_at).toLocaleString()}. Ready to submit to FARO.
-              </p>
-              <Button
-                size="sm"
-                disabled={!linkedInvoice || !candidateIds.has(linkedInvoice?.id ?? "")}
-                onClick={() => setSubmitOpen(true)}
-              >
-                Submit to FARO
-              </Button>
-              {/* DSP-MONEY-F7283 — candidateQ failure used to silently default candidateIds to an
-              empty Set, disabling submission with the WRONG explanation ("may already be in a
-              batch") when the real cause was a fetch failure. The button stays safely disabled
-              either way (we cannot fabricate eligibility we failed to read); only the message
-              changes to the honest one. */}
-              {candidateQ.isError ? (
-                <QueryErrorNote label="submission eligibility" onRetry={() => candidateQ.refetch()} />
-              ) : linkedInvoice && !candidateIds.has(linkedInvoice.id) ? (
-                <p className="mt-1 text-[11px] text-slate-700">Invoice may already be in a batch or already factored.</p>
-              ) : null}
-            </div>
-          )}
-
-          {/* Submit form */}
-          {submitOpen && (
-            <div className="rounded-sm border border-gray-200 p-3">
-              <div className="mb-2 text-xs font-semibold text-gray-700">Select FARO factor account</div>
-              {/* LST-F153: bare <select> had no + Add new — operators left load factoring to create a factor. */}
-              <div className="mb-2" data-testid="factoring-tab-submit-factor-picker">
-                <Combobox
-                  options={factorOptions}
-                  value={selectedFactorId || null}
-                  onChange={(next) => setSelectedFactorId(next ?? "")}
-                  placeholder="— choose factor —"
-                  loading={factorsQ.isLoading}
-                  allowAddNew={{
-                    label: "+ Add new factor",
-                    onAdd: () => setShowAddFactorModal(true),
-                  }}
+            <EntityLink
+              kind="factoring_submit_queue_load"
+              id={loadId}
+              label="View in Submission Queue →"
+              data-testid="factoring-tab-view-in-submission-queue"
+              className="text-xs font-medium text-slate-700 hover:underline"
+            />
+            {/* LDT-4 restyle (bd00b7cac1) dropped this invoice reverse-drill (was a CheckItem note
+                in the pre-LDT-4 readiness checklist that LDT-4 replaced with the packet/step UI) —
+                restored here (Rule 07: never delete) with the exact same real data binding. */}
+            {linkedInvoice?.id ? (
+              <EntityLinkOrTombstone
+                kind="invoice"
+                id={linkedInvoice.id}
+                name={linkedInvoice.display_id}
+                noun="Invoice"
+                className="text-xs font-medium text-slate-700 hover:underline"
+                data-testid="load-factoring-invoice-link"
+              />
+            ) : null}
+            {linkedInvoice?.factoring_advance_id ? (
+              <>
+                <EntityLink
+                  kind="factoring_advance"
+                  id={linkedInvoice.factoring_advance_id}
+                  label="View Advance Batch →"
+                  data-testid="factoring-tab-view-advance-batch"
+                  className="text-xs font-medium text-slate-700 hover:underline"
                 />
-                {/* DSP-MONEY-F7283 — factorsQ failure used to silently default the picker to an
-                empty option list with no explanation, indistinguishable from "no factors set up". */}
-                {factorsQ.isError ? (
-                  <QueryErrorNote label="factor accounts" onRetry={() => factorsQ.refetch()} />
-                ) : null}
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  disabled={!isFactorIdSet || submitMutation.isPending}
-                  loading={submitMutation.isPending}
-                  onClick={() => submitMutation.mutate()}
+                <Link
+                  to={`/banking/factoring?load_id=${encodeURIComponent(loadId)}`}
+                  data-testid="factoring-tab-view-banking-entry"
+                  className="text-xs font-medium text-slate-700 hover:underline"
                 >
-                  Confirm Submit
-                </Button>
-                <Button size="sm" variant="secondary" onClick={() => setSubmitOpen(false)}>
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          )}
-        </div>
-      ) : null}
-
-      {showAddFactorModal ? (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-3">
-          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-sm border border-gray-200 bg-white p-4 shadow-xl">
-            <div className="mb-3 text-xs font-semibold text-gray-900">Add Factor</div>
-            <div className="space-y-2 text-xs">
-              <label className="block">
-                <div className="mb-1">Name</div>
-                <input
-                  value={addForm.name}
-                  onChange={(event) => setAddForm((current) => ({ ...current, name: event.target.value }))}
-                  className="w-full rounded-sm border border-gray-300 px-2 py-1"
-                />
-              </label>
-              <label className="block">
-                <div className="mb-1">Advance Rate (0-1)</div>
-                <input
-                  value={addForm.advance_rate}
-                  onChange={(event) => setAddForm((current) => ({ ...current, advance_rate: event.target.value }))}
-                  className="w-full rounded-sm border border-gray-300 px-2 py-1"
-                />
-              </label>
-              <label className="block">
-                <div className="mb-1">Fee Rate (0-1)</div>
-                <input
-                  value={addForm.fee_rate}
-                  onChange={(event) => setAddForm((current) => ({ ...current, fee_rate: event.target.value }))}
-                  className="w-full rounded-sm border border-gray-300 px-2 py-1"
-                />
-              </label>
-              <label className="block">
-                <div className="mb-1">Reserve Rate (0-1)</div>
-                <input
-                  value={addForm.reserve_rate}
-                  onChange={(event) => setAddForm((current) => ({ ...current, reserve_rate: event.target.value }))}
-                  className="w-full rounded-sm border border-gray-300 px-2 py-1"
-                />
-              </label>
-              <label className="block">
-                <div className="mb-1">Recourse Days</div>
-                <input
-                  value={addForm.recourse_days}
-                  onChange={(event) => setAddForm((current) => ({ ...current, recourse_days: event.target.value }))}
-                  className="w-full rounded-sm border border-gray-300 px-2 py-1"
-                />
-              </label>
-            </div>
-            <div className="mt-4 flex justify-end gap-2">
-              <Button size="sm" variant="secondary" onClick={() => setShowAddFactorModal(false)}>
-                Cancel
-              </Button>
-              <Button
-                size="sm"
-                loading={addFactorMutation.isPending}
-                onClick={() => {
-                  if (!addForm.name.trim()) {
-                    pushToast("Factor name is required", "error");
-                    return;
-                  }
-                  void addFactorMutation.mutateAsync();
-                }}
-              >
-                Save
-              </Button>
-            </div>
+                  View in Banking (Faro) →
+                </Link>
+              </>
+            ) : null}
           </div>
         </div>
-      ) : null}
 
-      {/* Already submitted / beyond → informational */}
-      {["SUBMITTED", "ADVANCE_RECEIVED", "RESERVE_RELEASED", "CHARGED_BACK"].includes(stage) ? (
-        <div className="rounded-sm border border-gray-200 p-3 text-xs text-gray-600">
-          {stage === "SUBMITTED"
-            ? "Invoice submitted to FARO factoring batch. Track progress in Accounting → Factoring."
-            : stage === "ADVANCE_RECEIVED"
-            ? "Advance received from FARO. Reserve hold period active."
-            : stage === "RESERVE_RELEASED"
-            ? "Reserve released. Factoring cycle complete."
-            : "Chargeback recorded. See Accounting → Factoring for recourse details."}
+        <div className="ldt-grid2">
+        {/* ── The money card (LDT-4) ───────────────────────────────────────── */}
+        <div className="ldt-card" data-testid="factoring-money-card">
+          <div className="ldt-ch"><span>The money</span><span className="ldt-sub">ASC 860 · secured borrowing, recourse</span></div>
+          <div className="ldt-rows">
+            <MoneyRow
+              label="Invoice face"
+              value={formatMoneyCents(linkedInvoice?.total_cents ?? null, currency)}
+              sub={linkedInvoice?.display_id ?? null}
+            />
+            <MoneyRow
+              label="Broker advance applied"
+              value={formatMoneyCents(brokerAdvanceTotalCents || null, currency)}
+              sub={brokerAdvancesQ.isError ? "fetch error" : brokerAdvanceTotalCents ? `${(brokerAdvancesQ.data?.rows ?? []).filter((r) => !r.voided_at).length} advance(s)` : null}
+            />
+            <MoneyRow
+              label="Amount purchased"
+              value={formatMoneyCents(factoringAdvance?.invoice_total_cents ?? null, currency)}
+              sub={factoringAdvance?.display_id ?? null}
+            />
+            <MoneyRow
+              label="Advance %"
+              value={factoringAdvance ? `${factoringAdvance.advance_rate_pct}%` : "—"}
+              sub="Factoring Advance liability 2150"
+            />
+            <MoneyRow
+              label="Reserve %"
+              value={factoringAdvance ? `${factoringAdvance.reserve_pct}%` : "—"}
+              sub="Factoring Reserves 1230"
+            />
+            <MoneyRow
+              label="Fee %"
+              value={factoringAdvance ? `${factoringAdvance.factor_fee_pct}%` : "—"}
+              sub={`Factoring Fee expense ${load?.load_number ?? ""}-F`}
+            />
+            <MoneyRow
+              label="Net cash"
+              value={formatMoneyCents(factoringAdvance ? netCashCents : null, currency)}
+              sub="advance − fee"
+            />
+          </div>
         </div>
-      ) : null}
-    </div>
+
+        {/* ── Packet card (LDT-4) — real attachment chips ──────────────────── */}
+        <div className="ldt-card" data-testid="factoring-packet-card">
+          <div className="ldt-ch"><span>Packet</span><span className="ldt-sub">auto-assembles at delivery</span></div>
+          <div className="ldt-rows">
+            <div className="ldt-row"><span>Rate confirmation</span><PacketChip label="Rate con" file={rateConfFile} /></div>
+            <div className="ldt-row"><span>Bill of lading</span><PacketChip label="BOL" file={bolFile} /></div>
+            <div className="ldt-row"><span>Proof of delivery</span><PacketChip label="POD" file={podFile} /></div>
+            <div className="ldt-row"><span>Invoice PDF</span><PacketChip label="Invoice PDF" file={invoicePdfFile} /></div>
+          </div>
+          {/* Error notes for failed fetches (honest failure, not silent empty) */}
+          {docsLoadError ? (
+            <div className="mt-2">
+              <QueryErrorNote label="load documents" onRetry={() => void refetchDocs()} />
+            </div>
+          ) : null}
+          {!isDeliverable ? (
+            <p className="mt-2 text-[11px] text-slate-700">
+              Packet assembles once load status is delivered or later.
+            </p>
+          ) : null}
+        </div>
+        </div>
+        <div className="ldt-note" data-testid="factoring-links-note">
+          Every figure links: the invoice ↔ factoring advances ↔ broker advances ↔ journal entries. A/R stays on the books; the invoice is never derecognized. Chargebacks appear here only when driver-caused and approved.
+        </div>
+
+        {/* ── Chargebacks (LDT-4) — only when driver-caused and approved ────── */}
+        {linkedInvoice?.factoring_status === "recourse_returned" ? (
+          <div className="ldt-card">
+            <div className="ldt-ch"><span>Chargebacks</span></div>
+            {linkedInvoice.source_load_chargeback_requested ? (
+              <div className="ldt-row">
+                <div>
+                  <div className="text-gray-800">Chargeback — driver-caused and approved</div>
+                  {linkedInvoice.source_load_chargeback_reason ? (
+                    <div className="ldt-sub">{linkedInvoice.source_load_chargeback_reason}</div>
+                  ) : null}
+                </div>
+              </div>
+            ) : (
+              <div className="ldt-row ldt-muted">No chargebacks</div>
+            )}
+          </div>
+        ) : null}
+
+        {/* ── Timestamps ────────────────────────────────────────────────────── */}
+        {(meta.generated_at || meta.approved_at || meta.emailed_at || meta.uploaded_at) ? (
+          <div className="rounded-sm border border-gray-200 p-3 text-xs text-gray-600">
+            {meta.generated_at ? <div>Assembled: {new Date(meta.generated_at).toLocaleString()}</div> : null}
+            {meta.approved_at ? <div>Approved: {new Date(meta.approved_at).toLocaleString()}</div> : null}
+            {meta.emailed_at ? <div>Emailed to FARO: {new Date(meta.emailed_at).toLocaleString()}</div> : null}
+            {meta.uploaded_at ? <div>Uploaded to portal: {new Date(meta.uploaded_at).toLocaleString()}</div> : null}
+          </div>
+        ) : null}
+
+        {/* ── Actions ───────────────────────────────────────────────────────── */}
+        {canEdit && (step === "PRO_FORMA" || step === "IN_TRANSIT" || step === "POD") ? (
+          <div className="space-y-2">
+            {/* Before POD: mark packet ready (if deliverable) */}
+            {step !== "POD" && isDeliverable && !meta.generated_at ? (
+              <div className="rounded-sm border border-slate-300 bg-slate-100 p-3">
+                <p className="mb-2 text-xs text-slate-700">
+                  {docsLoadError || invoicesQ.isError
+                    ? "Couldn't verify document completeness — see packet above and retry before relying on this."
+                    : packetComplete
+                    ? "All documents present. Mark packet ready for dispatcher approval."
+                    : "Some documents are missing (see packet above). You can still mark ready and upload missing docs later."}
+                </p>
+                <Button size="sm" onClick={() => markReadyMutation.mutate()} loading={markReadyMutation.isPending}>
+                  Mark Packet Ready
+                </Button>
+              </div>
+            ) : null}
+
+            {/* POD step: approve (if not yet approved) */}
+            {step === "POD" && !meta.approved_at ? (
+              <div className="rounded-sm border border-slate-200 bg-slate-100 p-3">
+                <p className="mb-2 text-xs font-medium text-slate-700">
+                  Dispatcher approval required before submitting to FARO.
+                </p>
+                <Button size="sm" onClick={() => approveMutation.mutate()} loading={approveMutation.isPending}>
+                  Approve for FARO Submission
+                </Button>
+              </div>
+            ) : null}
+
+            {/* Approved + not yet submitted: submit to FARO */}
+            {meta.approved_at && step === "POD" && !submitOpen ? (
+              <div className="rounded-sm border border-slate-200 bg-slate-100 p-3">
+                <p className="mb-2 text-xs text-slate-700">
+                  Packet approved on {new Date(meta.approved_at).toLocaleString()}. Ready to submit to FARO.
+                </p>
+                <Button
+                  size="sm"
+                  disabled={!hasPod || !linkedInvoice || !candidateIds.has(linkedInvoice?.id ?? "")}
+                  onClick={() => setSubmitOpen(true)}
+                >
+                  Submit to FARO
+                </Button>
+                {candidateQ.isError ? (
+                  <QueryErrorNote label="submission eligibility" onRetry={() => candidateQ.refetch()} />
+                ) : linkedInvoice && !candidateIds.has(linkedInvoice.id) ? (
+                  <p className="mt-1 text-[11px] text-slate-700">Invoice may already be in a batch or already factored.</p>
+                ) : null}
+              </div>
+            ) : null}
+
+            {/* Submit form */}
+            {submitOpen ? (
+              <div className="rounded-sm border border-gray-200 p-3">
+                <div className="mb-2 text-xs font-semibold text-gray-700">Select FARO factor account</div>
+                <div className="mb-2" data-testid="factoring-tab-submit-factor-picker">
+                  <Combobox
+                    options={factorOptions}
+                    value={selectedFactorId || null}
+                    onChange={(next) => setSelectedFactorId(next ?? "")}
+                    placeholder="— choose factor —"
+                    loading={factorsQ.isLoading}
+                    allowAddNew={{ label: "+ Add new factor", onAdd: () => setShowAddFactorModal(true) }}
+                  />
+                  {factorsQ.isError ? (
+                    <QueryErrorNote label="factor accounts" onRetry={() => factorsQ.refetch()} />
+                  ) : null}
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    disabled={!hasPod || !isFactorIdSet || submitMutation.isPending}
+                    loading={submitMutation.isPending}
+                    onClick={() => submitMutation.mutate()}
+                  >
+                    Confirm Submit
+                  </Button>
+                  <Button size="sm" variant="secondary" onClick={() => setSubmitOpen(false)}>
+                    Cancel
+                  </Button>
+                </div>
+                {!hasPod ? (
+                  <p className="mt-1 text-[11px] text-red-600">POD required before submission.</p>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {showAddFactorModal ? (
+          <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-3">
+            <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-sm border border-gray-200 bg-white p-4 shadow-xl">
+              <div className="mb-3 text-xs font-semibold text-gray-900">Add Factor</div>
+              <div className="space-y-2 text-xs">
+                <label className="block">
+                  <div className="mb-1">Name</div>
+                  <input
+                    value={addForm.name}
+                    onChange={(event) => setAddForm((current) => ({ ...current, name: event.target.value }))}
+                    className="w-full rounded-sm border border-gray-300 px-2 py-1"
+                  />
+                </label>
+                <label className="block">
+                  <div className="mb-1">Advance Rate (0-1)</div>
+                  <input
+                    value={addForm.advance_rate}
+                    onChange={(event) => setAddForm((current) => ({ ...current, advance_rate: event.target.value }))}
+                    className="w-full rounded-sm border border-gray-300 px-2 py-1"
+                  />
+                </label>
+                <label className="block">
+                  <div className="mb-1">Fee Rate (0-1)</div>
+                  <input
+                    value={addForm.fee_rate}
+                    onChange={(event) => setAddForm((current) => ({ ...current, fee_rate: event.target.value }))}
+                    className="w-full rounded-sm border border-gray-300 px-2 py-1"
+                  />
+                </label>
+                <label className="block">
+                  <div className="mb-1">Reserve Rate (0-1)</div>
+                  <input
+                    value={addForm.reserve_rate}
+                    onChange={(event) => setAddForm((current) => ({ ...current, reserve_rate: event.target.value }))}
+                    className="w-full rounded-sm border border-gray-300 px-2 py-1"
+                  />
+                </label>
+                <label className="block">
+                  <div className="mb-1">Recourse Days</div>
+                  <input
+                    value={addForm.recourse_days}
+                    onChange={(event) => setAddForm((current) => ({ ...current, recourse_days: event.target.value }))}
+                    className="w-full rounded-sm border border-gray-300 px-2 py-1"
+                  />
+                </label>
+              </div>
+              <div className="mt-4 flex justify-end gap-2">
+                <Button size="sm" variant="secondary" onClick={() => setShowAddFactorModal(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  loading={addFactorMutation.isPending}
+                  onClick={() => {
+                    if (!addForm.name.trim()) {
+                      pushToast("Factor name is required", "error");
+                      return;
+                    }
+                    void addFactorMutation.mutateAsync();
+                  }}
+                >
+                  Save
+                </Button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {/* Already submitted / beyond → informational */}
+        {["SUBMITTED", "ADVANCE_RECEIVED", "RESERVE_RELEASED"].includes(step) ? (
+          <div className="rounded-sm border border-gray-200 p-3 text-xs text-gray-600">
+            {step === "SUBMITTED"
+              ? "Invoice submitted to FARO factoring batch. Track progress in Accounting → Factoring."
+              : step === "ADVANCE_RECEIVED"
+              ? "Advance received from FARO. Reserve hold period active."
+              : "Reserve released. Factoring cycle complete."}
+          </div>
+        ) : null}
+      </div>
+    </>
   );
 }

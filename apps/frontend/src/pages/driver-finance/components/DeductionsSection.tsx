@@ -44,6 +44,8 @@ type Props = {
   onHold: (row: DeductionRow) => void;
   onResume?: (row: DeductionRow) => void;
   isOpen?: boolean;
+  // SET-01 — the button rendered below always existed; it had no handler at all (a dead control).
+  onAdd?: () => void;
 };
 
 const COLUMNS: Array<ParityColumn<DeductionRow>> = [
@@ -118,7 +120,7 @@ const COLUMNS: Array<ParityColumn<DeductionRow>> = [
   },
 ];
 
-export function DeductionsSection({ rows, onHold, onResume, isOpen }: Props) {
+export function DeductionsSection({ rows, onHold, onResume, isOpen, onAdd }: Props) {
   const subtotal = rows.reduce((sum, row) => sum + Number(row.pending_ack ? 0 : row.this_period_amount || 0), 0);
 
   // Build columns with working hold/resume handlers — ParityColumn render is a pure function of
@@ -150,7 +152,14 @@ export function DeductionsSection({ rows, onHold, onResume, isOpen }: Props) {
         <h2 className="m-0 text-xs font-bold uppercase tracking-wide text-slate-600">Deductions</h2>
         <span className="ml-2 text-xs text-slate-500">escrow $25.00 per load only where printed · admin fee GAS · advances</span>
         <div className="ml-auto">
-          <Button size="sm" variant="secondary" disabled={!isOpen} title={!isOpen ? "Settlement locked" : undefined}>
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={!isOpen || !onAdd}
+            title={!isOpen ? "Settlement locked" : undefined}
+            onClick={onAdd}
+            data-testid="deductions-section-add"
+          >
             + Add deduction
           </Button>
         </div>

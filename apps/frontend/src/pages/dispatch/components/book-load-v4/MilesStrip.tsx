@@ -29,6 +29,10 @@ type Props = {
    *  NEVER editable and NEVER copied into any miles input (LAW §2). null/undefined = not
    *  computed yet (no coordinates, provider not configured, or still loading). */
   googleReferencePractical?: { miles: number; minutes: number } | null;
+  /** LDT-1 (owner ruling 2026-09-05): Google car-routing reference for the EMPTY leg —
+   *  yard → pickup — grey, read-only, NEVER editable and NEVER copied into Empty miles (LAW §2).
+   *  null/undefined = not computed (no coordinates, provider off, or still loading). */
+  googleReferenceEmpty?: { miles: number; minutes: number } | null;
 };
 
 function numFromInput(raw: string): number | null {
@@ -92,6 +96,7 @@ export function MilesStrip({
   onUseHistoryMiles,
   newLane = false,
   googleReferencePractical = null,
+  googleReferenceEmpty = null,
 }: Props) {
   // fillConfidence drives chrome; provenance is the operator sentence.
   const cell = "flex flex-1 flex-col items-center justify-center border-r border-slate-200 px-2 py-2 text-center last:border-r-0";
@@ -117,7 +122,7 @@ export function MilesStrip({
       <div className="flex text-xs font-semibold tracking-wide text-slate-700">
         <div className={cell}>
           <label className="text-slate-600" htmlFor="book-miles-practical">
-            Practical miles{practicalRequired ? " *" : ""}
+            Practical (long){practicalRequired ? " *" : ""}
           </label>
           {editable ? (
             <input
@@ -140,7 +145,7 @@ export function MilesStrip({
         </div>
         <div className={`${cell} bg-slate-100`}>
           <label className="text-slate-700" htmlFor="book-miles-shortest">
-            Short miles{shortestRequired ? " *" : ""}
+            Shortest{shortestRequired ? " *" : ""}
           </label>
           {editable ? (
             <input
@@ -236,6 +241,17 @@ export function MilesStrip({
         >
           Google ref {googleReferencePractical.miles.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} mi ·{" "}
           {formatDuration(googleReferencePractical.minutes)}
+        </p>
+      ) : null}
+      {googleReferenceEmpty ? (
+        <p
+          className="border-t border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-500"
+          data-testid="book-load-google-reference-empty"
+          title="Google car routing, yard to pickup — reference only"
+        >
+          Empty leg ref (yard → pickup){" "}
+          {googleReferenceEmpty.miles.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} mi ·{" "}
+          {formatDuration(googleReferenceEmpty.minutes)}
         </p>
       ) : null}
     </div>

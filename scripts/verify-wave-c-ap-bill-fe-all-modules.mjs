@@ -40,7 +40,8 @@ export function collectApBillLeaves(read = fs.readFileSync, readDir = fs.readdir
 }
 const contracts = [
   ["apps/frontend/src/pages/accounting/BillsPage.tsx", /kind="bill"/],
-  ["apps/frontend/src/pages/banking/ReconciliationWorkspace.tsx", /<EntityLink kind="bill" id=\{tx\.matched_bill_id\}/],
+  // JSX attributes moved onto separate lines since this check was written — match either shape.
+  ["apps/frontend/src/pages/banking/ReconciliationWorkspace.tsx", /<EntityLink[\s\S]{0,40}kind="bill"[\s\S]{0,40}id=\{tx\.matched_bill_id\}/],
   ["apps/frontend/src/pages/insurance/ClaimsTab.tsx", /kind="bill"/],
   ["apps/frontend/src/pages/maintenance/WorkOrderDetailPage.tsx", /<EntityLink kind="bill" id=\{row\.id\}/],
   ["apps/frontend/src/pages/driver-finance/SettlementDetailPage.tsx", /kind="bill"[\s\S]*accounting_bill_id/],

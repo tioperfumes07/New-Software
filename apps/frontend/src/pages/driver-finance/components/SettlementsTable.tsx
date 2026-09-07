@@ -97,19 +97,24 @@ export function SettlementsTable({
         sortable: true,
         sortValue: (row) => Number(row.load_count ?? 0),
         cellClass: "tabular-nums",
+        // SETTLEMENTS-LIST-TRUTH — a bare flex gap between adjacent load-number links reads as
+        // one run-on number ("1352513529"), not two loads. A visible separator between links
+        // (never between a link and nothing) makes the boundary unambiguous.
         render: (row) => {
           const links = row.load_links ?? [];
           if (links.length > 0) {
             return (
               <span className="flex flex-wrap items-center gap-1">
-                {links.map((link) => (
-                  <EntityLink
-                    key={link.id}
-                    kind="load"
-                    id={link.id}
-                    label={entityLabel(link.label, link.id, "Load")}
-                    className="tabular-nums text-slate-700 hover:underline"
-                  />
+                {links.map((link, i) => (
+                  <span key={link.id} className="flex items-center gap-1">
+                    {i > 0 ? <span className="text-gray-400">·</span> : null}
+                    <EntityLink
+                      kind="load"
+                      id={link.id}
+                      label={entityLabel(link.label, link.id, "Load")}
+                      className="tabular-nums text-slate-700 hover:underline"
+                    />
+                  </span>
                 ))}
               </span>
             );
