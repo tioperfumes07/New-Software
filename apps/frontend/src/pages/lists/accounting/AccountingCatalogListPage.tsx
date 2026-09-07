@@ -28,6 +28,8 @@ type Props = {
   breadcrumbPath: string;
   codeLabel?: string;
   readOnly?: boolean;
+  // PAYMENT-TERMS-CODE-NAME-COLUMN-COLLISION — see AccountingCatalogModal's own doc comment.
+  singleCodeNameField?: boolean;
   metadataFields?: AccountingMetadataField[];
   metadataSummary?: (row: AccountingCatalogRow) => string;
   // Optional in-context explainer link (e.g. Expense Categories → the GL account map).
@@ -49,6 +51,7 @@ export function AccountingCatalogListPage({
   breadcrumbPath,
   codeLabel = "Code",
   readOnly = false,
+  singleCodeNameField = false,
   metadataFields,
   metadataSummary,
   helperLink,
@@ -205,6 +208,7 @@ export function AccountingCatalogListPage({
         open={profileOpen}
         displayName={displayName}
         codeLabel={codeLabel}
+        singleCodeNameField={singleCodeNameField}
         row={selectedRow}
         canEdit={!readOnly}
         onClose={() => setProfileOpen(false)}
@@ -221,6 +225,7 @@ export function AccountingCatalogListPage({
         operatingCompanyId={companyId}
         displayName={displayName}
         codeLabel={codeLabel}
+        singleCodeNameField={singleCodeNameField}
         metadataFields={metadataFields}
         nextSortOrder={nextSortOrder}
         client={client}

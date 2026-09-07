@@ -6,6 +6,9 @@ type Props = {
   open: boolean;
   displayName: string;
   codeLabel?: string;
+  // PAYMENT-TERMS-CODE-NAME-COLUMN-COLLISION — see AccountingCatalogModal's own doc comment; hides
+  // the redundant Name field when code and display_name are the same physical column.
+  singleCodeNameField?: boolean;
   row: AccountingCatalogRow | null;
   canEdit: boolean;
   onClose: () => void;
@@ -38,6 +41,7 @@ export function AccountingCatalogProfileDrawer({
   open,
   displayName,
   codeLabel = "Code",
+  singleCodeNameField = false,
   row,
   canEdit,
   onClose,
@@ -70,10 +74,12 @@ export function AccountingCatalogProfileDrawer({
           <dt className="text-xs font-semibold text-slate-500">{codeLabel}</dt>
           <dd className="mt-1 break-words text-slate-900">{row.code || "—"}</dd>
         </div>
-        <div>
-          <dt className="text-xs font-semibold text-slate-500">Name</dt>
-          <dd className="mt-1 break-words text-slate-900">{row.display_name || "—"}</dd>
-        </div>
+        {singleCodeNameField ? null : (
+          <div>
+            <dt className="text-xs font-semibold text-slate-500">Name</dt>
+            <dd className="mt-1 break-words text-slate-900">{row.display_name || "—"}</dd>
+          </div>
+        )}
         <div className="sm:col-span-2">
           <dt className="text-xs font-semibold text-slate-500">Description</dt>
           <dd className="mt-1 whitespace-pre-wrap break-words text-slate-900">{row.description || "—"}</dd>
