@@ -601,6 +601,30 @@ export function RecordExpenseForm({
         Sample / TEST DATA expense
       </label>
 
+      {/* Two INDEPENDENT flags per cost row (accounting.expenses.is_reimbursable /
+          is_company_expense). Two separate checkboxes, not one dropdown — a row can be
+          neither, either, or both. */}
+      <label className="flex items-center gap-2 text-xs font-semibold text-gray-700">
+        <input
+          type="checkbox"
+          data-testid="record-expense-is-reimbursable"
+          checked={values.isReimbursable}
+          onChange={(event) => setValues((prev) => ({ ...prev, isReimbursable: event.target.checked }))}
+          className="h-4 w-4 rounded-sm border-gray-300"
+        />
+        Reimbursable to driver
+      </label>
+      <label className="flex items-center gap-2 text-xs font-semibold text-gray-700">
+        <input
+          type="checkbox"
+          data-testid="record-expense-is-company-expense"
+          checked={values.isCompanyExpense}
+          onChange={(event) => setValues((prev) => ({ ...prev, isCompanyExpense: event.target.checked }))}
+          className="h-4 w-4 rounded-sm border-gray-300"
+        />
+        Company expense
+      </label>
+
       <label className="text-xs font-semibold text-gray-700" htmlFor={fieldId("payment-method")}>
         Payment method *
         <div className="mt-1">
