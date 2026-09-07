@@ -135,6 +135,7 @@ import { registerLoadStopExtraRateRoutes } from "./dispatch/loads/multi-stop/ext
 import { registerDispatchOcrIntakeRoutes } from "./dispatch/ocr-intake.routes.js";
 import { registerDispatchCustomerNotifyRoutes } from "./dispatch/customer-notify.routes.js";
 import { registerDispatchPodBolRoutes } from "./dispatch/pod.routes.js";
+import { registerManualDeliveryAuthorizationRoutes } from "./dispatch/manual-delivery-authorization.routes.js";
 import { registerDispatchViewRoutes } from "./dispatch/driver-pwa/dispatch-view.routes.js";
 import { registerDispatcherRoleViewRoutes } from "./dispatcher-board/role-views/routes.js";
 import { registerDriverRoutes } from "./driver/index.js";
@@ -954,6 +955,7 @@ async function main() {
   await registerDispatchOcrIntakeRoutes(app);
   await registerDispatchCustomerNotifyRoutes(app);
   await registerDispatchPodBolRoutes(app);
+  await registerManualDeliveryAuthorizationRoutes(app);
   // GAP-34 — the driver dispatch view and stop mutations were complete but orphaned, so the PWA's
   // mounted screen received 404s. Register beside the other dispatch capture routes.
   await registerDispatchViewRoutes(app);
