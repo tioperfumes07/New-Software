@@ -22,6 +22,14 @@
  * OPEN settlement; refuses if a live (non-voided) bill already exists for the load at call time
  * other than the one being corrected. This is a narrow "undo a same-day draft mistake" tool, never a
  * general bill-editing capability.
+ *
+ * C6-MONEY-JE-EXEMPT: same class as detention-pay-posting.service.ts / settlement-lines-materialize
+ * .service.ts's own C6-MONEY-JE-EXEMPT notes for driver_finance.settlement_lines — these replacement
+ * lines are minted on an OPEN, un-posted settlement (guard above requires it), so no JE has been
+ * posted for them yet at either the old or new figure. The settlement HEADER posts one aggregate
+ * balanced JE at finalize via settlement-payrun-close.service.ts's closeSettlementPayRun, which reads
+ * the settlement's live (non-voided) lines at that time — the corrected amount, not the voided one.
+ * This function mints no new money and no new GL fact of its own; it corrects a pre-finalize figure.
  */
 
 type QueryClient = {
