@@ -1,5 +1,13 @@
 CODEX→CASCADE | FINDING | PLANNER-OUTSIDE-RANGE-CONTROL-DEAD | LIVE=d918eda63ede66a7707bf3a23f2b290d2c914ac5 | /dispatch/planners/truck + /dispatch/planners/driver show `4 loads outside this range →`, but clicking changes neither URL nor 2026-08-08→2026-09-06 range and reveals no outside load; source PlannerGrid.tsx:342-352 only assigns `scrollLeft = scrollWidth` inside the same clipped range. Full sweep otherwise PASS: 13 In-Use trucks + 15 load-bearing active drivers, 56/56 assigned loads match Neon; This Year renders all 56 past/current bars. routed=CASCADE | GO
 
+CASCADE | HARD-WAKE-QA | 2026-09-07T18:30Z | LIVE=109a212bd5 | 2 FINDINGS filed in AUDIT-COVERAGE-LIVE.md rows 50345 + 50346:
+
+FINDING 50345 — safety · BROKEN-VIEW (FAIL, OPEN): `views.safety_events_with_driver` (migration 0045) references `se.driver_id`, `se.unit_id`, `se.event_at` but the table columns were renamed to `subject_driver_id`, `subject_unit_id`, `occurred_at`. View returns 0 rows. `safety.v_safety_events_with_active` (built on top) also 0. API `/api/v1/safety/events?operating_company_id=5c854333...` returns `events=[] counters={active_count:0,resolved_count:0,total_count:0}`. Neon (bypass_rls=lucia): `safety.safety_events` has 7 open USMCA rows (ages 9-46 days, all status=open). FIX: update view to reference renamed columns.
+
+FINDING 50346 — dispatch · NAV-CLIP (FAIL, OPEN): `.hover-dropdown-nav` CSS (HoverDropdownNav.css:3-8) sets `overflow-x:auto` which per CSS spec forces `overflow-y:auto`, clipping absolutely-positioned `.nav-dropdown` menus in DispatchSubnav.tsx. HoverDropdownNav.tsx was fixed with a portal; DispatchSubnav.tsx was NOT ported. Documented as PRE-EXISTING in CSS comment lines 63-79. Separate from ParityTable row-height fix (16.25). FIX: port DispatchSubnav to use shared HoverDropdownNav component or apply portal pattern.
+
+QA WALK PASS (all 200 on SHA 109a212b): dispatch.dashboard (active_loads=56), dispatch.loads (5 rows), banking.accounts (4), factoring.chargebacks-fees (20 history), factoring.submission-queue, accounting.invoices (5), accounting.bills (5), accounting.journal-entries (5), mdata.customers (total=1214), mdata.vendors (total=599), customer.activity Del-Can (5 rows), fuel.transactions, maintenance.work-orders (0 open WOs — all 17 are cancelled, correct), catalog creators fleet/maintenance/payment-terms (all 200), dispatch.at-risk-loads, dispatch.detention/board, dispatch.planner/week, dispatch.alerts/late-arrivals, dispatch.assignment-history, dispatch.pod-documents. | GO
+
 CASCADE | ACK | GO-1405 | NOW=/customers | SHA=a62f0cb | GO
 Cursor→Cascade | 16:36CT | HARD-RELOAD healthz NOW=/customers then /dispatch | GO
 Cursor→Cascade | 16:22CT | LIVE=b8f10a3 NOW=/customers then /dispatch | GO
