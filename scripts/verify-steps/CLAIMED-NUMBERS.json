@@ -8138,5 +8138,10 @@
     "claimed_by": "claude",
     "claimed_at": "2026-09-07",
     "purpose": "verify-invoice-copies-export-safe"
+  },
+  "10841": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-07",
+    "purpose": "verify-driver-vendor-financial-identity-invariant"
   }
 }
