@@ -10,6 +10,8 @@ const required = [
   "pairing_history_dca.deactivated_at IS NULL",
   "a.operating_company_id = $1::uuid",
   "COALESCE(u.currently_leased_to_company_id, u.owner_company_id) = $1::uuid",
+  "history_equipment.equipment_number AS trailer_number",
+  "COALESCE(\n                 history_equipment.currently_leased_to_company_id,\n                 history_equipment.owner_company_id\n               ) = a.operating_company_id",
 ];
 const failures = (candidate) => required.filter((needle) => !candidate.includes(needle));
 
@@ -22,12 +24,14 @@ if (process.argv.includes("--selftest")) {
     ["non-deactivated authorization", required[4], "pairing_history_dca.deactivated_at IS NOT NULL"],
     ["assignment scope", required[5], "a.operating_company_id <> $1::uuid"],
     ["unit scope", required[6], "COALESCE(u.currently_leased_to_company_id, u.owner_company_id) <> $1::uuid"],
+    ["trailer label", required[7], "history_equipment.unit_number AS trailer_number"],
+    ["trailer scope", required[8], "history_equipment.operating_company_id = a.operating_company_id"],
   ]) {
     const mutated = name === "assignment scope" ? source.replaceAll(needle, replacement) : source.replace(needle, replacement);
     if (mutated === source) throw new Error(`mutation did not apply: ${name}`);
     if (failures(mutated).length === 0) throw new Error(`mutation escaped: ${name}`);
   }
-  console.log("PASS verify-vehicle-driver-history-shared-label --selftest (7/7)");
+  console.log("PASS verify-vehicle-driver-history-shared-label --selftest (9/9)");
   process.exit(0);
 }
 
