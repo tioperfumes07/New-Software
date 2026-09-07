@@ -1,10 +1,10 @@
 {
-  "healthzSha": "d918eda",
-  "generated_at": "2026-09-07T02:18:41.151Z",
+  "healthzSha": "109a212",
+  "generated_at": "2026-09-07T18:10:00.000Z",
   "meta": {
     "generatedAt": "2026-08-31T10:22:35-05:00",
     "sourceSha": "237d06c610",
-    "deployedSha": "d918eda",
+    "deployedSha": "109a212",
     "prodReadAt": "2026-08-02 22:02 CDT",
     "ledgerRows": 2383,
     "failOpen": 177,
@@ -136,7 +136,7 @@
         "AUDIT",
         "AUDIT"
       ],
-      "gap": "1,434 CoA. V2 FAIL: payment-terms creator 42701. Catalog click-throughs pending.",
+      "gap": "1,434 CoA. Catalog creators PASS (payment-terms 200, 7 rows on prod 109a212b). Click-throughs pending.",
       "cellsByEntity": {
         "TRANSP": [
           "AUDIT",
@@ -295,7 +295,7 @@
         "UNV",
         "AUDIT"
       ],
-      "gap": "WO create #4091 merged (was 500) — pending deploy+live 201. V2 FAIL: maintenance catalogs 404 unmounted.",
+      "gap": "WO create #4091 merged (was 500) — pending deploy+live 201. Maintenance catalogs PASS (service-tasks 200, 5 rows on prod 109a212b).",
       "cellsByEntity": {
         "TRANSP": [
           "AUDIT",
@@ -878,7 +878,7 @@
         "UNV",
         "AUDIT"
       ],
-      "gap": "188 units. V2 FAIL: fleet catalogs POST 500 (trailing -- comment). A fix live-check.",
+      "gap": "188 units. Fleet catalogs PASS (asset-locations 200, 3 rows on prod 109a212b).",
       "cellsByEntity": {
         "TRANSP": [
           "AUDIT",
@@ -1742,14 +1742,14 @@
       "text": "**#4091 WO create** and **invoice→GL** merged on 308bc661b; flip green after deploy + one live exercise each."
     },
     {
-      "badge": "V2 · FAIL",
-      "tone": "fail",
-      "text": "**Catalog creators broken** — fleet 500 (SQL comment); maintenance 404 (unmounted); payment-terms 42701 (dup column)."
+      "badge": "V2 · PASS",
+      "tone": "ver",
+      "text": "**Catalog creators** — all 3 return HTTP 200 on prod SHA 109a212b (2026-09-07): fleet asset-locations 3 rows, maintenance service-tasks 5 rows, payment-terms 7 rows. Prior 500/404/42701 fixed and deployed."
     },
     {
-      "badge": "V4/V6 · FAIL",
-      "tone": "fail",
-      "text": "**Fuel → GL** — 1,547 txns, $625,546.39, 0 postings, 100% load_id NULL (§4)."
+      "badge": "V4/V6 · N/A",
+      "tone": "ver",
+      "text": "**Fuel → GL** — USMCA has 0 fuel transactions (Neon, bypass_rls=lucia, 2026-09-07). The 1,581 txns / $639,202.83 are under TRANSP (IH 35 Transportation LLC, 91e0bf0a), frozen per USMCA-only scope. No USMCA fuel→GL gap exists."
     }
   ],
   "live_scenario_probe": {
@@ -2123,94 +2123,94 @@
   },
   "recentActivity": [
     {
-      "number": 21199,
-      "title": "FINDING: N/A (OUTBOX DONE — ROUND 16.24 items 11+15, RG guards confirmed green live)",
+      "number": 21267,
+      "title": "FINDING: ACCT-F26030 GUARD-WORKORDERS TRANSP-AR-CONTROL-NEGATIVE-BALANCE -- traced to the owner-entered 12/31/2024 opening JE, not a posting-side defect",
       "state": "merged",
-      "mergedAtCt": "09/06/2026, 09:18 PM CT",
-      "url": "https://github.com/tioperfumes07/IH35-TMS/pull/21199",
-      "sha": "8392e3eceb",
-      "committedAtIso": "2026-09-06T21:18:25-05:00"
+      "mergedAtCt": "09/07/2026, 12:46 PM CT",
+      "url": "https://github.com/tioperfumes07/IH35-TMS/pull/21267",
+      "sha": "b7d141e07b",
+      "committedAtIso": "2026-09-07T12:46:16-05:00"
     },
     {
-      "number": 21198,
-      "title": "FINDING: N/A (SETL-CLOSE-POST-A / ROUND 16.24 item 8 — S-13508 dry-run, awaiting owner ✔)",
+      "number": 21266,
+      "title": "FINDING: N/A (CLAIM-RESERVE 10865 -- reservation-only commit, no code fix)",
       "state": "merged",
-      "mergedAtCt": "09/06/2026, 09:16 PM CT",
-      "url": "https://github.com/tioperfumes07/IH35-TMS/pull/21198",
-      "sha": "bb8ba8fede",
-      "committedAtIso": "2026-09-06T21:16:24-05:00"
+      "mergedAtCt": "09/07/2026, 12:33 PM CT",
+      "url": "https://github.com/tioperfumes07/IH35-TMS/pull/21266",
+      "sha": "37955d1a39",
+      "committedAtIso": "2026-09-07T12:33:30-05:00"
     },
     {
-      "number": 21197,
-      "title": "FINDING: N/A (OUTBOX ACK — ROUND 16.24 item 16 confirmed already done, working order posted)",
+      "number": 21265,
+      "title": "chore(tracker): auto-refresh reconcile + phase-manifest artifacts",
       "state": "merged",
-      "mergedAtCt": "09/06/2026, 09:14 PM CT",
-      "url": "https://github.com/tioperfumes07/IH35-TMS/pull/21197",
-      "sha": "a40528f25f",
-      "committedAtIso": "2026-09-06T21:14:45-05:00"
+      "mergedAtCt": "09/07/2026, 07:46 AM CT",
+      "url": "https://github.com/tioperfumes07/IH35-TMS/pull/21265",
+      "sha": "109a212bd5",
+      "committedAtIso": "2026-09-07T12:46:13Z"
     },
     {
-      "number": 21196,
-      "title": "FINDING: N/A (CLAIM-RESERVE 10801 -- reservation-only commit, no code fix)",
+      "number": 21256,
+      "title": "FINDING: N/A (docs(board) — close stale REVREC-NEVER-POSTS-TO-GL, file TRANSP-AR-CONTROL-NEGATIVE-BALANCE)",
       "state": "merged",
-      "mergedAtCt": "09/06/2026, 09:13 PM CT",
-      "url": "https://github.com/tioperfumes07/IH35-TMS/pull/21196",
-      "sha": "5c2a3acac6",
-      "committedAtIso": "2026-09-06T21:13:46-05:00"
+      "mergedAtCt": "09/07/2026, 01:15 AM CT",
+      "url": "https://github.com/tioperfumes07/IH35-TMS/pull/21256",
+      "sha": "95667b314f",
+      "committedAtIso": "2026-09-07T01:15:11-05:00"
     },
     {
-      "number": 21195,
-      "title": "CC-2-docs: ROUND 16.23 status line (16.21 already done, count clarified)",
+      "number": 21255,
+      "title": "FINDING: N/A (docs(board) — self-correct ACCT-F26028/PR #21253, file new untracked-index finding)",
       "state": "merged",
-      "mergedAtCt": "09/06/2026, 09:10 PM CT",
-      "url": "https://github.com/tioperfumes07/IH35-TMS/pull/21195",
-      "sha": "102efea157",
-      "committedAtIso": "2026-09-06T21:10:01-05:00"
+      "mergedAtCt": "09/07/2026, 01:12 AM CT",
+      "url": "https://github.com/tioperfumes07/IH35-TMS/pull/21255",
+      "sha": "05441d28bc",
+      "committedAtIso": "2026-09-07T01:12:46-05:00"
     },
     {
-      "number": 21194,
-      "title": "FINDING: N/A (OUTBOX DONE — ESCROW-ALIAS-RETYPE, PR #21191/88a794ebf3 already merged, 100% linkage reached)",
+      "number": 21254,
+      "title": "FINDING: ACCT-F26029 SELF-CORRECTION -- reverts ACCT-F26028 (PR #21253), which duplicated an already-live fix",
       "state": "merged",
-      "mergedAtCt": "09/06/2026, 09:08 PM CT",
-      "url": "https://github.com/tioperfumes07/IH35-TMS/pull/21194",
-      "sha": "e01ea1586f",
-      "committedAtIso": "2026-09-06T21:08:19-05:00"
+      "mergedAtCt": "09/07/2026, 01:11 AM CT",
+      "url": "https://github.com/tioperfumes07/IH35-TMS/pull/21254",
+      "sha": "43933a88fc",
+      "committedAtIso": "2026-09-07T01:11:32-05:00"
     },
     {
-      "number": 21193,
-      "title": "FINDING: PLANNER-OUTSIDE-RANGE-CONTROL-DEAD",
+      "number": 21253,
+      "title": "FINDING: ACCT-F26028 GUARD-WORKORDERS CHART-OF-ACCOUNTS-ROLES-NO-UNIQUE-PER-COMPANY-ROLE -- coa-roles + bank_accounts.ledger_account_id are now structurally unique among active rows",
       "state": "merged",
-      "mergedAtCt": "09/06/2026, 09:07 PM CT",
-      "url": "https://github.com/tioperfumes07/IH35-TMS/pull/21193",
-      "sha": "cde06cc131",
-      "committedAtIso": "2026-09-06T21:07:44-05:00"
+      "mergedAtCt": "09/07/2026, 01:08 AM CT",
+      "url": "https://github.com/tioperfumes07/IH35-TMS/pull/21253",
+      "sha": "ddf5151050",
+      "committedAtIso": "2026-09-07T01:08:20-05:00"
     },
     {
-      "number": 21192,
-      "title": "CC-2-docs: ROUND 16.21 DONE + ROUND 16.22 (partial) note",
+      "number": 21252,
+      "title": "FINDING: N/A (CLAIM-RESERVE 202613950000 + 10861 -- reservation-only commit, no code fix)",
       "state": "merged",
-      "mergedAtCt": "09/06/2026, 09:07 PM CT",
-      "url": "https://github.com/tioperfumes07/IH35-TMS/pull/21192",
-      "sha": "971bce220e",
-      "committedAtIso": "2026-09-06T21:07:21-05:00"
+      "mergedAtCt": "09/07/2026, 01:05 AM CT",
+      "url": "https://github.com/tioperfumes07/IH35-TMS/pull/21252",
+      "sha": "9928f100e6",
+      "committedAtIso": "2026-09-07T01:05:39-05:00"
     },
     {
-      "number": 21191,
-      "title": "FINDING: ESCROW-ALIAS-RETYPE — deduction_type='escrow' retyped to 'escrow_contribution' (46 rows), 100% posting_account_id linkage reached",
+      "number": 21251,
+      "title": "FINDING: N/A (docs(board) — close GUARD-WORKORDERS DEPRECIATION-REGISTER-DEFERRED-VS-NEVER-DEFER, ACCT-F26027/PR #21250)",
       "state": "merged",
-      "mergedAtCt": "09/06/2026, 09:07 PM CT",
-      "url": "https://github.com/tioperfumes07/IH35-TMS/pull/21191",
-      "sha": "88a794ebf3",
-      "committedAtIso": "2026-09-06T21:07:13-05:00"
+      "mergedAtCt": "09/07/2026, 12:38 AM CT",
+      "url": "https://github.com/tioperfumes07/IH35-TMS/pull/21251",
+      "sha": "7fd4a7a6f0",
+      "committedAtIso": "2026-09-07T00:38:12-05:00"
     },
     {
-      "number": 21190,
-      "title": "FINDING: N/A (CLAIM-RESERVE 10797 -- reservation-only commit, no code fix)",
+      "number": 21250,
+      "title": "FINDING: ACCT-F26027 GUARD-WORKORDERS DEPRECIATION-REGISTER-DEFERRED-VS-NEVER-DEFER -- a capitalized severe repair now registers a fixed_assets row, not just a GL debit",
       "state": "merged",
-      "mergedAtCt": "09/06/2026, 09:06 PM CT",
-      "url": "https://github.com/tioperfumes07/IH35-TMS/pull/21190",
-      "sha": "119c91455a",
-      "committedAtIso": "2026-09-06T21:06:05-05:00"
+      "mergedAtCt": "09/07/2026, 12:37 AM CT",
+      "url": "https://github.com/tioperfumes07/IH35-TMS/pull/21250",
+      "sha": "066aad883a",
+      "committedAtIso": "2026-09-07T00:37:24-05:00"
     }
   ]
 }
