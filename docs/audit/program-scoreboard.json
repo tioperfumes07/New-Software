@@ -401,7 +401,7 @@
         "UNV",
         "AUDIT"
       ],
-      "gap": "1,547 txns/$625,546/100% load_id NULL/0 GL. V4+V6 FAIL, no fix merged.",
+      "gap": "1,581 txns/$639,203 (TRANSP; 0 USMCA)/1,556 posted (98.4%, 3,112 JE lines)/14 stranded >3d ($6,932.13, CC-1). load_id null is a 100%-reasoned exemption, not a gap. Cells above still show the pre-fix FAIL/UNV pattern, not re-derived here -- flagged for whoever owns cell regeneration.",
       "cellsByEntity": {
         "TRANSP": [
           "AUDIT",
@@ -1620,10 +1620,10 @@
       "tone": "flag"
     },
     {
-      "n": "$625,546",
-      "label": "Fuel — 0 GL",
-      "detail": "1,547 txns · 100% load_id NULL · 0 postings.",
-      "tone": "flag"
+      "n": "$639,203",
+      "label": "Fuel — 98.4% GL",
+      "detail": "1,581 txns (TRANSP; 0 USMCA) · 1,556 posted, 3,112 JE lines · 14 stranded >3d ($6,932.13, CC-1) · load_id null is a 100%-reasoned exemption, not a gap.",
+      "tone": "good"
     },
     {
       "n": "192",
