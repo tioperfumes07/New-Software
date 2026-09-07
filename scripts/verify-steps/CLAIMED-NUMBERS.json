@@ -8178,5 +8178,10 @@
     "claimed_by": "claude",
     "claimed_at": "2026-09-07",
     "purpose": "verify-manual-delivery-authorization (MANUAL-DELIVERY-AUTH-01, owner request 2026-09-07). Live-data + static guard: a load with no manual authorization and no real delivery evidence is refused (missing_delivery_evidence); a load WITH an active authorization earns, JE memo tagged distinctly; factoring packet assembles with manual_delivery_authorization_id set; revoking the authorization makes a fresh postLoadRevenueLatch call refuse again."
+  },
+  "10873": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-07",
+    "purpose": "verify-payment-terms-code-name-collision (PAYMENT-TERMS-CODE-NAME-COLUMN-COLLISION, docs/audit/GUARD-WORKORDERS.md). Static guard: AccountingCatalogModal/ProfileDrawer/ListPage support a singleCodeNameField opt-in that hides the redundant Display Name field and mirrors code into display_name on submit; PaymentTermsListPage opts in (catalogs.payment_terms has ONE physical column, terms_name, backing both code and display_name server-side)."
   }
 }
