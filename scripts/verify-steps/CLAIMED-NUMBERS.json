@@ -8168,5 +8168,10 @@
     "claimed_by": "claude",
     "claimed_at": "2026-09-07",
     "purpose": "verify-coa-roles-and-bank-accounts-uniqueness"
+  },
+  "10865": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-07",
+    "purpose": "verify-transp-ar-control-opening-balance-integrity (TRANSP-AR-CONTROL-NEGATIVE-BALANCE, docs/audit/GUARD-WORKORDERS.md). Read-only live-data integrity guard: TRANSP ar_control GL account nets to -$961,983.52; traced live to a single owner-entered opening-balance JE line (2025-01-01, QBO Balance Sheet 12/31/2024 signed-actual, matches docs/specs/qbo-parity/OPENING-BALANCE-TIEOUT-CEREMONY-2026-07-04.md exactly) -- NOT a posting-side defect; TMS live posting engine nets $0 outside that one line. Guard locks the opening line against silent edits (void-not-delete) and tripwires any future non-opening ar_control movement beyond $10,000."
   }
 }
