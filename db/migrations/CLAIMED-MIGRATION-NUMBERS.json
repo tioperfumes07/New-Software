@@ -8,6 +8,11 @@
   "_how_to_claim": "Open a claim-only PR (chore/claim-migration-YYYYMMDDHHMM-*) that adds the timestamp to 'claimed' below; merge to origin/main; THEN author the .sql file on a feature branch. CI fails if a new db/migrations/*.sql timestamp is not already claimed on origin/main. Same-lane intra-branch collisions are prevented because the registry is merged before the migration file exists.",
   "_why": "202612350000 was claimed twice by two concurrently-open CC-1 branches. The migration lane-band guard (HH 00\u201311 / 12\u201323) only prevents inter-lane collisions; it cannot see two unmerged branches in the same lane. A registry merged before authorship converts the invisible race into a git conflict.",
   "claimed": {
+    "202613940000": {
+      "claimed_by": "claude",
+      "claimed_at": "2026-09-07",
+      "purpose": "GUARD-WORKORDERS DEPRECIATION-REGISTER-DEFERRED-VS-NEVER-DEFER (routed=CC-1, filed 2026-09-01): additive accounting.fixed_assets.capitalized_from_work_order_id uuid NULL FK to maintenance.work_orders(id) + partial unique index WHERE NOT NULL -- a WO-close severe repair >= $7,000 (capitalize-threshold.ts) already posts the GL debit to the fixed_asset_default account (maintenance-posting/poster.service.ts) but never creates a corresponding accounting.fixed_assets register row, so the capitalized cost never enters the depreciation schedule/autopost engine. This column lets the new register-write be idempotent per WO."
+    },
     "202613910000": {
       "claimed_by": "claude-3",
       "claimed_at": "2026-09-07",
