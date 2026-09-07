@@ -9,6 +9,7 @@ import {
   listBills,
   listBrokerAdvances,
   listCoaRoles,
+  listExpenseCategoryMappings,
   listExpenses,
   type BrokerAdvanceCategory,
   type ExpenseListRow,
@@ -56,6 +57,11 @@ type Draft = {
   vendorName: string;
   categoryId: string;
   categoryName: string;
+  /** LOAD-COSTS-EXPENSE-CATEGORY-FUEL-ROW-ROOT-CAUSE fix 1 (owner 2026-09-07) — the operator's real
+   *  intent (diesel vs. oil vs. misc, all posting to the SAME GL account) was never captured at all.
+   *  Empty when categoryId has 0 or 1 active binding (auto-resolved silently); required when it has
+   *  more than one (e.g. 5000 Fuel & Diesel binds 6 distinct codes). */
+  categoryCode: string;
   paymentAccountId: string;
   invoiceNo: string;
   vendorDocNo: string;
@@ -67,6 +73,12 @@ type Draft = {
   /** documents.attachments draft entity id — the create payload carries it as attachment_draft_id. */
   attachmentDraftId: string;
   receiptCount: number;
+  /** LOAD-COSTS-EXPENSE-CATEGORY-FUEL-ROW-ROOT-CAUSE fix 2 (owner 2026-09-07) — same two independent
+   *  flags RecordExpenseForm.tsx already exposes (accounting.expenses.is_reimbursable), just missing
+   *  from THIS create surface. Deliberately does NOT touch "Paid with" (LDT-1 law: bank/card/fuel-card
+   *  accounts only, never a driver/receivable account) — the money still left a real GL account; this
+   *  only flags that the driver fronted it and is owed back. */
+  isReimbursable: boolean;
 };
 type DriverBillRow = {
   id?: string;
@@ -105,9 +117,9 @@ function bucketOf(kind: CostChoice, categoryName: string): Bucket {
 
 function blankDraft(kind: CostChoice = "expense"): Draft {
   return {
-    id: crypto.randomUUID(), number: "", kind, date: companyToday(), vendorId: "", vendorName: "", categoryId: "", categoryName: "",
+    id: crypto.randomUUID(), number: "", kind, date: companyToday(), vendorId: "", vendorName: "", categoryId: "", categoryName: "", categoryCode: "",
     paymentAccountId: "", invoiceNo: "", vendorDocNo: "", amount: "", error: null, advanceCategory: "", instrumentType: "", instrumentReference: "",
-    attachmentDraftId: crypto.randomUUID(), receiptCount: 0,
+    attachmentDraftId: crypto.randomUUID(), receiptCount: 0, isReimbursable: false,
   };
 }
 
@@ -133,6 +145,15 @@ export function LoadDetailCostsTab({ load, canEdit, canEditReason }: { load: Loa
   // come from accounting.chart_of_accounts_roles.
   const coaRoles = useQuery({ queryKey: ["load-costs", "coa-roles", opco], queryFn: () => listCoaRoles(opco) });
   const bankAccountsQuery = useQuery({ queryKey: ["load-costs", "bank-accounts", opco], queryFn: () => getAllAccounts(opco) });
+  // LOAD-COSTS-EXPENSE-CATEGORY-FUEL-ROW-ROOT-CAUSE fix 1 (owner 2026-09-07) — the SAME table
+  // bill-account-resolver.ts / posting-engine.service.ts already read for the bill side (never a
+  // new source); one account can bind more than one category_code (5000 Fuel & Diesel binds 6).
+  const categoryMapQuery = useQuery({
+    queryKey: ["load-costs", "expense-category-map", opco],
+    queryFn: () => listExpenseCategoryMappings(opco),
+  });
+  const categoryCodesForAccount = (accountId: string) =>
+    (categoryMapQuery.data?.rows ?? []).filter((row) => row.account_id === accountId && row.is_active);
   const advanceBankAccountRows = (bankAccountsQuery.data?.accounts ?? []) as Array<{ id: string; display_name?: string | null; account_name?: string | null; institution_name?: string | null; account_mask?: string | null }>;
 
   const savedExpenses: ExpenseListRow[] = expenses.data?.rows ?? [];
@@ -203,6 +224,7 @@ export function LoadDetailCostsTab({ load, canEdit, canEditReason }: { load: Loa
     if (!row.categoryId) return "Category (expense account) is required.";
     if (!(amountCents > 0)) return "Amount must be greater than zero.";
     if (row.kind === "expense" && !row.paymentAccountId) return "Paid with is required — the bank, card or fuel card the money left.";
+    if (row.kind === "expense" && categoryCodesForAccount(row.categoryId).length > 1 && !row.categoryCode) return "This account covers more than one category — pick which one below.";
     if (row.kind === "bill" && !row.invoiceNo.trim()) return "Vendor invoice number is required — it is what stops us paying the same bill twice.";
     return null;
   };
@@ -232,7 +254,7 @@ export function LoadDetailCostsTab({ load, canEdit, canEditReason }: { load: Loa
         if (missing) { errors.set(row.id, missing); continue; }
         try {
           if (row.kind === "expense") {
-            await createExpense(opco, { category_account_id: row.categoryId, expense_date: row.date, amount_cents: amountCents, payment_account_uuid: row.paymentAccountId, vendor_uuid: row.vendorId, load_id: load.id, expense_number: number, vendor_document_number: row.vendorDocNo.trim() || undefined, memo: `Load cost · ${load.load_number}`, is_sample_data: false, attachment_draft_id: row.attachmentDraftId });
+            await createExpense(opco, { category_account_id: row.categoryId, expense_category_code: row.categoryCode || undefined, expense_date: row.date, amount_cents: amountCents, payment_account_uuid: row.paymentAccountId, vendor_uuid: row.vendorId, load_id: load.id, expense_number: number, vendor_document_number: row.vendorDocNo.trim() || undefined, memo: `Load cost · ${load.load_number}`, is_sample_data: false, attachment_draft_id: row.attachmentDraftId, is_reimbursable: row.isReimbursable });
           } else if (row.kind === "bill") {
             await createVendorBill(opco, { vendor_id: row.vendorId, bill_number: row.invoiceNo.trim(), display_id: number, bill_date: row.date, amount_cents: amountCents, coa_account_id: row.categoryId, driver_id: load.assigned_primary_driver_id ?? undefined, memo: `Load cost · ${load.load_number}`, is_sample_data: false, attachment_draft_id: row.attachmentDraftId, lines: [{ account_id: row.categoryId, amount_cents: amountCents, description: `Load cost · ${load.load_number}`, section: "A", load_id: load.id }] }, { idempotencyKey: generateIdempotencyKey() });
           } else if (row.kind === "fuel_advance") {
@@ -334,13 +356,52 @@ export function LoadDetailCostsTab({ load, canEdit, canEditReason }: { load: Loa
               <div className="ldt-fld"><label>Category</label>
                 {row.kind === "advance" ? <select data-testid="load-cost-field-advance-category" value={row.advanceCategory} onChange={(e) => update(row.id, { advanceCategory: e.target.value as BrokerAdvanceCategory | "" })}><option value="">Select category</option>{BROKER_ADVANCE_CATEGORIES.map((c) => <option key={c} value={c}>{ADVANCE_CATEGORY_LABEL[c]}</option>)}</select>
                   : row.kind === "fuel_advance" ? <div data-testid="load-cost-field-fuel-category" className="ldt-inp ro">{fuelAccount ? `${acctLabel(fuelAccount.account_number, fuelAccount.account_name)} (by role)` : "No Fuel expense account found"}</div>
-                  : <LocalCombobox testId="load-cost-field-category" placeholder="Expense account…" value={row.categoryName} options={categories.map((a) => ({ id: a.id, label: acctLabel(a.account_number, a.account_name) }))} onSelect={(o) => update(row.id, { categoryId: o.id, categoryName: o.label })} createHref="/accounting/chart-of-accounts" />}
+                  : <LocalCombobox testId="load-cost-field-category" placeholder="Expense account…" value={row.categoryName} options={categories.map((a) => ({ id: a.id, label: acctLabel(a.account_number, a.account_name) }))} onSelect={(o) => {
+                      // LOAD-COSTS-EXPENSE-CATEGORY-FUEL-ROW-ROOT-CAUSE fix 1 -- a fresh account pick
+                      // resets categoryCode; auto-resolve silently when exactly one binding exists
+                      // (the common case), leave blank (forcing the picker below) when there is more
+                      // than one, per the account's own real bindings, never guessed.
+                      const bindings = categoryCodesForAccount(o.id);
+                      update(row.id, { categoryId: o.id, categoryName: o.label, categoryCode: bindings.length === 1 ? bindings[0].category_code : "" });
+                    }} createHref="/accounting/chart-of-accounts" />}
               </div>
+              {row.kind === "expense" && categoryCodesForAccount(row.categoryId).length > 1 ? <div className="ldt-fld"><label>Category detail</label>
+                <select data-testid="load-cost-field-category-code" value={row.categoryCode} onChange={(e) => update(row.id, { categoryCode: e.target.value })}>
+                  <option value="">Select…</option>
+                  {categoryCodesForAccount(row.categoryId).map((c) => <option key={c.id} value={c.category_code}>{c.category_code}</option>)}
+                </select>
+              </div> : null}
               {row.kind === "expense" ? <div className="ldt-fld"><label>Paid with</label>
-                <select data-testid="load-cost-field-paid-with" value={row.paymentAccountId} onChange={(e) => update(row.id, { paymentAccountId: e.target.value })}>
-                  <option value="">Bank, card or fuel card…</option>
-                  {paymentAccounts.map((a) => <option key={a.id} value={a.id}>{acctLabel(a.account_number, a.account_name)} · {PAID_WITH_KIND_LABEL[paidWithKind(a) ?? "bank"]}</option>)}
-                </select></div> : null}
+                {/* LOAD-COSTS-EXPENSE-CATEGORY-FUEL-ROW-ROOT-CAUSE fix 3 (owner 2026-09-07): "we are
+                    missing the + create account" -- Paid With was a bare <select> with no create
+                    affordance, unlike Category two fields above which already uses LocalCombobox +
+                    createHref. Same component, same target, so a missing bank/card/fuel-card account
+                    can be added inline instead of blocking the whole cost entry. */}
+                <LocalCombobox
+                  testId="load-cost-field-paid-with"
+                  placeholder="Bank, card or fuel card…"
+                  value={paidWithLabel(row.paymentAccountId) ?? ""}
+                  options={paymentAccounts.map((a) => ({ id: a.id, label: `${acctLabel(a.account_number, a.account_name)} · ${PAID_WITH_KIND_LABEL[paidWithKind(a) ?? "bank"]}` }))}
+                  onSelect={(o) => update(row.id, { paymentAccountId: o.id })}
+                  createHref="/accounting/chart-of-accounts"
+                />
+              </div> : null}
+              {/* LOAD-COSTS-EXPENSE-CATEGORY-FUEL-ROW-ROOT-CAUSE fix 2 (owner 2026-09-07): "we must
+                  also add if it was paid by the driver and will be reimbursed" -- deliberately a
+                  SEPARATE flag from Paid With, per LDT-1 (bank/card/fuel-card accounts only, never a
+                  driver/receivable account) — the money still left the real account picked above;
+                  this only marks that the driver fronted it and is owed back. */}
+              {row.kind === "expense" ? <div className="ldt-fld"><label>Reimbursement</label>
+                <label className="ldt-inp" style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+                  <input
+                    type="checkbox"
+                    data-testid="load-cost-field-reimbursable"
+                    checked={row.isReimbursable}
+                    onChange={(e) => update(row.id, { isReimbursable: e.target.checked })}
+                  />
+                  Paid by driver, reimbursable
+                </label>
+              </div> : null}
               {row.kind === "fuel_advance" ? <div className="ldt-fld"><label>Paid from (bank)</label><div data-testid="load-cost-field-fuel-bank" className="ldt-inp ro">{operatingBankAccount ? `${acctLabel(operatingBankAccount.account_number, operatingBankAccount.account_name)} (by role)` : "No operating bank account found"}</div></div> : null}
               {row.kind === "bill" ? <div className="ldt-fld"><label>Vendor invoice no.</label><input data-testid="load-cost-field-vendor-invoice" placeholder="off the paper" value={row.invoiceNo} onChange={(e) => update(row.id, { invoiceNo: e.target.value })} /></div> : null}
               {row.kind === "expense" || row.kind === "fuel_advance" ? <div className="ldt-fld"><label>Vendor doc no.</label><input data-testid="load-cost-field-vendor-doc" className="ldt-mono" placeholder="receipt / ticket no." value={row.vendorDocNo} onChange={(e) => update(row.id, { vendorDocNo: e.target.value })} /></div> : null}
