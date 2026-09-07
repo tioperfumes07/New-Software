@@ -851,6 +851,11 @@
       "claimed_by": "claude",
       "claimed_at": "2026-09-07",
       "purpose": "MANUAL-DELIVERY-AUTH-01 (owner request 2026-09-07): dispatch.manual_delivery_authorizations table + dispatch.pod_documents.source column, letting Owner/Administrator/Manager manually authorize revenue recognition + factoring submission for a load before physical delivery, when customer and factoring have both agreed to accept early billing against a signed POD/BOL already in hand. Does not touch mdata.loads.status or any load_stops timestamp; adds a separate, always-audited, reason-required authorization record that poster.service.ts recognizes as alternate evidence to the delivery-departure gate, always distinctly tagged in the JE memo and POD source column."
+    },
+    "202613970000": {
+      "claimed_by": "claude",
+      "claimed_at": "2026-09-07",
+      "purpose": "SAFETY-BROKEN-VIEW (owner QA finding 50345, routed 2026-09-07): rewrites views.safety_events_with_driver to alias the CURRENT safety.safety_events columns (subject_driver_id/subject_unit_id/occurred_at) onto driver_id/unit_id/event_at -- the view had been stuck on migration 0045s empty fallback on prod, returning 0 rows while USMCA has 7 real open safety events."
     }
   },
   "202613590001": {
