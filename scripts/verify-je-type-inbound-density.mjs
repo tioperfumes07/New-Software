@@ -4,6 +4,10 @@
  *
  * Static: create path always resolves a type (never NULL for auto).
  * --live: every non-void JE has journal_entry_type_id (lucia).
+ *
+ * MATRIX-BUILT-OPTIONAL: "FK" above is a literal Postgres foreign key column, not an
+ * EntityLink/reverse-link/Program-matrix wiring surface — exempt from
+ * verify-matrix-built-tag-present's @matrix-built requirement.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -13,11 +17,17 @@ import pg from "pg";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const LABEL = "verify-je-type-inbound-density";
 const SERVICE = "apps/backend/src/accounting/journal-entries.service.ts";
+// ACCT-LINK-01 regression fix (GO-1405 Recipe B, 2026-08-29) moved inferJournalEntryTypeCode (and
+// its GENERAL fallback) into this leaf module so every poster reuses one implementation — SERVICE
+// now only re-exports it, so the static checks below must also read this file.
+const RESOLVER = "apps/backend/src/accounting/journal-entry-type-resolver.ts";
 const MIGRATION = "db/migrations/202610070000_acct_link_01_je_type_backfill.sql";
 
 function assertStatic(root = ROOT) {
   const problems = [];
-  const src = fs.readFileSync(path.join(root, SERVICE), "utf8");
+  const serviceSrc = fs.readFileSync(path.join(root, SERVICE), "utf8");
+  const resolverPath = path.join(root, RESOLVER);
+  const src = fs.existsSync(resolverPath) ? `${serviceSrc}\n${fs.readFileSync(resolverPath, "utf8")}` : serviceSrc;
   if (!/inferJournalEntryTypeCode/.test(src)) {
     problems.push("must export inferJournalEntryTypeCode");
   }

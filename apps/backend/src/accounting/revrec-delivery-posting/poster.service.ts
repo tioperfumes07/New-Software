@@ -432,6 +432,38 @@ export async function finalActiveDeliveryDepartureAt(
   return res.rows[0]?.actual_departure_at ?? null;
 }
 
+/**
+ * MANUAL-DELIVERY-AUTH-01 (owner request 2026-09-07) -- some customer + factoring agreements permit
+ * invoicing/factoring a load before the truck is physically empty, with a signed POD/BOL already in
+ * hand. This does NOT touch finalActiveDeliveryDepartureAt or fabricate stop data -- it is a SEPARATE,
+ * explicit, reason-required authorization record (dispatch.manual_delivery_authorizations, created
+ * only via POST /api/v1/dispatch/loads/:loadId/manual-delivery-authorization, role-gated, requires
+ * both customer_authorized and factoring_authorized). Returns the authorization's own timestamp
+ * (never a fabricated stop time) when an ACTIVE (non-revoked) authorization exists for this load,
+ * otherwise null. Callers that use this to satisfy the Event 1 earn gate MUST tag the resulting JE
+ * memo distinctly (see `earn` branch below) so a manually-authorized posting is never silently
+ * indistinguishable from one backed by real delivery evidence.
+ */
+async function activeManualDeliveryAuthorizationAt(
+  client: DbClient,
+  operatingCompanyId: string,
+  loadId: string
+): Promise<string | null> {
+  const res = await client.query<{ authorized_at: string | null }>(
+    `
+      SELECT authorized_at::text AS authorized_at
+      FROM dispatch.manual_delivery_authorizations
+      WHERE load_id = $1::uuid
+        AND operating_company_id = $2::uuid
+        AND revoked_at IS NULL
+      ORDER BY authorized_at DESC
+      LIMIT 1
+    `,
+    [loadId, operatingCompanyId]
+  );
+  return res.rows[0]?.authorized_at ?? null;
+}
+
 function resolveEvent(targetStatus: string): RevrecEvent | null {
   // Dispatch machine uses delivered_pending_docs (not a separate "delivered") for earn.
   if (targetStatus === "delivered" || targetStatus === "delivered_pending_docs") return "earn";
@@ -492,14 +524,24 @@ export async function postLoadRevenueLatch(input: PostLoadRevenueLatchInput): Pr
     );
     if (invoicePostedLoad) return { gate: "invoice_gl_already_recognized" as const };
 
-    // Event 1 earns ONLY on real captured delivery evidence — never on status alone.
+    // Event 1 earns on real captured delivery evidence, OR an explicit, on-the-record manual
+    // delivery authorization (MANUAL-DELIVERY-AUTH-01) — never on status alone, never silently.
+    let manualAuthEvidence = false;
     if (event === "earn") {
       const departedAt = await finalActiveDeliveryDepartureAt(
         client,
         input.operating_company_id,
         input.load_id
       );
-      if (!departedAt) return { gate: "missing_delivery_evidence" as const };
+      if (!departedAt) {
+        const authorizedAt = await activeManualDeliveryAuthorizationAt(
+          client,
+          input.operating_company_id,
+          input.load_id
+        );
+        if (!authorizedAt) return { gate: "missing_delivery_evidence" as const };
+        manualAuthEvidence = true;
+      }
     }
 
     let amount = load.rate_total_cents;
@@ -519,7 +561,9 @@ export async function postLoadRevenueLatch(input: PostLoadRevenueLatchInput): Pr
     const label = load.display_id ?? load.id;
     const memo =
       event === "earn"
-        ? `Revrec Event 1 earn — load ${label} [${load.id}]`
+        ? manualAuthEvidence
+          ? `Revrec Event 1 earn — load ${label} [${load.id}] (MANUAL DELIVERY AUTHORIZATION — pre-delivery, customer+factoring authorized, see dispatch.manual_delivery_authorizations)`
+          : `Revrec Event 1 earn — load ${label} [${load.id}]`
         : `Revrec Event 2 bill — load ${label} [${load.id}]`;
 
     const unbilledAccountId = await resolveRoleAccount(client, input.operating_company_id, "unbilled_revenue");

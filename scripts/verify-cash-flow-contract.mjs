@@ -53,9 +53,12 @@ try {
     "const netCashChange = operatingTotal + investingTotal + financingTotal;",
     "net_cash_change must be derived from section totals",
   );
-  assertIncludes(
+  assertMatches(
     service,
-    "const reconciled = netCashChange === cashAtEnd - cashAtStart;",
+    // Basis-mode split (accrual vs cash) extracted netCashChange into a shared `sections` object
+    // returned by the two per-basis helpers — accept either the bare local or the property access
+    // so this doesn't re-break on the next legitimate refactor of the same shape.
+    /const reconciled = (?:netCashChange|sections\.netCashChange) === cashAtEnd - cashAtStart;/,
     "reconciled must be derived from returned figures",
   );
 
