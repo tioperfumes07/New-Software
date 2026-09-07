@@ -50,8 +50,10 @@ const APPLY_ONLY_PATTERNS = [
 
 function assertSource(rel, src) {
   const errors = [];
-  if (!src.includes("CollapsedListFilters")) {
-    errors.push(`${rel}: must use CollapsedListFilters`);
+  // RPT-04: ReportFilterBar (inline) is the replacement for CollapsedListFilters (popover).
+  // Either is acceptable as long as useStagedListFilters is wired with Apply/Cancel/Reset.
+  if (!src.includes("CollapsedListFilters") && !src.includes("ReportFilterBar")) {
+    errors.push(`${rel}: must use CollapsedListFilters or ReportFilterBar`);
   }
   if (!src.includes("useStagedListFilters")) {
     errors.push(`${rel}: must use useStagedListFilters`);
@@ -92,10 +94,10 @@ function selftest() {
   `;
   const good = `
     const staged = useStagedListFilters({ applied, empty, onApply: setApplied });
-    <CollapsedListFilters onApply={staged.apply} onReset={staged.reset} onCancel={staged.cancel}>
+    <ReportFilterBar onApply={staged.apply} onReset={staged.reset} onCancel={staged.cancel}>
       <BasisSelector value={staged.draft.basis} onChange={(n) => staged.setDraft({ ...staged.draft, basis: n })} />
       <DatePicker value={staged.draft.start} onChange={(n) => staged.setDraft((p) => ({ ...p, start: n }))} />
-    </CollapsedListFilters>
+    </ReportFilterBar>
   `;
   const badErrs = assertSource("planted/bad.tsx", bad);
   const goodErrs = assertSource("planted/good.tsx", good);
