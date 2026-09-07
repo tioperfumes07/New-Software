@@ -47,6 +47,15 @@
  * "The tour's loads": the set of load_id values already present on this settlement's own earnings/
  * deadhead_pay settlement_lines rows (the load-bookended settlement's real load membership) — never
  * re-derived from a load-number range guess.
+ *
+ * C6-MONEY-JE-EXEMPT: the two INSERTs into driver_finance.settlement_lines below are settlement-scoped
+ * LINE items, not independent cash movements — same class as detention-pay-posting.service.ts's own
+ * C6-MONEY-JE-EXEMPT note for this exact table. The settlement HEADER posts one aggregate balanced JE
+ * at finalize via settlement-payrun-close.service.ts's closeSettlementPayRun (createJournalEntry),
+ * which reads these rows back (see e.g. loadDetentionPayCents()'s pattern of aggregating active
+ * settlement_lines by line_type). This function only resolves posting_account_id/approval_status on
+ * lines whose underlying driver_reimbursements/driver_settlement_deductions row already exists — it
+ * mints no new money, no new liability, and no new GL fact of its own.
  */
 import { appendCrudAudit } from "../audit/crud-audit.js";
 import { resolveRoleAccountOptional, isCoaRole } from "../accounting/coa-roles/resolver.service.js";

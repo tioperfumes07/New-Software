@@ -57,7 +57,14 @@ export async function assertWorkOrderCostFinancialLink(
        FROM (
          SELECT 'bill'::text AS kind, b.id::text AS id, b.unit_id::text AS unit_id,
                 COALESCE(b.mdata_vendor_id::text, b.vendor_uuid, b.vendor_id) AS vendor_id,
-                b.load_id::text AS load_id
+                -- accounting.bills has no load_id column -- the load linkage lives on
+                -- accounting.bill_lines (same table bills.service.ts's own load_link LATERAL join
+                -- reads), never the bill header itself.
+                (
+                  SELECT bl.load_id::text FROM accounting.bill_lines bl
+                   WHERE bl.bill_id = b.id AND bl.load_id IS NOT NULL
+                   LIMIT 1
+                ) AS load_id
            FROM accounting.bills b
           WHERE b.operating_company_id = $1::uuid
             AND b.linked_work_order_uuid = $2::uuid

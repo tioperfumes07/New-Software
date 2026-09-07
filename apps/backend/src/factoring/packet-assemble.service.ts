@@ -99,6 +99,16 @@ export type AssemblePacketInput = {
   userId: string;
   /** When true, assembles even if POD is not yet approved (used for manual trigger). */
   force?: boolean;
+  /**
+   * MANUAL-DELIVERY-AUTH-01 (owner request 2026-09-07) -- set ONLY by the manual delivery
+   * authorization route (manual-delivery-authorization.routes.ts) after it has verified an active
+   * dispatch.manual_delivery_authorizations row exists for this load. Skips the
+   * isFactoringPathLoadStatus gate below for that one, explicitly-authorized call -- never set by the
+   * POD-approval trigger or the daily sweep cron, which must keep requiring a real deliverable
+   * mdata.loads.status. This is why it takes the authorization id rather than a bare boolean: a
+   * caller cannot flip this on without actually holding one.
+   */
+  manualDeliveryAuthorizationId?: string;
 };
 
 export type AssemblePacketResult =
@@ -139,7 +149,7 @@ export async function assembleFactoringPacket(
     const load = loadRes.rows[0];
     if (!load) return { ok: false, reason: "load_not_found" };
 
-    if (!isFactoringPathLoadStatus(load.status)) {
+    if (!isFactoringPathLoadStatus(load.status) && !input.manualDeliveryAuthorizationId) {
       return { ok: false, reason: `load_status_not_deliverable:${load.status}` };
     }
 
@@ -278,6 +288,7 @@ export async function assembleFactoringPacket(
         invoice_id: invoiceId,
         assembled_at: nextMeta.generated_at,
         assembled_by_user_id: input.userId,
+        manual_delivery_authorization_id: input.manualDeliveryAuthorizationId ?? null,
       },
     ).catch(() => {
       // outbox emission stays best-effort: packet assembly must succeed regardless.
