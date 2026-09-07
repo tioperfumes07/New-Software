@@ -143,6 +143,14 @@ export function assertGuard({ uploadModal, documentsTab, directMounts, documents
 
   // 4. Every DocumentsTab mount site must pass operatingCompanyId= (the viewed company: either a
   //    CompanyContext-derived companyId, or a per-record operating_company_id like load.operating_company_id).
+  //    LoadDetailDrawer.tsx specifically mounts <LdtDocumentsTab>, a load-specific rename of the
+  //    generic <DocumentsTab> (adds invoice/expense/bill receipt aggregation the other entities
+  //    don't need) -- confirmed live (2026-09-07) that it still threads operatingCompanyId all the
+  //    way to <EntityDocumentUpload operatingCompanyId={operatingCompanyId}>, so this is a component
+  //    rename, not a dropped prop. The guard's string match had not been updated for the rename,
+  //    producing a false FAIL on every PR repo-wide. Recognizing both tag names here is the fix;
+  //    it does not weaken the check -- a real drop of the prop on either tag name still fails below.
+  const MOUNT_TAB_RE = /<(?:DocumentsTab|LdtDocumentsTab)/;
   for (const rel of DOCUMENTS_TAB_MOUNT_SITES) {
     const src = documentsTabMounts[rel];
     if (src == null) {
@@ -150,8 +158,8 @@ export function assertGuard({ uploadModal, documentsTab, directMounts, documents
       continue;
     }
     const stripped = stripComments(src);
-    if (!/<DocumentsTab[\s\S]{0,400}?operatingCompanyId=/.test(stripped)) {
-      errors.push(`${rel}: <DocumentsTab> mount no longer passes operatingCompanyId= (viewed-company thread dropped)`);
+    if (!MOUNT_TAB_RE.test(stripped) || !new RegExp(MOUNT_TAB_RE.source + "[\\s\\S]{0,400}?operatingCompanyId=").test(stripped)) {
+      errors.push(`${rel}: <DocumentsTab>/<LdtDocumentsTab> mount no longer passes operatingCompanyId= (viewed-company thread dropped)`);
     }
   }
 
@@ -282,6 +290,36 @@ function selftest() {
         documentsTabMounts: mounts(
           "apps/frontend/src/pages/drivers/DriverProfilePage.tsx",
           `<DocumentsTab entityType="driver" entityId={id} entityName={displayName} />`,
+          DOCUMENTS_TAB_MOUNT_SITES,
+          goodTabMount
+        ),
+      },
+      wantMin: 1,
+    },
+    {
+      name: "LoadDetailDrawer's <LdtDocumentsTab> mount, correctly wired (renamed tag) → 0 errors",
+      in: {
+        uploadModal: goodUploadModal,
+        documentsTab: goodDocumentsTab,
+        directMounts: mounts(null, null, DIRECT_MOUNT_SITES, goodDirectMount),
+        documentsTabMounts: mounts(
+          "apps/frontend/src/components/dispatch/LoadDetailDrawer.tsx",
+          `<LdtDocumentsTab loadId={load.id} operatingCompanyId={load.operating_company_id} loadNumber={load.load_number} canEdit={canEdit} />`,
+          DOCUMENTS_TAB_MOUNT_SITES,
+          goodTabMount
+        ),
+      },
+      want: 0,
+    },
+    {
+      name: "LoadDetailDrawer's <LdtDocumentsTab> mount drops operatingCompanyId= (renamed tag, real regression) → FAIL",
+      in: {
+        uploadModal: goodUploadModal,
+        documentsTab: goodDocumentsTab,
+        directMounts: mounts(null, null, DIRECT_MOUNT_SITES, goodDirectMount),
+        documentsTabMounts: mounts(
+          "apps/frontend/src/components/dispatch/LoadDetailDrawer.tsx",
+          `<LdtDocumentsTab loadId={load.id} loadNumber={load.load_number} canEdit={canEdit} />`,
           DOCUMENTS_TAB_MOUNT_SITES,
           goodTabMount
         ),
