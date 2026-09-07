@@ -976,6 +976,30 @@ this table to CC-3/GUARD to confirm USMCA's GL nets to ZERO for all battery acti
 | 19 | `mdata.maintenance_parts` | maintenance part | `a1259683-b656-4f52-8bd9-b4e0b91a9dad` | — | **y** | pending CC-3 | — |
 | 20 | `mdata.loads` | **LOAD (operating path)** `LUSMCAFREIGHT-20260807-0001` | `8d576d23-9b82-4474-b76f-d2640e6e13f7` | — draft, no JE yet | **y** | pending CC-3 | — |
 | 21 | `accounting.bills` | **vendor bill (money — first JE-posting surface)** `BILL-2026-00023` | `061bf94d-bab4-4e10-aa5e-e126b47dbc72` | `bb5b9b63-da45-4b16-a068-dc7066f459ff` | **y** | **y — VOIDED 2026-08-28** | — |
+| 22 | `safety.civil_fines` | **driver fine → liability (money-chain surface, first-ever live exercise — 0 prior conversions existed anywhere)** DOT Speeding, driver Neftali Coronado Urbano | `b05cc2db-b3a5-4826-9b9b-aa5020da8fc1` | — no JE yet, correctly deferred | **y** | **y — see FINDING SAFETY-MONEY-FINE-CONVERT-DROPS-DRIVER-LABEL below** | — |
+
+**Row 22 (2026-09-07, CC-3):** the next untested money surface in dependency order after row 21
+(invoice/AR, expense, fuel, settlement, advance, deduction, escrow, WO, factoring, claim were all
+independently confirmed live-tested elsewhere by 2026-09-07 — see the cross-session coverage audit
+this session ran against `docs/audit/GUARD-WORKORDERS.md`). Created a real $75.00 DOT/Speeding civil
+fine for driver Neftali Coronado Urbano via the live `+ Create Fine` UI
+(`/safety/external-fines`), marked `CC2-BATTERY-20260907` in its violation description/notes per the
+established battery convention, held per the owner's 2026-08-29 standing rule (not voided). Converted
+it to a driver liability via the live "Convert to Driver Liability" action — **PASS end to end**:
+`safety.civil_fines.converted_to_liability_id` → `driver_finance.driver_liabilities`
+`ed9aa15c-6083-43c7-b2d7-b335a6a18781` (type `civil_fine`, `$75.00`, status `pending_recovery`) →
+`driver_finance.driver_settlement_deductions` `9784c5df-4bd5-4ee6-8fa8-ff370fc14c6e` (`deduction_type`
+`fine`, status `pending`, `applied_to_settlement_id` NULL). No JE posted yet — correct: per
+`settlement-payrun-close.service.ts`, the deduction posts its GL leg only when a real settlement run
+closes and includes it, same architecture as the already-tested settlement/deduction surfaces. This is
+the first real evidence that the fine→liability chain (previously found abandoned/never-exercised —
+`SAFETY-MONEY-TRIAGE-INTERNAL-FINES-LIVE-CORRECTION`, GUARD-WORKORDERS.md) actually works.
+
+**Live-caught FE defect, root-caused and fixed in the same pass:** converting the fine dropped the
+driver's display name (`"Driver — not visible"` tombstone) and threw React error #185 (max update
+depth) in the console — filed as **`SAFETY-MONEY-FINE-CONVERT-DROPS-DRIVER-LABEL`** on the board
+(`docs/audit/GUARD-WORKORDERS.md`) with full root cause, fix, and a planted-regression test. See that
+row for detail; not duplicated here.
 
 **All 9 catalog/master rows above (1-20) — none posts a journal entry, so USMCA's GL was untouched by them.**
 Row 21 (2026-08-28, CC-3) is the first MONEY surface exercised: DR 5400 Truck Repairs & Maintenance / CR 2000

@@ -128,7 +128,18 @@ export function FinesPage({ operatingCompanyId }: Props) {
           if (!old?.fines) return old;
           return {
             ...old,
-            fines: old.fines.map((fine) => (String(fine.id) === fineId ? payload.fine : fine)),
+            // SAFETY-MONEY-FINE-CONVERT-DROPS-DRIVER-LABEL: convert-to-liability's response is a
+            // plain `RETURNING *` on safety.civil_fines — it carries no subject_driver_name (that's
+            // only ever computed by the enriched GET list/detail queries' JOIN to mdata.drivers).
+            // Replacing the cached row wholesale with `payload.fine` therefore dropped the resolved
+            // driver display name, rendering the governed "Driver — not visible" tombstone even
+            // though the driver is fully resolvable — live-caught the first time this mutation was
+            // ever exercised (0 prior real conversions existed). Merge the authoritative new fields
+            // (status, converted_to_liability_id, etc.) onto the existing enriched row instead of
+            // replacing it, so display-only joined fields survive.
+            fines: old.fines.map((fine) =>
+              String(fine.id) === fineId ? { ...fine, ...payload.fine } : fine
+            ),
           };
         }
       );
