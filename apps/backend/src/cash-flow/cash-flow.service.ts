@@ -1047,6 +1047,16 @@ function rowStatus(daysOverdue: number): RollingLedgerRow["status"] {
   return "upcoming";
 }
 
+/** CASH-FLOW-ROLLING-LEDGER-4-FIXES fix 1 — real customer name(s), never a guessed single name for
+ * a genuine batch: "Customer" alone when the advance/reserve covers one invoice, "Customer +N more"
+ * when it spans more (N = the OTHER invoices, not the total). Falls back to "Factor" only when no
+ * invoice could be resolved at all (should not happen live, kept as an honest last resort). */
+function factoringCounterpartyLabel(customerName: string | null, nInvoices: number): string {
+  if (!customerName) return "Factor";
+  if (nInvoices > 1) return `${customerName} +${nInvoices - 1} more`;
+  return customerName;
+}
+
 /**
  * Every currently-OPEN expected-expense / expected-income row, USMCA-scoped, real dates, never
  * fabricated. Six sources per the owner's own END STATE list:
@@ -1288,10 +1298,19 @@ export async function getRollingLedgerRows(
   // 2) accounting.factoring_advances — advanced but the wire hasn't matched a bank line yet
   // (banking.bank_transactions.matched_advance_id), and separately, collected but the reserve
   // hasn't been released yet (released_at IS NULL).
+  // CASH-FLOW-ROLLING-LEDGER-4-FIXES (owner 2026-09-07) fix 1: this row's "Customer · No." column
+  // must show the real underlying CUSTOMER, not the factoring company (vendor_name was always
+  // "Faro Factoring" etc. -- the query never joined back to the source invoice at all). Live-verified
+  // (2026-09-07): every factoring_advances row today is 1:1 with exactly one accounting.invoices row
+  // (accounting.invoices.factoring_advance_id), but the schema does not GUARANTEE that -- a batch
+  // COULD cover multiple invoices/customers -- so this resolves the primary (earliest-issued)
+  // customer name plus a real invoice count, and the row-building loop below appends "+N more" only
+  // when a batch genuinely spans more than one invoice, never guessing a single name for a batch.
   const advancesPromise = client.query<{
     id: string;
     display_id: string | null;
-    vendor_name: string;
+    customer_name: string | null;
+    n_invoices: number;
     advanced_at: string;
     advance_amount_cents: number;
   }>(
@@ -1299,11 +1318,23 @@ export async function getRollingLedgerRows(
     SELECT
       fa.id::text,
       fa.display_id,
-      COALESCE(v.vendor_name, 'Factor') AS vendor_name,
+      inv.customer_name,
+      COALESCE(inv.n_invoices, 0)::int AS n_invoices,
       fa.advanced_at::date::text AS advanced_at,
       COALESCE(fa.advance_amount_cents, 0)::int AS advance_amount_cents
     FROM accounting.factoring_advances fa
-    LEFT JOIN mdata.vendors v ON v.id = fa.factoring_company_vendor_id AND v.operating_company_id = $1::uuid
+    LEFT JOIN LATERAL (
+      SELECT
+        (
+          SELECT c.customer_name
+          FROM accounting.invoices i
+          JOIN mdata.customers c ON c.id = i.customer_id AND c.operating_company_id = fa.operating_company_id
+          WHERE i.factoring_advance_id = fa.id
+          ORDER BY i.issue_date ASC, i.id ASC
+          LIMIT 1
+        ) AS customer_name,
+        (SELECT count(*) FROM accounting.invoices i WHERE i.factoring_advance_id = fa.id) AS n_invoices
+    ) inv ON true
     WHERE fa.operating_company_id = $1::uuid
       AND fa.advanced_at IS NOT NULL
       AND COALESCE(fa.advance_amount_cents, 0) > 0
@@ -1319,7 +1350,8 @@ export async function getRollingLedgerRows(
   const reservesPromise = client.query<{
     id: string;
     display_id: string | null;
-    vendor_name: string;
+    customer_name: string | null;
+    n_invoices: number;
     collected_at: string;
     reserve_amount_cents: number;
   }>(
@@ -1327,11 +1359,23 @@ export async function getRollingLedgerRows(
     SELECT
       fa.id::text,
       fa.display_id,
-      COALESCE(v.vendor_name, 'Factor') AS vendor_name,
+      inv.customer_name,
+      COALESCE(inv.n_invoices, 0)::int AS n_invoices,
       fa.collected_at::date::text AS collected_at,
       COALESCE(fa.reserve_amount_cents, 0)::int AS reserve_amount_cents
     FROM accounting.factoring_advances fa
-    LEFT JOIN mdata.vendors v ON v.id = fa.factoring_company_vendor_id AND v.operating_company_id = $1::uuid
+    LEFT JOIN LATERAL (
+      SELECT
+        (
+          SELECT c.customer_name
+          FROM accounting.invoices i
+          JOIN mdata.customers c ON c.id = i.customer_id AND c.operating_company_id = fa.operating_company_id
+          WHERE i.factoring_advance_id = fa.id
+          ORDER BY i.issue_date ASC, i.id ASC
+          LIMIT 1
+        ) AS customer_name,
+        (SELECT count(*) FROM accounting.invoices i WHERE i.factoring_advance_id = fa.id) AS n_invoices
+    ) inv ON true
     WHERE fa.operating_company_id = $1::uuid
       AND fa.collected_at IS NOT NULL
       AND fa.released_at IS NULL
@@ -1513,7 +1557,7 @@ export async function getRollingLedgerRows(
       document_kind: "factoring_advance",
       document_id: a.id,
       document_label: a.display_id ?? a.id.slice(0, 8),
-      counterparty: a.vendor_name,
+      counterparty: factoringCounterpartyLabel(a.customer_name, a.n_invoices),
       origin_date: a.advanced_at,
       due_date: a.advanced_at,
       amount_cents: a.advance_amount_cents,
@@ -1530,7 +1574,7 @@ export async function getRollingLedgerRows(
       document_kind: "factoring_advance",
       document_id: r.id,
       document_label: r.display_id ?? r.id.slice(0, 8),
-      counterparty: r.vendor_name,
+      counterparty: factoringCounterpartyLabel(r.customer_name, r.n_invoices),
       origin_date: r.collected_at,
       due_date: r.collected_at,
       amount_cents: r.reserve_amount_cents,

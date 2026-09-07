@@ -102,11 +102,22 @@ const STATUS_CLASS: Record<RollingLedgerRow["status"], string> = {
   upcoming: "border-slate-200 bg-white text-slate-500",
 };
 
+// CASH-FLOW-ROLLING-LEDGER-4-FIXES fix 4 (owner 2026-09-07) — Factor advance/reserve rows already
+// say what they are in the Type column; Status re-deriving the literal word "Factored" from that
+// same type field stated the same fact twice. Collapse Status to a neutral dash for those two row
+// types only (every other row type keeps its real current/overdue Status, unchanged).
+function isFactoringRow(type: string): boolean {
+  return type === "Factor advance" || type === "Factor reserve";
+}
+
 function StatusPill({ row }: { row: RollingLedgerRow }) {
+  if (isFactoringRow(row.type)) {
+    return <span className="inline-flex rounded-full border border-slate-200 bg-white px-1.5 py-0.5 text-xs text-slate-400">—</span>;
+  }
   return (
     <>
       <span className={`inline-flex rounded-full border px-1.5 py-0.5 text-xs ${row.is_rollover_echo ? "border-slate-200 bg-slate-100 text-slate-500" : STATUS_CLASS[row.status]}`}>
-        {row.is_rollover_echo ? "Rolled" : row.type === "Factor advance" || row.type === "Factor reserve" ? "Factored" : STATUS_LABEL[row.status]}
+        {row.is_rollover_echo ? "Rolled" : STATUS_LABEL[row.status]}
       </span>
       {row.reason_label && <div className="mt-0.5 text-xs text-slate-400">rolled — {row.reason_label}</div>}
     </>
@@ -531,7 +542,13 @@ export function RollingLedgerTab({ operatingCompanyId }: Props) {
   // ROUND 16.7 CORRECTION — segmented [By day | By type]: "day" is the existing flat
   // chronological sort; "type" groups each register by row.type via ParityTable's native groupBy.
   const groupMode = (searchParams.get("rl_group") as "day" | "type") || "day";
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  // CASH-FLOW-ROLLING-LEDGER-4-FIXES fix 3 (owner 2026-09-07) — this page's own header comment
+  // ("A daily snapshot with roll-over") means the default view must show only TODAY's projected
+  // income/expenses; starting selectedDate at null made the row filter below (`!selectedDate ||
+  // r.due_date === selectedDate`) pass every row unconditionally until the owner clicked a day in
+  // the grid, so a load due in a future week showed up on first load. Default to today; clicking a
+  // day in DayNavigatorCard still overrides it exactly as before.
+  const [selectedDate, setSelectedDate] = useState<string | null>(today);
   const [adjustingRowKey, setAdjustingRowKey] = useState<string | null>(null);
 
   const updateParams = (updates: Record<string, string | null>) => {
@@ -677,12 +694,21 @@ export function RollingLedgerTab({ operatingCompanyId }: Props) {
           <span className="text-slate-400">—</span>
         ),
     },
+    {
+      key: "invoice_date",
+      label: "Invoice date",
+      render: (row) => fmtDateShort(row.origin_date),
+      sortValue: (row) => row.origin_date,
+    },
     { key: "due_date", label: "Due", render: (row) => fmtDateShort(row.due_date), sortValue: (row) => row.due_date },
     {
       key: "in",
       label: "In",
       sortable: false,
-      render: (row) => (row.days_overdue > 0 ? `+${row.days_overdue}d` : row.days_overdue === 0 ? "today" : `${-row.days_overdue}d`),
+      // CASH-FLOW-ROLLING-LEDGER-4-FIXES fix 2 (owner 2026-09-07) — the old "+Nd"/"Nd" pair read
+      // backwards (a reader decodes "+Nd" as "in N days" when it actually meant N days OVERDUE, and
+      // a bare "Nd" read as overdue when it meant due IN N days). Say what it means, not a sign.
+      render: (row) => (row.days_overdue > 0 ? `${row.days_overdue}d overdue` : row.days_overdue === 0 ? "Due today" : `In ${-row.days_overdue}d`),
     },
     {
       key: "amount_cents",
@@ -703,7 +729,9 @@ export function RollingLedgerTab({ operatingCompanyId }: Props) {
     {
       key: "days_overdue",
       label: "Days",
-      render: (row) => (row.days_overdue > 0 ? String(row.days_overdue) : row.days_overdue === 0 ? "today" : "—"),
+      // CASH-FLOW-ROLLING-LEDGER-4-FIXES fix 2 (owner 2026-09-07) — same backwards-sign class as the
+      // income table's "In" column: a bare number gave no cue which direction it meant. Label it.
+      render: (row) => (row.days_overdue > 0 ? `${row.days_overdue}d overdue` : row.days_overdue === 0 ? "Due today" : `In ${-row.days_overdue}d`),
     },
     {
       key: "amount_cents",
