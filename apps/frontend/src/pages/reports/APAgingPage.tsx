@@ -273,6 +273,8 @@ export function APAgingPage() {
         search={reportSearch}
         onSearchChange={setReportSearch}
         onApply={staged.apply}
+        onCancel={staged.cancel}
+        onReset={staged.reset}
         applyDisabled={!staged.dirty}
       >
         <label className="flex items-center gap-1 text-xs text-slate-600">

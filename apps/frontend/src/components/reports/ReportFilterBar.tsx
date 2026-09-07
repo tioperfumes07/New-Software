@@ -26,6 +26,10 @@ type ReportFilterBarProps = {
   /** When provided, an Apply button renders and calls this on click. Used with useStagedListFilters. */
   onApply?: () => void;
   applyDisabled?: boolean;
+  /** When provided with onApply, a Cancel button renders and calls this on click. */
+  onCancel?: () => void;
+  /** When provided with onApply, a Reset button renders and calls this on click. */
+  onReset?: () => void;
 };
 
 const PRESET_BUTTONS: Array<{ preset: ReportPreset; label: string }> = [
@@ -87,6 +91,8 @@ export function ReportFilterBar({
   statusOptions,
   onApply,
   applyDisabled,
+  onCancel,
+  onReset,
 }: ReportFilterBarProps) {
   const [, setSearchParams] = useSearchParams();
 
@@ -232,6 +238,26 @@ export function ReportFilterBar({
       {onApply ? (
         <>
           <div className="mx-1 h-5 w-px bg-slate-200" />
+          {onReset ? (
+            <button
+              type="button"
+              onClick={onReset}
+              className="h-7 rounded-sm border border-slate-300 bg-white px-3 text-xs font-medium text-slate-600 hover:bg-slate-50"
+              data-testid={`${testIdPrefix}-reset`}
+            >
+              Reset
+            </button>
+          ) : null}
+          {onCancel ? (
+            <button
+              type="button"
+              onClick={onCancel}
+              className="h-7 rounded-sm border border-slate-300 bg-white px-3 text-xs font-medium text-slate-600 hover:bg-slate-50"
+              data-testid={`${testIdPrefix}-cancel`}
+            >
+              Cancel
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={onApply}
