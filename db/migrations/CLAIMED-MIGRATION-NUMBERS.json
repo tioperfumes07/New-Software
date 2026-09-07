@@ -8,6 +8,11 @@
   "_how_to_claim": "Open a claim-only PR (chore/claim-migration-YYYYMMDDHHMM-*) that adds the timestamp to 'claimed' below; merge to origin/main; THEN author the .sql file on a feature branch. CI fails if a new db/migrations/*.sql timestamp is not already claimed on origin/main. Same-lane intra-branch collisions are prevented because the registry is merged before the migration file exists.",
   "_why": "202612350000 was claimed twice by two concurrently-open CC-1 branches. The migration lane-band guard (HH 00\u201311 / 12\u201323) only prevents inter-lane collisions; it cannot see two unmerged branches in the same lane. A registry merged before authorship converts the invisible race into a git conflict.",
   "claimed": {
+    "202613950000": {
+      "claimed_by": "claude",
+      "claimed_at": "2026-09-07",
+      "purpose": "GUARD-WORKORDERS CHART-OF-ACCOUNTS-ROLES-NO-UNIQUE-PER-COMPANY-ROLE (routed=CC-1/Cursor, filed 2026-08-30) + its sibling banking.bank_accounts.ledger_account_id uniqueness gap noted still-open in the same board's BANK-ECON-05 closure note: partial unique index on accounting.chart_of_accounts_roles(operating_company_id, role) WHERE is_active=true, and on banking.bank_accounts(operating_company_id, ledger_account_id) WHERE deactivated_at IS NULL AND ledger_account_id IS NOT NULL. Live-verified before claiming: the 14 duplicate coa-roles groups named in the board row already resolved to exactly 1 active row each (someone deactivated the extras since 2026-08-30) and 0 bank_accounts currently share a ledger_account_id among active rows -- both indexes are safe to add with zero data cleanup required."
+    },
     "202613940000": {
       "claimed_by": "claude",
       "claimed_at": "2026-09-07",

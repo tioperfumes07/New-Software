@@ -8163,5 +8163,10 @@
     "claimed_by": "claude",
     "claimed_at": "2026-09-07",
     "purpose": "verify-capitalized-repair-registers-fixed-asset"
+  },
+  "10861": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-07",
+    "purpose": "verify-coa-roles-and-bank-accounts-uniqueness"
   }
 }
