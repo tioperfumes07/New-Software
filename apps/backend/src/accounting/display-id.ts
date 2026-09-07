@@ -290,7 +290,32 @@ export async function resolveInvoiceDisplayId(
     return manual;
   }
   const fallback = autoFallback?.trim();
-  if (fallback) return assertDisplayIdShape(fallback, INVOICE_DISPLAY_ID_PATTERN, "invoice");
+  if (fallback) {
+    assertDisplayIdShape(fallback, INVOICE_DISPLAY_ID_PATTERN, "invoice");
+    // ACCT reissue-after-void (LOAD-13541-ROUNDTRIP-CORRECTION): display_id = load_number is the
+    // going-forward default (owner 2026-08-24), but accounting.invoices carries a FULL
+    // (operating_company_id, display_id) unique constraint that does NOT exclude voided rows. Once a
+    // load's invoice is voided, that load_number is permanently burned -- so re-rating or re-invoicing
+    // the load (resyncProformaInvoiceFromLoadRate -> buildInvoiceFromLoad, or a from-load reissue) hit
+    // a raw 23505 and the whole PATCH/mint FAILED: a load whose invoice was voided could never be
+    // re-invoiced at a corrected amount. When the load-number id is already taken by ANY invoice
+    // (including a voided one), fall through to the INV-YYYY-NNNNN allocator so the reissue gets a
+    // fresh, unique number. The taken-check intentionally does NOT filter voided_at (the constraint
+    // doesn't either), and holds the same advisory lock the manual path uses.
+    await withDisplayLock(client, `accounting.invoice.display_id:${operatingCompanyId}`);
+    const taken = await client.query(
+      `
+        SELECT 1
+          FROM accounting.invoices
+         WHERE operating_company_id = $1::uuid
+           AND display_id = $2
+         LIMIT 1
+      `,
+      [operatingCompanyId, fallback]
+    );
+    if (!taken.rows[0]) return fallback;
+    return nextInvoiceDisplayId(client, operatingCompanyId, referenceDate);
+  }
   return nextInvoiceDisplayId(client, operatingCompanyId, referenceDate);
 }
 
