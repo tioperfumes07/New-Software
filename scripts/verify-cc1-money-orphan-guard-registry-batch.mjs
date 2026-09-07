@@ -9,6 +9,7 @@ const LABEL = "verify-cc1-money-orphan-guard-registry-batch";
  * verify-wave-c-gl-je-system-qbo-recon.mjs — explicitly excluded from USMCA sprint scope by
  * owner ruling (N/A section of the handoff doc), never wired here. */
 const REQUIRED = [
+  "verify-acc20-void-unmatch-resets-review-state.mjs",
   "verify-accounting-existing-query-reverse-drills.mjs",
   "verify-accounting-required-linkage-honest.mjs",
   "verify-accounting-reverse-link-list-surfaces.mjs",
@@ -23,6 +24,7 @@ const REQUIRED = [
   "verify-banking-factoring-liability-built.mjs",
   "verify-banking-matched-bill-drill.mjs",
   "verify-banking-reverse-link-list-surfaces.mjs",
+  "verify-capitalized-repair-registers-fixed-asset.mjs",
   "verify-cash-forecast-profile-reverse.mjs",
   "verify-coa-asymmetry-account-entitylink.mjs",
   "verify-driver-finance-reverse-leaves.mjs",
@@ -41,6 +43,7 @@ const REQUIRED = [
   "verify-fuel-expense-identity-honesty.mjs",
   "verify-gl-je-honest-built.mjs",
   "verify-invoice-inline-surface-applicability.mjs",
+  "verify-invoices-no-load-id-column.mjs",
   "verify-liability-built-tags-strict.mjs",
   "verify-liability-navigation-honesty.mjs",
   "verify-liability-surfaces-built.mjs",
