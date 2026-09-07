@@ -193,7 +193,7 @@ export async function registerVehicleDriverPairingRoutes(app: FastifyInstance) {
             history_load.id::text AS load_id,
             history_load.load_number,
             history_trailer.new_trailer_id::text AS trailer_id,
-            history_equipment.unit_number AS trailer_number,
+            history_equipment.equipment_number AS trailer_number,
             history_miles.driven_miles,
             COUNT(*) OVER()::int AS total_count
           FROM telematics.vehicle_driver_assignments a
@@ -235,7 +235,10 @@ export async function registerVehicleDriverPairingRoutes(app: FastifyInstance) {
           ) history_trailer ON true
           LEFT JOIN mdata.equipment history_equipment
             ON history_equipment.id = history_trailer.new_trailer_id
-           AND history_equipment.operating_company_id = a.operating_company_id
+           AND COALESCE(
+                 history_equipment.currently_leased_to_company_id,
+                 history_equipment.owner_company_id
+               ) = a.operating_company_id
           LEFT JOIN LATERAL (
             SELECT SUM(history_miles_row.driven_miles)::numeric AS driven_miles
             FROM telematics.load_odometer_segments history_miles_row
