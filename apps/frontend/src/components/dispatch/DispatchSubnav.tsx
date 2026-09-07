@@ -3,11 +3,14 @@ import {
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type KeyboardEvent,
 } from "react";
+import { createPortal } from "react-dom";
 import { Link, useLocation } from "react-router-dom";
 import { useQueries } from "@tanstack/react-query";
 import { listFactoringCandidateInvoices } from "../../api/accounting";
@@ -24,6 +27,13 @@ import {
 } from "../../api/dispatch";
 import { listLatestPositions } from "../../api/telematics";
 import "../../components/forms/shared/HoverDropdownNav.css";
+// GO-23-REGRESSION-CORRECTION port (finding 50346, Cascade/Devin QA walk 2026-09-07): this file has
+// its own hand-rolled `DropdownColumn`, never ported to HoverDropdownNav.tsx's portal fix, so its
+// `.nav-dropdown` still sat inside `.hover-dropdown-nav`'s CSS-spec-forced `overflow-y: auto` and was
+// clipped exactly like HoverDropdownNav.tsx's menus were before that fix. Reuses the SAME measurement
+// helper (single source of truth for the positioning math) rather than re-deriving it, while keeping
+// this file's own badge-aware markup intact.
+import { measureNavDropdownStyle } from "../../components/forms/shared/HoverDropdownNav";
 
 type NavChild = { label: string; href: string; badgeKey?: string };
 type NavItem = {
@@ -263,9 +273,11 @@ function DropdownColumn({
 }) {
   const menuId = useId().replace(/:/g, "");
   const [open, setOpen] = useState(false);
+  const [menuStyle, setMenuStyle] = useState<CSSProperties>({});
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const menuRef = useRef<HTMLUListElement>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
+  const splitRef = useRef<HTMLDivElement>(null);
   const openViaKey = useRef(false);
 
   const clearHide = useCallback(() => {
@@ -279,6 +291,30 @@ function DropdownColumn({
     clearHide();
     setOpen(true);
   }, [clearHide]);
+
+  // GO-23-REGRESSION-CORRECTION port: measure + reposition into a document.body portal, same fix as
+  // HoverDropdownNav.tsx — `.hover-dropdown-nav`'s CSS-spec-forced `overflow-y: auto` clips a
+  // `position: absolute` menu regardless of correct DOM/layout, so escape via `position: fixed` off a
+  // live getBoundingClientRect() read instead.
+  useLayoutEffect(() => {
+    if (!open || !splitRef.current) return;
+    setMenuStyle(measureNavDropdownStyle(splitRef.current));
+  }, [open, item.children?.length]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    function reposition() {
+      if (!splitRef.current) return;
+      setMenuStyle(measureNavDropdownStyle(splitRef.current));
+    }
+    window.addEventListener("resize", reposition);
+    // Capture: `.hover-dropdown-nav` itself scrolls horizontally (overflow-x: auto) without bubbling.
+    document.addEventListener("scroll", reposition, true);
+    return () => {
+      window.removeEventListener("resize", reposition);
+      document.removeEventListener("scroll", reposition, true);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -350,7 +386,7 @@ function DropdownColumn({
     <li role="none" className="nav-item-with-dropdown">
       {/* Click-to-toggle persistent menu (overrides locked-decision #728 hover pattern per Jorge).
           Opens on click, STAYS open until an item is chosen, an outside click, or Escape. */}
-      <div className="nav-split">
+      <div className="nav-split" ref={splitRef}>
         {item.href ? (
           // C-1 split control: the LABEL navigates to the default planner; the CHEVRON keeps the
           // click-to-toggle persistent submenu (locked decision #728 preserved — see test).
@@ -394,31 +430,35 @@ function DropdownColumn({
           )}
           <ChevronDown size={12} aria-hidden />
         </button>
-        {open ? (
-          <ul
-            ref={menuRef}
-            id={menuId}
-            role="menu"
-            className="nav-dropdown"
-            tabIndex={-1}
-          >
-            {(item.children ?? []).map((child) => (
-              <li key={child.href} role="none">
-                <Link
-                  role="menuitem"
-                  to={child.href}
-                  className={activeHref === child.href ? "active" : undefined}
-                  onClick={() => setOpen(false)}
-                >
-                  {child.label}
-                  {child.badgeKey ? (
-                    <CountBadge count={badges[child.badgeKey]} badgeKey={child.badgeKey} />
-                  ) : null}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        ) : null}
+        {open && typeof document !== "undefined"
+          ? createPortal(
+              <ul
+                ref={menuRef}
+                id={menuId}
+                role="menu"
+                className="nav-dropdown"
+                style={menuStyle}
+                tabIndex={-1}
+              >
+                {(item.children ?? []).map((child) => (
+                  <li key={child.href} role="none">
+                    <Link
+                      role="menuitem"
+                      to={child.href}
+                      className={activeHref === child.href ? "active" : undefined}
+                      onClick={() => setOpen(false)}
+                    >
+                      {child.label}
+                      {child.badgeKey ? (
+                        <CountBadge count={badges[child.badgeKey]} badgeKey={child.badgeKey} />
+                      ) : null}
+                    </Link>
+                  </li>
+                ))}
+              </ul>,
+              document.body,
+            )
+          : null}
       </div>
     </li>
   );

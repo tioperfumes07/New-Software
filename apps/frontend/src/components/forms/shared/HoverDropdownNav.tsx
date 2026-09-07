@@ -51,9 +51,9 @@ function itemOrChildActive(item: NavItem, activeHref?: string): boolean {
 // `position: fixed` from a live getBoundingClientRect() read, so no ancestor's overflow or stacking
 // context can clip or bury it. Reuses the same z-index rationale (220 sits above every explicit
 // z-index found in the codebase, including the z-[200]/z-[210] slide-over drawer tier).
-const NAV_DROPDOWN_Z_INDEX = 220;
+export const NAV_DROPDOWN_Z_INDEX = 220;
 
-function measureNavDropdownStyle(anchor: HTMLElement): CSSProperties {
+export function measureNavDropdownStyle(anchor: HTMLElement): CSSProperties {
   const rect = anchor.getBoundingClientRect();
   return {
     position: "fixed",
