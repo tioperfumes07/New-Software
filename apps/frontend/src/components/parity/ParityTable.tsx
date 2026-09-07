@@ -17,14 +17,17 @@
 import {
   Fragment,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
   type TouchEvent as ReactTouchEvent,
 } from "react";
+import { createPortal } from "react-dom";
 import { colors, spacing, typography, MIN_HIT_TARGET_CLASS, TOOLBAR_ICON_SIZE_CLASS } from "../../design/tokens";
 import { Button } from "../Button";
 import { Settings as GearIcon } from "lucide-react";
@@ -662,6 +665,8 @@ export function ParityTable<T>({
   const [dragKey, setDragKey] = useState<string | null>(null);
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
   const gearRef = useRef<HTMLDivElement>(null);
+  const gearPanelRef = useRef<HTMLDivElement>(null);
+  const [gearPanelStyle, setGearPanelStyle] = useState<CSSProperties>({});
   const resizing = useRef<{ key: string; startX: number; startW: number } | null>(null);
 
   const cancelGear = () => {
@@ -692,11 +697,15 @@ export function ParityTable<T>({
     setDraftPageSize(pageSizeOptions[0] ?? 25);
   };
 
-  // Outside click / Escape cancels uncommitted gear edits.
+  // Outside click / Escape cancels uncommitted gear edits. gearPanelRef is checked too because the
+  // panel is portal-rendered (see below) — it no longer lives inside gearRef's DOM subtree, so a
+  // click on e.g. a column checkbox would otherwise read as "outside" and cancel the whole popover.
   useEffect(() => {
     if (!gearOpen) return;
     const onDoc = (e: MouseEvent) => {
-      if (gearRef.current && !gearRef.current.contains(e.target as Node)) cancelGear();
+      const t = e.target as Node;
+      if (gearRef.current?.contains(t) || gearPanelRef.current?.contains(t)) return;
+      cancelGear();
     };
     const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") cancelGear(); };
     document.addEventListener("mousedown", onDoc);
@@ -706,6 +715,46 @@ export function ParityTable<T>({
       document.removeEventListener("keydown", onKey);
     };
   }, [density, gearOpen, hidden]);
+
+  // GO-23-REGRESSION-CORRECTION (owner-reported, 2026-09-07): this popover is `position: absolute`
+  // with no viewport-collision handling, so a page that wraps ParityTable in a fixed-height
+  // `overflow-hidden` card (e.g. LoadCostsBoardPage's <section>) clips it — not a scroll-to-reveal
+  // problem, an `overflow: hidden` ancestor with no scrollbar at all, confirmed live
+  // (getComputedStyle on the wrapping <section>: overflow-hidden, fixed height ~694px). Same class
+  // of bug as HoverDropdownNav.tsx/DispatchSubnav.tsx's nav-dropdown clip, same fix: escape into a
+  // document.body portal at `position: fixed`, measured from a live getBoundingClientRect() read,
+  // right-aligned under the gear button to preserve its current visual placement.
+  const PARITY_GEAR_Z_INDEX = 220;
+  useLayoutEffect(() => {
+    if (!gearOpen || !gearRef.current) return;
+    const rect = gearRef.current.getBoundingClientRect();
+    setGearPanelStyle({
+      position: "fixed",
+      top: rect.bottom,
+      right: window.innerWidth - rect.right,
+      zIndex: PARITY_GEAR_Z_INDEX,
+    });
+  }, [gearOpen]);
+
+  useEffect(() => {
+    if (!gearOpen) return undefined;
+    function reposition() {
+      if (!gearRef.current) return;
+      const rect = gearRef.current.getBoundingClientRect();
+      setGearPanelStyle({
+        position: "fixed",
+        top: rect.bottom,
+        right: window.innerWidth - rect.right,
+        zIndex: PARITY_GEAR_Z_INDEX,
+      });
+    }
+    window.addEventListener("resize", reposition);
+    document.addEventListener("scroll", reposition, true);
+    return () => {
+      window.removeEventListener("resize", reposition);
+      document.removeEventListener("scroll", reposition, true);
+    };
+  }, [gearOpen]);
 
   // REORDER — apply the user's saved drag order BEFORE the hidden-column filter, so hiding/showing
   // a column never disturbs the order of the ones that stay visible.
@@ -1362,8 +1411,9 @@ export function ParityTable<T>({
                * gear stops being smaller than the icons next to it. */}
               <GearIcon className={TOOLBAR_ICON_SIZE_CLASS} aria-hidden />
             </Button>
-            {gearOpen ? (
-              <div className="absolute right-0 z-20 mt-1 w-60 rounded-md border border-gray-200 bg-white p-2 shadow-lg">
+            {gearOpen && typeof document !== "undefined"
+              ? createPortal(
+              <div ref={gearPanelRef} className="w-60 rounded-md border border-gray-200 bg-white p-2 shadow-lg" style={gearPanelStyle}>
                 <div className="mb-2">
                   <label htmlFor="parity-gear-page-size" className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-gray-500">
                     Rows per page
@@ -1436,8 +1486,10 @@ export function ParityTable<T>({
                   <button type="button" className="rounded-sm border border-gray-300 bg-white px-2 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50" onClick={cancelGear}>Cancel</button>
                   <button type="button" className="rounded-sm bg-[#1F2A44] px-2 py-1 text-xs font-semibold text-white hover:bg-[#172036]" onClick={applyGear}>Apply</button>
                 </div>
-              </div>
-            ) : null}
+              </div>,
+              document.body,
+            )
+            : null}
           </div>
         </div>
       </div>
