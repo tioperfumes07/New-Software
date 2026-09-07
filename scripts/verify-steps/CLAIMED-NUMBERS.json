@@ -8158,5 +8158,10 @@
     "claimed_by": "claude",
     "claimed_at": "2026-09-07",
     "purpose": "verify-expense-reimbursable-company-expense-flags"
+  },
+  "10857": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-07",
+    "purpose": "verify-capitalized-repair-registers-fixed-asset"
   }
 }
