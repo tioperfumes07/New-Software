@@ -29,6 +29,7 @@
     "verify-bank-automatch-memo-threshold-calibrated.mjs",
     "verify-bank-econ-02-poster-path-wired.mjs",
     "verify-bank-econ-04-honesty-keep.mjs",
+    "verify-bank-fee-recovery-role-bound.mjs",
     "verify-bank-suggestions-includes-rule-match.mjs",
     "verify-bankfeed-je-match.mjs",
     "verify-banking-active-categorize-path.mjs",
@@ -134,6 +135,7 @@
     "verify-expense-column-wave.mjs",
     "verify-factoring-advances-write-role-gated.mjs",
     "verify-factoring-batch-wizard-qbo-chrome.mjs",
+    "verify-factoring-chargeback-invoice-customer-reverse.mjs",
     "verify-factoring-submit-canonical-factor-rates.mjs",
     "verify-factoring-void-reverses-funding-je.mjs",
     "verify-fail-dd2-pending-deduction-surfaces.mjs",
@@ -242,6 +244,7 @@
     "verify-no-seed-data-in-prod-fixtures.mjs",
     "verify-no-selftest-mutates-tracked-source.mjs",
     "verify-no-session-scoped-rls-bypass.mjs",
+    "verify-no-swallow-on-money-paths.mjs",
     "verify-no-uncast-operating-company-id.mjs",
     "verify-no-unmanifested-prod-financial-fixtures.mjs",
     "verify-no-uuid-label-rendering.mjs",
@@ -348,9 +351,6 @@
     "verify-wo-cancel-reason-combobox.mjs",
     "verify-wo-console-list-uses-paritytable.mjs",
     "verify-work-order-queries-exclude-voided.mjs",
-    "verify-work-orders-console-no-dup-search.mjs",
-    "verify-bank-fee-recovery-role-bound.mjs",
-    "verify-factoring-chargeback-invoice-customer-reverse.mjs",
-    "verify-no-swallow-on-money-paths.mjs"
+    "verify-work-orders-console-no-dup-search.mjs"
   ]
 }

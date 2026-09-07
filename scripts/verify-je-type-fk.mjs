@@ -7,6 +7,10 @@
  *  2. Prod SQL — when DATABASE_URL targets prod, FAIL if column absent (MERGED≠APPLIED honesty).
  *
  * Local/CI throwaway Postgres skips layer 2 (202607960000 is HELD — not in migrate path).
+ *
+ * MATRIX-BUILT-OPTIONAL: "FK" above is a literal Postgres foreign key (journal_entry_type_id ->
+ * catalogs.journal_entry_types), not an EntityLink/reverse-link/Program-matrix wiring surface —
+ * exempt from verify-matrix-built-tag-present's @matrix-built requirement.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -22,6 +26,11 @@ const LABEL = "verify-je-type-fk";
 const MIGRATION = "db/migrations/202607960000_journal_entries_type_fk.sql";
 const HELD = "db/migrations/.held-migrations.json";
 const SERVICE = "apps/backend/src/accounting/journal-entries.service.ts";
+// ACCT-LINK-01 regression fix (GO-1405 Recipe B, 2026-08-29) moved hasJournalEntryTypeColumn /
+// resolveJournalEntryTypeId / the GENERAL fallback / the HELD-migration reference into this leaf
+// module so every poster (not just journal-entries.service.ts) can reuse them — SERVICE now only
+// re-exports them, so those checks must also read this file (guard-drift, not a code regression).
+const RESOLVER = "apps/backend/src/accounting/journal-entry-type-resolver.ts";
 const ROUTES = "apps/backend/src/accounting/journal-entries.routes.ts";
 const API = "apps/frontend/src/api/accounting.ts";
 const PICKER = "apps/frontend/src/components/accounting/JournalEntryTypePicker.tsx";
@@ -63,21 +72,31 @@ function collectStaticFailures(files) {
   }
 
   const service = files.service;
+  // hasJournalEntryTypeColumn / resolveJournalEntryTypeId / the GENERAL fallback / the HELD-migration
+  // reference live in the shared leaf resolver module (imported + re-exported by SERVICE) — check
+  // the combined text so the move doesn't read as a regression.
+  const combined = service ? `${service}\n${files.resolver ?? ""}` : "";
   if (service) {
-    if (!/hasJournalEntryTypeColumn/.test(service)) {
+    if (!/hasJournalEntryTypeColumn/.test(combined)) {
       failures.push(`${SERVICE} must col-gate via hasJournalEntryTypeColumn`);
     }
-    if (!/resolveJournalEntryTypeId/.test(service)) {
+    if (!/resolveJournalEntryTypeId/.test(combined)) {
       failures.push(`${SERVICE} must resolve catalog type via resolveJournalEntryTypeId`);
     }
-    if (!/journal_entry_type_id/.test(service) || !/GENERAL/.test(service)) {
+    if (!/journal_entry_type_id/.test(combined) || !/GENERAL/.test(combined)) {
       failures.push(`${SERVICE} must write journal_entry_type_id and default manual to GENERAL`);
     }
     if (!/INSERT INTO accounting\.journal_entries \([\s\S]*journal_entry_type_id/.test(service)) {
       failures.push(`${SERVICE} INSERT must include journal_entry_type_id when column present`);
     }
-    if (!/202607960000/.test(service)) {
-      failures.push(`${SERVICE} must reference HELD migration 202607960000 (not a stale number)`);
+    // The bare migration number in a comment is a soft breadcrumb that can go stale on its own;
+    // a load-bearing import of the leaf resolver module is the stronger, code-verified signal that
+    // journal-entries.service.ts is actually wired to the shared col-gate/resolve logic (which is
+    // itself gated on 202607960000 via hasJournalEntryTypeColumn, checked above).
+    if (!/202607960000/.test(combined) && !/journal-entry-type-resolver/.test(service)) {
+      failures.push(
+        `${SERVICE} must reference HELD migration 202607960000 (not a stale number), or import from ${RESOLVER}`
+      );
     }
   }
 
@@ -229,6 +248,7 @@ const files = {
   migration: read(MIGRATION, failures),
   held: read(HELD, failures),
   service: read(SERVICE, failures),
+  resolver: read(RESOLVER, failures),
   routes: read(ROUTES, failures),
   api: read(API, failures),
   picker: read(PICKER, failures),
