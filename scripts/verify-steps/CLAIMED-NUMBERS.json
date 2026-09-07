@@ -8188,5 +8188,10 @@
     "claimed_by": "claude",
     "claimed_at": "2026-09-07",
     "purpose": "verify-safety-events-with-driver-view-live (SAFETY-BROKEN-VIEW). Static+live guard: migration 202613970000 correctly aliases driver_id/unit_id/event_at and LEFT JOINs mdata.drivers (never INNER JOIN, which would drop the 5 of 7 live open events with no subject_driver_id); live half re-counts views.safety_events_with_driver, expects > 0."
+  },
+  "10881": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-07",
+    "purpose": "verify-cash-flow-rolling-ledger-4-fixes (CASH-FLOW-ROLLING-LEDGER-4-FIXES, owner request 2026-09-07). Static guard: cash-flow.service.ts resolves the real customer name for Factor advance/reserve rows (not the factoring vendor); RollingLedgerTab.tsx honest In/Days labels, selectedDate defaults to today, StatusPill collapses for factor rows, incomeColumns has an Invoice date column."
   }
 }
