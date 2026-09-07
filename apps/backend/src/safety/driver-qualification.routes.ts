@@ -260,7 +260,7 @@ export async function registerSafetyDriverQualificationRoutes(app: FastifyInstan
               d.status::text AS driver_status,
               d.cdl_number,
               d.cdl_state,
-              d.cdl_expiry_date
+              d.cdl_expires_at AS cdl_expiry_date
             FROM mdata.drivers d
             WHERE (d.operating_company_id = $1::uuid OR EXISTS (
                     SELECT 1 FROM mdata.driver_company_authorizations dca
