@@ -10,6 +10,7 @@ const listExpenses = vi.fn().mockResolvedValue({ rows: [] });
 const listBills = vi.fn().mockResolvedValue({ rows: [] });
 const listBrokerAdvances = vi.fn().mockResolvedValue({ rows: [] });
 const listCoaRoles = vi.fn().mockResolvedValue({ rows: [] });
+const listExpenseCategoryMappings = vi.fn().mockResolvedValue({ rows: [] });
 const createBrokerAdvance = vi.fn().mockResolvedValue({ broker_advance_id: "adv-1", applied_to_invoice_id: null });
 const createExpense = vi.fn();
 const createVendorBill = vi.fn();
@@ -22,6 +23,7 @@ vi.mock("../../api/accounting", async () => {
     listBills: (...args: unknown[]) => listBills(...args),
     listBrokerAdvances: (...args: unknown[]) => listBrokerAdvances(...args),
     listCoaRoles: (...args: unknown[]) => listCoaRoles(...args),
+    listExpenseCategoryMappings: (...args: unknown[]) => listExpenseCategoryMappings(...args),
     createBrokerAdvance: (...args: unknown[]) => createBrokerAdvance(...args),
     createExpense: (...args: unknown[]) => createExpense(...args),
     createVendorBill: (...args: unknown[]) => createVendorBill(...args),
@@ -102,6 +104,7 @@ describe("LoadDetailCostsTab — entry cards + SET-15 advance received", () => {
     listBills.mockResolvedValue({ rows: [] });
     listBrokerAdvances.mockResolvedValue({ rows: [] });
     listCoaRoles.mockResolvedValue({ rows: [] });
+    listExpenseCategoryMappings.mockResolvedValue({ rows: [] });
     createBrokerAdvance.mockResolvedValue({ broker_advance_id: "adv-1", applied_to_invoice_id: null, journal_entry_id: null });
     getAllAccounts.mockResolvedValue({ accounts: [{ id: "bank-1", display_name: "Operating Bank", institution_name: "BofA", account_mask: "1234" }] });
   });
@@ -156,9 +159,16 @@ describe("LoadDetailCostsTab — entry cards + SET-15 advance received", () => {
       { id: "adv", account_number: "DRIVERCASHAD", account_name: "Driver Cash Advance", account_type: "Asset", account_subtype: "Employee Cash Advances", system_purpose: null },
     ] });
     renderTab();
-    const select = await screen.findByTestId("load-cost-field-paid-with");
-    await waitFor(() => expect(within(select).getAllByRole("option")).toHaveLength(4));
-    const labels = within(select).getAllByRole("option").map((o) => o.textContent);
+    const combobox = await screen.findByTestId("load-cost-field-paid-with");
+    // LOAD-COSTS-EXPENSE-CATEGORY-FUEL-ROW-ROOT-CAUSE fix 3 -- Paid With is now a LocalCombobox
+    // (matching Category, two fields above), not a native <select>: focusing opens the option list
+    // as buttons, not <option role="option"> elements.
+    fireEvent.focus(combobox);
+    const popup = combobox.parentElement!;
+    // 3, not 4: the old native <select>'s blank placeholder <option> counted as a 4th `role=option`
+    // element; LocalCombobox's placeholder lives on the input itself, not as a selectable entry.
+    await waitFor(() => expect(within(popup).getAllByRole("button")).toHaveLength(3));
+    const labels = within(popup).getAllByRole("button").map((o) => o.textContent);
     expect(labels.join(" | ")).toContain("1000 Bank of America - Operating (USMCA) · bank");
     expect(labels.join(" | ")).toContain("2500 Amex Credit Card Payable · card");
     expect(labels.join(" | ")).toContain("1295 Relay Fuel Wallet · fuel card");
@@ -217,7 +227,8 @@ describe("LoadDetailCostsTab — entry cards + SET-15 advance received", () => {
     fireEvent.click(await screen.findByText("Pilot"));
     fireEvent.change(screen.getByTestId("load-cost-field-category"), { target: { value: "Tolls" } });
     fireEvent.click(await screen.findByText("6500 Tolls"));
-    fireEvent.change(screen.getByTestId("load-cost-field-paid-with"), { target: { value: "acct-bank" } });
+    fireEvent.change(screen.getByTestId("load-cost-field-paid-with"), { target: { value: "Operating Bank" } });
+    fireEvent.click(await screen.findByText("1000 Operating Bank · bank"));
     fireEvent.change(screen.getByTestId("load-cost-field-amount").querySelector("input")!, { target: { value: "40.00" } });
     fireEvent.click(screen.getByTestId("load-costs-save-all"));
     await waitFor(() => expect(createExpense).toHaveBeenCalledTimes(1));
@@ -226,6 +237,112 @@ describe("LoadDetailCostsTab — entry cards + SET-15 advance received", () => {
       // The receipt follows the record: attachment_draft_id is the card's documents.attachments draft id.
       expect.objectContaining({ expense_number: "13508", amount_cents: 4000, attachment_draft_id: expect.any(String) })
     );
+  });
+
+  it("LOAD-COSTS-EXPENSE-CATEGORY-FUEL-ROW-ROOT-CAUSE fix 1 — an account with 6 category bindings (real 5000 Fuel & Diesel shape) requires a pick and sends expense_category_code", async () => {
+    listCatalogAccounts.mockResolvedValue({ accounts: [
+      { id: "acct-fuel", account_number: "5000", account_name: "Fuel & Diesel", account_type: "Expense" },
+      { id: "acct-bank", account_number: "1000", account_name: "Operating Bank", account_type: "Asset", account_subtype: "Checking", system_purpose: "bank_operating" },
+    ] });
+    listExpenseCategoryMappings.mockResolvedValue({ rows: [
+      { id: "m1", operating_company_id: "co", category_kind: "fuel", category_code: "fuel", account_id: "acct-fuel", posting_side: "debit", is_active: true, created_at: "", updated_at: "" },
+      { id: "m2", operating_company_id: "co", category_kind: "fuel", category_code: "diesel", account_id: "acct-fuel", posting_side: "debit", is_active: true, created_at: "", updated_at: "" },
+      { id: "m3", operating_company_id: "co", category_kind: "fuel", category_code: "def", account_id: "acct-fuel", posting_side: "debit", is_active: true, created_at: "", updated_at: "" },
+      { id: "m4", operating_company_id: "co", category_kind: "fuel", category_code: "oil", account_id: "acct-fuel", posting_side: "debit", is_active: true, created_at: "", updated_at: "" },
+      { id: "m5", operating_company_id: "co", category_kind: "fuel", category_code: "misc", account_id: "acct-fuel", posting_side: "debit", is_active: true, created_at: "", updated_at: "" },
+      { id: "m6", operating_company_id: "co", category_kind: "fuel", category_code: "reefer", account_id: "acct-fuel", posting_side: "debit", is_active: true, created_at: "", updated_at: "" },
+    ] });
+    createExpense.mockResolvedValue({ expense_id: "exp-1", posting_status: "posted" });
+    const listVendors = (await import("../../api/mdata")).listVendors as unknown as ReturnType<typeof vi.fn>;
+    listVendors.mockResolvedValue({ vendors: [{ id: "vend-1", name: "Pilot" }] });
+    renderTab();
+    await screen.findByTestId("load-cost-number");
+    fireEvent.change(screen.getByTestId("load-cost-field-vendor"), { target: { value: "Pilot" } });
+    fireEvent.click(await screen.findByText("Pilot"));
+    fireEvent.change(screen.getByTestId("load-cost-field-category"), { target: { value: "Fuel & Diesel" } });
+    fireEvent.click(await screen.findByText("5000 Fuel & Diesel"));
+    // Ambiguous account -> the picker appears and Save is blocked until one is chosen.
+    expect(screen.getByTestId("load-cost-field-category-code")).toBeInTheDocument();
+    fireEvent.change(screen.getByTestId("load-cost-field-paid-with"), { target: { value: "Operating Bank" } });
+    fireEvent.click(await screen.findByText("1000 Operating Bank · bank"));
+    fireEvent.change(screen.getByTestId("load-cost-field-amount").querySelector("input")!, { target: { value: ".01" } });
+    await waitFor(() => expect(last(screen.getAllByTestId("load-cost-hint"))).toHaveTextContent("more than one category"));
+    fireEvent.change(screen.getByTestId("load-cost-field-category-code"), { target: { value: "diesel" } });
+    fireEvent.click(screen.getByTestId("load-costs-save-all"));
+    await waitFor(() => expect(createExpense).toHaveBeenCalledTimes(1));
+    expect(createExpense).toHaveBeenCalledWith(
+      "5c854333-6ea5-4faa-af31-67cb272fef80",
+      expect.objectContaining({ category_account_id: "acct-fuel", expense_category_code: "diesel" })
+    );
+  });
+
+  it("LOAD-COSTS-EXPENSE-CATEGORY-FUEL-ROW-ROOT-CAUSE fix 1 — an account with exactly one binding auto-resolves silently, no extra picker", async () => {
+    listCatalogAccounts.mockResolvedValue({ accounts: [
+      { id: "acct-toll", account_number: "6500", account_name: "Tolls", account_type: "Expense" },
+      { id: "acct-bank", account_number: "1000", account_name: "Operating Bank", account_type: "Asset", account_subtype: "Checking", system_purpose: "bank_operating" },
+    ] });
+    listExpenseCategoryMappings.mockResolvedValue({ rows: [
+      { id: "m1", operating_company_id: "co", category_kind: "toll", category_code: "toll", account_id: "acct-toll", posting_side: "debit", is_active: true, created_at: "", updated_at: "" },
+    ] });
+    createExpense.mockResolvedValue({ expense_id: "exp-1", posting_status: "posted" });
+    const listVendors = (await import("../../api/mdata")).listVendors as unknown as ReturnType<typeof vi.fn>;
+    listVendors.mockResolvedValue({ vendors: [{ id: "vend-1", name: "Pilot" }] });
+    renderTab();
+    await screen.findByTestId("load-cost-number");
+    fireEvent.change(screen.getByTestId("load-cost-field-vendor"), { target: { value: "Pilot" } });
+    fireEvent.click(await screen.findByText("Pilot"));
+    fireEvent.change(screen.getByTestId("load-cost-field-category"), { target: { value: "Tolls" } });
+    fireEvent.click(await screen.findByText("6500 Tolls"));
+    expect(screen.queryByTestId("load-cost-field-category-code")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByTestId("load-cost-field-paid-with"), { target: { value: "Operating Bank" } });
+    fireEvent.click(await screen.findByText("1000 Operating Bank · bank"));
+    fireEvent.change(screen.getByTestId("load-cost-field-amount").querySelector("input")!, { target: { value: "5.00" } });
+    fireEvent.click(screen.getByTestId("load-costs-save-all"));
+    await waitFor(() => expect(createExpense).toHaveBeenCalledTimes(1));
+    expect(createExpense).toHaveBeenCalledWith(
+      "5c854333-6ea5-4faa-af31-67cb272fef80",
+      expect.objectContaining({ expense_category_code: "toll" })
+    );
+  });
+
+  it("LOAD-COSTS-EXPENSE-CATEGORY-FUEL-ROW-ROOT-CAUSE fix 2 — checking 'Paid by driver, reimbursable' sends is_reimbursable: true, unchecked sends false", async () => {
+    listCatalogAccounts.mockResolvedValue({ accounts: [
+      { id: "acct-other", account_number: "6500", account_name: "Tolls", account_type: "Expense" },
+      { id: "acct-bank", account_number: "1000", account_name: "Operating Bank", account_type: "Asset", account_subtype: "Checking", system_purpose: "bank_operating" },
+    ] });
+    createExpense.mockResolvedValue({ expense_id: "exp-1", posting_status: "posted" });
+    const listVendors = (await import("../../api/mdata")).listVendors as unknown as ReturnType<typeof vi.fn>;
+    listVendors.mockResolvedValue({ vendors: [{ id: "vend-1", name: "Pilot" }] });
+    renderTab();
+    await screen.findByTestId("load-cost-number");
+    fireEvent.change(screen.getByTestId("load-cost-field-vendor"), { target: { value: "Pilot" } });
+    fireEvent.click(await screen.findByText("Pilot"));
+    fireEvent.change(screen.getByTestId("load-cost-field-category"), { target: { value: "Tolls" } });
+    fireEvent.click(await screen.findByText("6500 Tolls"));
+    fireEvent.change(screen.getByTestId("load-cost-field-paid-with"), { target: { value: "Operating Bank" } });
+    fireEvent.click(await screen.findByText("1000 Operating Bank · bank"));
+    fireEvent.change(screen.getByTestId("load-cost-field-amount").querySelector("input")!, { target: { value: "40.00" } });
+    const reimbursable = screen.getByTestId("load-cost-field-reimbursable");
+    expect(reimbursable).not.toBeChecked();
+    fireEvent.click(reimbursable);
+    expect(reimbursable).toBeChecked();
+    fireEvent.click(screen.getByTestId("load-costs-save-all"));
+    await waitFor(() => expect(createExpense).toHaveBeenCalledTimes(1));
+    expect(createExpense).toHaveBeenCalledWith(
+      "5c854333-6ea5-4faa-af31-67cb272fef80",
+      expect.objectContaining({ is_reimbursable: true })
+    );
+  });
+
+  it("LOAD-COSTS-EXPENSE-CATEGORY-FUEL-ROW-ROOT-CAUSE fix 3 — Paid With offers + Create like Category, unlike the old bare <select>", async () => {
+    listCatalogAccounts.mockResolvedValue({ accounts: [
+      { id: "acct-bank", account_number: "1000", account_name: "Operating Bank", account_type: "Asset", account_subtype: "Checking", system_purpose: "bank_operating" },
+    ] });
+    renderTab();
+    const combobox = await screen.findByTestId("load-cost-field-paid-with");
+    fireEvent.focus(combobox);
+    const createLink = within(combobox.parentElement!).getByText("+ Create");
+    expect(createLink).toHaveAttribute("href", "/accounting/chart-of-accounts");
   });
 
   it("blocks save with a specific reason, on the card, when diesel/repair/other has no bank account chosen", async () => {

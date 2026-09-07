@@ -117,6 +117,13 @@ const createExpenseBodySchema = z.object({
   // account above. Optional and entity-scoped; when absent the route falls back to the category whose
   // metadata unambiguously binds the resolved GL account, and leaves the line uncategorized otherwise.
   expense_category_id: z.string().uuid().optional().nullable(),
+  // LOAD-COSTS-EXPENSE-CATEGORY-FUEL-ROW-ROOT-CAUSE (owner 2026-09-07) — resolveExpenseCategoryId
+  // already accepted a category CODE (fuel/diesel/def/oil/misc/reefer …), matching
+  // catalogs.expense_categories.code case-insensitively, but no write path ever exposed it on this
+  // body — the FE category picker was a bare chart-of-accounts account selector with no way to say
+  // WHICH of several categories bound to the same account (e.g. 5000 Fuel & Diesel binds 6: fuel,
+  // diesel, def, oil, misc, reefer) the operator meant. Alternative to expense_category_id, not both.
+  expense_category_code: z.string().trim().min(1).optional().nullable(),
   expense_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   amount_cents: z.coerce.number().int().positive(),
   vendor_uuid: z.string().uuid().optional(),
@@ -798,9 +805,10 @@ export async function registerExpenseRoutes(app: FastifyInstance) {
         const expenseCategoryId = await resolveExpenseCategoryId(client, {
           operatingCompanyId: body.operating_company_id,
           categoryId: body.expense_category_id ?? null,
+          categoryCode: body.expense_category_code ?? null,
           accountId: categoryAccountId,
         });
-        if (body.expense_category_id && !expenseCategoryId) {
+        if ((body.expense_category_id || body.expense_category_code) && !expenseCategoryId) {
           return { categoryNotInEntityCatalog: true as const };
         }
 

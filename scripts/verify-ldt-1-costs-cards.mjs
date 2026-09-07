@@ -135,7 +135,11 @@ function audit(files) {
   if (expenseCalls.length < 2 || expenseCalls.some((l) => !l.includes("attachment_draft_id: row.attachmentDraftId"))) problems.push("every createExpense call must carry attachment_draft_id (expense + fuel advance)");
   if (!/createVendorBill\(opco, \{[^\n]*attachment_draft_id: row\.attachmentDraftId/.test(tab)) problems.push("createVendorBill does not carry attachment_draft_id");
   if (!/vendor_document_number: row\.vendorDocNo/.test(tab)) problems.push("expense vendor_document_number not sent");
-  if (!/data-testid="load-cost-field-paid-with"/.test(tab)) problems.push("Paid-with select missing");
+  // LOAD-COSTS-EXPENSE-CATEGORY-FUEL-ROW-ROOT-CAUSE fix 3 (owner 2026-09-07) — Paid With moved from a
+  // bare <select data-testid="..."> to the same LocalCombobox component Category already used
+  // (testId="..." is a component PROP LocalCombobox renders as data-testid on its own <input>, so the
+  // literal string in SOURCE changed even though the live testid on the DOM did not).
+  if (!/testId="load-cost-field-paid-with"/.test(tab)) problems.push("Paid-with field missing");
   if (/category_qbo_id/.test(tab) === false && !/category_account_id: row\.categoryId/.test(tab)) problems.push("category account not sent");
 
   // 4 — receipt control on EVERY creator/editor

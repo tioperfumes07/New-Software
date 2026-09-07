@@ -1212,6 +1212,15 @@ export function createExpense(
     category_qbo_id?: string;
     /** catalogs.accounts UUID — used when the category has no QBO bridge yet (parallel books). */
     category_account_id?: string;
+    /**
+     * LOAD-COSTS-EXPENSE-CATEGORY-FUEL-ROW-ROOT-CAUSE (owner 2026-09-07) — when the chosen GL
+     * account (category_account_id above) has more than one active
+     * accounting.expense_category_account_map binding (e.g. 5000 Fuel & Diesel binds fuel/diesel/
+     * def/oil/misc/reefer), this disambiguates WHICH catalogs.expense_categories.code the operator
+     * meant — resolved server-side via the same resolveExpenseCategoryId() used for
+     * expense_category_id, never a new resolver.
+     */
+    expense_category_code?: string;
     expense_date: string;
     amount_cents: number;
     payment_account_uuid: string;
