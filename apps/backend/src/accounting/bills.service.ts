@@ -1037,11 +1037,26 @@ export async function listBillsByVendor(
           ON claim.id = b.insurance_claim_id
          AND claim.tenant_id = b.operating_company_id
         LEFT JOIN LATERAL (
-          SELECT bl.load_id, l.load_number, l.pickup_date, l.delivery_date, l.miles_practical,
+          SELECT bl.load_id, l.load_number, pickup.scheduled_arrival_at AS pickup_date,
+                 delivery.actual_arrival_at AS delivery_date, l.miles_practical,
                  u.unit_number
           FROM accounting.bill_lines bl
           JOIN mdata.loads l ON l.id = bl.load_id AND l.operating_company_id = b.operating_company_id
           LEFT JOIN mdata.units u ON u.id = l.assigned_unit_id AND COALESCE(u.currently_leased_to_company_id, u.owner_company_id) = l.operating_company_id
+          -- mdata.loads has no pickup_date/delivery_date columns (those live only on
+          -- analytics.load_fact, a derived profitability table that can lag or be unpopulated for a
+          -- new load) -- same LATERAL-to-load_stops pattern already established in
+          -- load-costs-board.routes.ts (pu_date/del_date), reused here for consistency.
+          LEFT JOIN LATERAL (
+            SELECT scheduled_arrival_at FROM mdata.load_stops
+            WHERE load_id = l.id AND stop_type::text = 'pickup' AND soft_deleted_at IS NULL
+            ORDER BY sequence_number ASC LIMIT 1
+          ) pickup ON true
+          LEFT JOIN LATERAL (
+            SELECT actual_arrival_at FROM mdata.load_stops
+            WHERE load_id = l.id AND stop_type::text = 'delivery' AND soft_deleted_at IS NULL
+            ORDER BY sequence_number DESC LIMIT 1
+          ) delivery ON true
           WHERE bl.bill_id = b.id AND bl.load_id IS NOT NULL
           ORDER BY bl.line_sequence ASC
           LIMIT 1

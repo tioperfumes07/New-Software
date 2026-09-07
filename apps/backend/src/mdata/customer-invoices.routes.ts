@@ -85,8 +85,8 @@ export async function registerCustomerInvoicesRoutes(app: FastifyInstance) {
             i.created_at, i.updated_at,
             -- CV-TRANSACTION-COLUMNS (inv #46): load/settlement/unit linkage for customer invoice transactions tab.
             l.load_number AS source_load_number,
-            l.pickup_date AS linked_pickup_date,
-            l.delivery_date AS linked_delivery_date,
+            pickup.scheduled_arrival_at AS linked_pickup_date,
+            delivery.actual_arrival_at AS linked_delivery_date,
             l.miles_practical AS linked_loaded_miles,
             u.unit_number AS linked_unit_number,
             s.id::text AS linked_settlement_id,
@@ -94,6 +94,20 @@ export async function registerCustomerInvoicesRoutes(app: FastifyInstance) {
           FROM accounting.invoices i
           LEFT JOIN mdata.loads l ON l.id = i.source_load_id AND l.operating_company_id = i.operating_company_id
           LEFT JOIN mdata.units u ON u.id = l.assigned_unit_id AND COALESCE(u.currently_leased_to_company_id, u.owner_company_id) = l.operating_company_id
+          -- mdata.loads has no pickup_date/delivery_date columns (those live only on
+          -- analytics.load_fact, a derived profitability table that can lag or be unpopulated for a
+          -- new load) -- same LATERAL-to-load_stops pattern already established in
+          -- load-costs-board.routes.ts (pu_date/del_date), reused here for consistency.
+          LEFT JOIN LATERAL (
+            SELECT scheduled_arrival_at FROM mdata.load_stops
+            WHERE load_id = l.id AND stop_type::text = 'pickup' AND soft_deleted_at IS NULL
+            ORDER BY sequence_number ASC LIMIT 1
+          ) pickup ON true
+          LEFT JOIN LATERAL (
+            SELECT actual_arrival_at FROM mdata.load_stops
+            WHERE load_id = l.id AND stop_type::text = 'delivery' AND soft_deleted_at IS NULL
+            ORDER BY sequence_number DESC LIMIT 1
+          ) delivery ON true
           LEFT JOIN LATERAL (
             SELECT ds.id, ds.display_id
             FROM driver_finance.driver_settlements ds

@@ -3797,6 +3797,22 @@
       "canceled_at",
       "canceled_by"
     ],
+    "dispatch.manual_delivery_authorizations": [
+      "authorized_at",
+      "authorized_by_user_id",
+      "created_at",
+      "customer_authorized",
+      "factoring_authorized",
+      "id",
+      "load_id",
+      "operating_company_id",
+      "pod_document_id",
+      "reason",
+      "revoke_reason",
+      "revoked_at",
+      "revoked_by_user_id",
+      "updated_at"
+    ],
     "dispatch.non_owned_trailers": [
       "counterparty_id",
       "counterparty_type",
@@ -3867,6 +3883,7 @@
       "reviewed_at",
       "reviewed_by_user_id",
       "signature_r2_key",
+      "source",
       "status",
       "stop_id",
       "updated_at"

@@ -91,7 +91,7 @@ export async function registerManualDeliveryAuthorizationRoutes(app: FastifyInst
           assigned_primary_driver_id: string | null;
         }>(
           `
-            SELECT id::text, display_id, load_number, assigned_primary_driver_id::text
+            SELECT id::text, load_number::text AS display_id, load_number, assigned_primary_driver_id::text
             FROM mdata.loads
             WHERE id = $1::uuid
               AND operating_company_id = $2::uuid
