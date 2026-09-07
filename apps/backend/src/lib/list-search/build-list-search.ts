@@ -226,7 +226,7 @@ export function expenseListSearchFields(aliases: {
     },
     {
       kind: "text",
-      sql: `(SELECT ec.name FROM accounting.expense_lines el
+      sql: `(SELECT ec.display_name FROM accounting.expense_lines el
              JOIN catalogs.expense_categories ec ON ec.id = el.expense_category_uuid
              WHERE el.expense_id = ${e}.id
              ORDER BY el.line_sequence LIMIT 1)`,
@@ -240,7 +240,7 @@ export function expenseListSearchFields(aliases: {
     },
     {
       kind: "text",
-      sql: `(SELECT a.name FROM accounting.expense_lines el
+      sql: `(SELECT a.account_name FROM accounting.expense_lines el
              JOIN catalogs.accounts a ON a.id = el.expense_account_uuid
              WHERE el.expense_id = ${e}.id
              ORDER BY el.line_sequence LIMIT 1)`,
