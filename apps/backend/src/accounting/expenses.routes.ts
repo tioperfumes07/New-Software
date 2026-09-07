@@ -124,6 +124,10 @@ const createExpenseBodySchema = z.object({
   // FAIL-F2 / ACCT-F262 — without this the flag could not be SUPPLIED at all, so the writer below had
   // nothing to write. Optional so existing callers are unchanged; only an explicit true marks sample.
   is_sample_data: z.boolean().optional(),
+  // SET-14 (ROUND 16.26) — two INDEPENDENT flags per cost row, migration 202613930000. Optional,
+  // default false server-side when omitted; a row can be neither, either, or both.
+  is_reimbursable: z.boolean().optional(),
+  is_company_expense: z.boolean().optional(),
   payment_account_uuid: z.string().uuid().optional(),
   // HARD cross-module link (maintenance): persist the WO + unit id as a real FK, not just a memo string.
   work_order_id: z.string().uuid().optional().nullable(),
@@ -834,6 +838,15 @@ export async function registerExpenseRoutes(app: FastifyInstance) {
         // `true` marks sample.
         columns.push(`is_sample_data`);
         values.push(body.is_sample_data === true);
+
+        // SET-14 (ROUND 16.26) — two independent flags per cost row: is_reimbursable (owed back
+        // to the driver who fronted it) and is_company_expense (a direct company cost). Same
+        // optional/default-false-on-omit treatment as is_sample_data above — a caller that omits
+        // either keeps today's behaviour exactly (both false), never a silent re-classification.
+        columns.push(`is_reimbursable`);
+        values.push(body.is_reimbursable === true);
+        columns.push(`is_company_expense`);
+        values.push(body.is_company_expense === true);
 
         if (hasVendor) {
           columns.push(`vendor_uuid`);

@@ -6,6 +6,12 @@ export type RecordExpensePaymentMethod = "ach" | "card" | "check" | "wire" | "ca
 export type RecordExpenseFormValues = {
   /** FAIL-F2 class-B — marks this cash-out as demo/test data at CREATION, like the Book wizard does for loads. */
   isSampleData: boolean;
+  /** SET-14 (ROUND 16.26) — two INDEPENDENT flags, accounting.expenses (migration 202613930000).
+   *  Owed back to the driver who fronted it. Independent of isCompanyExpense below. */
+  isReimbursable: boolean;
+  /** A direct company cost (vs. a personal one the driver is merely reporting). Independent of
+   *  isReimbursable above — a row can be neither, either, or both. */
+  isCompanyExpense: boolean;
   vendorId: string | null;
   vendorUuid: string | null;
   vendorDisplay: string;
@@ -135,6 +141,10 @@ export async function submitRecordExpense(
     ...(!values.loadId && exemptionReason ? { load_exemption_reason: exemptionReason } : {}),
     // FAIL-F2 class-B: always SUPPLIED, never omitted — an absent field is what left the merged writer inert.
     is_sample_data: values.isSampleData === true,
+    // SET-14: same always-SUPPLIED treatment, so an unchecked box means an explicit false, not a
+    // silently-omitted field that could leave the row unclassified.
+    is_reimbursable: values.isReimbursable === true,
+    is_company_expense: values.isCompanyExpense === true,
     ...(values.expenseNumber.trim() ? { expense_number: values.expenseNumber.trim() } : {}),
     ...(values.vendorDocumentNumber.trim() ? { vendor_document_number: values.vendorDocumentNumber.trim() } : {}),
     ...(values.classId && UUID_RE.test(values.classId) ? { class_id: values.classId } : {}),
@@ -152,6 +162,8 @@ export const RECORD_EXPENSE_PAYMENT_METHODS: Array<{ value: RecordExpensePayment
 export function initialRecordExpenseFormValues(): RecordExpenseFormValues {
   return {
     isSampleData: false,
+    isReimbursable: false,
+    isCompanyExpense: false,
     vendorId: null,
     vendorUuid: null,
     vendorDisplay: "",

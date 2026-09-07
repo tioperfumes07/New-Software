@@ -1239,6 +1239,13 @@ export function createExpense(
      * landed indistinguishable from real money — including ones with SAMPLE in their own memo.
      */
     is_sample_data?: boolean;
+    /**
+     * SET-14 (ROUND 16.26) — two INDEPENDENT flags per cost row (accounting.expenses, migration
+     * 202613930000): is_reimbursable (owed back to the driver who fronted it) and
+     * is_company_expense (a direct company cost). A row can be neither, either, or both.
+     */
+    is_reimbursable?: boolean;
+    is_company_expense?: boolean;
     driver_id?: string;
     attachment_draft_id?: string;
     expense_number?: string;
