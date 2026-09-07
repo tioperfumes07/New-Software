@@ -1650,5 +1650,170 @@
     "additional_pay_rows": [],
     "reimbursement_rows": [],
     "deduction_rows_from_driver_settlement": []
+  },
+  "13574": {
+    "load_number": "13574",
+    "settlement_ref": null,
+    "customer_name": "ES Logistics International LLC",
+    "driver_name": "Jorge Luis Infante Corona",
+    "unit": "T177",
+    "trailer": "FB-56709 - 53' Flatbed",
+    "status_in_recon": "Dispatched",
+    "pickup": {
+      "location_name": null,
+      "city": "CRESSONA",
+      "state": "PA",
+      "zip": null,
+      "date": "2026-09-04"
+    },
+    "delivery": {
+      "location_name": null,
+      "city": "LAREDO",
+      "state": "TX",
+      "zip": null,
+      "date": "2026-09-08"
+    },
+    "linehaul_amount": 4400,
+    "loaded_miles": 1858.6,
+    "loaded_rate": 0.42,
+    "empty_miles": null,
+    "empty_rate": null,
+    "fuel_rows": [],
+    "expense_rows": [],
+    "additional_pay_rows": [],
+    "reimbursement_rows": [],
+    "deduction_rows_from_driver_settlement": []
+  },
+  "13575": {
+    "load_number": "13575",
+    "settlement_ref": null,
+    "customer_name": "ES Logistics International LLC",
+    "driver_name": "Leonel Antonio Morales",
+    "unit": "T152",
+    "trailer": "2200 - 53' Van",
+    "status_in_recon": "Dispatched",
+    "pickup": {
+      "location_name": null,
+      "city": "MAYFIELD",
+      "state": "KY",
+      "zip": null,
+      "date": "2026-09-04"
+    },
+    "delivery": {
+      "location_name": null,
+      "city": "LAREDO",
+      "state": "TX",
+      "zip": null,
+      "date": "2026-09-08"
+    },
+    "linehaul_amount": 0,
+    "loaded_miles": 1048.7,
+    "loaded_rate": 0.45,
+    "empty_miles": null,
+    "empty_rate": null,
+    "fuel_rows": [],
+    "expense_rows": [],
+    "additional_pay_rows": [],
+    "reimbursement_rows": [],
+    "deduction_rows_from_driver_settlement": []
+  },
+  "13576": {
+    "load_number": "13576",
+    "settlement_ref": null,
+    "customer_name": "Refrigerx Transportation LLC",
+    "driver_name": "JOSE ANTONIO VICENTE MARTINEZ",
+    "unit": "T171",
+    "trailer": "10218 - 53' Reefer",
+    "status_in_recon": "Dispatched",
+    "pickup": {
+      "location_name": null,
+      "city": "Laredo",
+      "state": "TX",
+      "zip": null,
+      "date": "2026-09-04"
+    },
+    "delivery": {
+      "location_name": null,
+      "city": "LUMBERTON",
+      "state": "NC",
+      "zip": null,
+      "date": "2026-09-08"
+    },
+    "linehaul_amount": 3700,
+    "loaded_miles": 1475.1,
+    "loaded_rate": null,
+    "empty_miles": null,
+    "empty_rate": null,
+    "fuel_rows": [],
+    "expense_rows": [],
+    "additional_pay_rows": [],
+    "reimbursement_rows": [],
+    "deduction_rows_from_driver_settlement": []
+  },
+  "13577": {
+    "load_number": "13577",
+    "settlement_ref": null,
+    "customer_name": "Armstrong Transport GR",
+    "driver_name": "Fernando Mecor Hernandez",
+    "unit": "T168",
+    "trailer": "FB-56210 - 53' Flatbed",
+    "status_in_recon": "Dispatched",
+    "pickup": {
+      "location_name": null,
+      "city": "UNION",
+      "state": "SC",
+      "zip": null,
+      "date": "2026-09-03"
+    },
+    "delivery": {
+      "location_name": null,
+      "city": "Laredo",
+      "state": "TX",
+      "zip": null,
+      "date": "2026-09-05"
+    },
+    "linehaul_amount": 3500,
+    "loaded_miles": 1342,
+    "loaded_rate": 0.44,
+    "empty_miles": null,
+    "empty_rate": null,
+    "fuel_rows": [],
+    "expense_rows": [],
+    "additional_pay_rows": [],
+    "reimbursement_rows": [],
+    "deduction_rows_from_driver_settlement": []
+  },
+  "13578": {
+    "load_number": "13578",
+    "settlement_ref": null,
+    "customer_name": "Refrigerx Transportation LLC",
+    "driver_name": "Angel Alfonso Sosa Perez",
+    "unit": "T156",
+    "trailer": "10224 - 53' Reefer",
+    "status_in_recon": "Dispatched",
+    "pickup": {
+      "location_name": null,
+      "city": "Laredo",
+      "state": "TX",
+      "zip": null,
+      "date": "2026-09-04"
+    },
+    "delivery": {
+      "location_name": null,
+      "city": "Lebanon",
+      "state": "TN",
+      "zip": null,
+      "date": "2026-09-06"
+    },
+    "linehaul_amount": 4650,
+    "loaded_miles": 1121.9,
+    "loaded_rate": null,
+    "empty_miles": null,
+    "empty_rate": null,
+    "fuel_rows": [],
+    "expense_rows": [],
+    "additional_pay_rows": [],
+    "reimbursement_rows": [],
+    "deduction_rows_from_driver_settlement": []
   }
 }
