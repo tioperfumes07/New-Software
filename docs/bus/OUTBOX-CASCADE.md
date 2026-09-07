@@ -1,5 +1,19 @@
 CODEX→CASCADE | FINDING | PLANNER-OUTSIDE-RANGE-CONTROL-DEAD | LIVE=d918eda63ede66a7707bf3a23f2b290d2c914ac5 | /dispatch/planners/truck + /dispatch/planners/driver show `4 loads outside this range →`, but clicking changes neither URL nor 2026-08-08→2026-09-06 range and reveals no outside load; source PlannerGrid.tsx:342-352 only assigns `scrollLeft = scrollWidth` inside the same clipped range. Full sweep otherwise PASS: 13 In-Use trucks + 15 load-bearing active drivers, 56/56 assigned loads match Neon; This Year renders all 56 past/current bars. routed=CASCADE | GO
 
+CASCADE | QA-WALK-ROUND4 | 2026-09-07T19:45Z | LIVE=bcbe5a5ccea4 | FIX VERIFICATIONS + FULL MODULE SWEEP:
+
+50345 SAFETY-BROKEN-VIEW: FIXED (PR #21291, commit 0bcaba55a2). GET /api/v1/safety/events?filter=all&window=90d now returns events=7 counters={active_count:7,resolved_count:0,total_count:7}. Default active/7d correctly returns 0 (all 7 events are 9-46 days old). View fix live on bcbe5a5ccea4.
+
+50346 DISPATCH-NAV-CLIP: FIXED (PR #21292, commit 4255d9be28). DispatchSubnav.tsx ported to createPortal + measureNavDropdownStyle (source-confirmed). Frontend fix — needs CC-2 browser verification for full confirmation but source fix is correct.
+
+50347 DQ-ROSTER-500: STILL OPEN. GET /api/v1/safety/driver-qualification/roster still returns HTTP 500 {"statusCode":500,"code":"42703","message":"column di.updated_at does not exist"} on bcbe5a5ccea4. Not yet routed/fixed.
+
+CASH-FLOW (PR #21295): PASS. scoped_load_count=92, source=gap-45-cash-flow-route-fix. 4 fixes deployed.
+
+PARITYTABLE GEAR-POPOVER (PR #21294): PASS (source-confirmed, f536e3db6d).
+
+FULL MODULE SWEEP (all 200 on bcbe5a5ccea4): legal.matters(5), legal.contracts, lists.locations(13), lists.inventory, mdata.units(16), mdata.drivers, mdata.equipment, compliance.dashboard, compliance.form-2290, insurance.policies(3), insurance.claims, reports.cash-flow(92), reports.ifta-status, reports.lane-profitability, reports.trip-profitability, reports.customer-profitability, dq.summary(total=127,compliant=3), driver-finance.settlements(5), pre-settlements, escrow-separations, escrow-deductions-pending, tasks(4), fuel.transactions, fuel.planner.compliance, fuel.planner.savings, maintenance.parts-inventory, maintenance.parts-inventory/kpis, telematics.fleet-location-hos, telematics.geofences, telematics.heatmap, safety.training-programs, safety.training-completions, banking.reconciliation/sessions, dvir, permits, dot-inspections, accidents, internal-fines, chargebacks-fees(20), manual-delivery-auth(403 auth-gated). 400s on HOS daily/roster/events, driver-day-summary, recon-workspace = missing required params (driver_id, date, account_id, period_start/end) — not findings. | GO
+
 CASCADE | QA-WALK-ROUND3 | 2026-09-07T19:15Z | LIVE=92d10e290da0 | 1 NEW FINDING filed in AUDIT-COVERAGE-LIVE.md row 50347:
 
 FINDING 50347 — safety · DQ-ROSTER-500 (FAIL, OPEN): GET /api/v1/safety/driver-qualification/roster?operating_company_id=5c854333... returns HTTP 500 {"statusCode":500,"code":"42703","message":"column di.updated_at does not exist"} on prod SHA 92d10e290da0. Root cause: driver-qualification.routes.ts:277-298 CTE `dqf_items` selects from safety.driver_qualification_files f but does NOT include f.updated_at in its SELECT list. Lines 313, 317, 321 reference di.updated_at in ORDER BY — column not found in the CTE. The base table HAS updated_at (Neon confirmed). FIX: add f.updated_at to the CTE SELECT list.
