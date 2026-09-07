@@ -1001,6 +1001,14 @@ depth) in the console — filed as **`SAFETY-MONEY-FINE-CONVERT-DROPS-DRIVER-LAB
 (`docs/audit/GUARD-WORKORDERS.md`) with full root cause, fix, and a planted-regression test. See that
 row for detail; not duplicated here.
 
+**Row 23 (`lease`, the next surface in dependency order): BLOCKED, not skipped.** There is no live-UI
+create path for `accounting.lease_contract` anywhere — the full ASC 842 lease-posting lifecycle exists
+in the backend (`lease-posting.routes.ts`, 8 endpoints) but zero frontend surface calls any of it
+(`apps/frontend/src/api/accountingLease.ts` is GET-only; `UnitFinanceLinkageTab.tsx` is a read-only
+display with an explicit empty state). Per this battery's own "no fake USMCA rows" rule, did not
+API/SQL-fabricate a row to force a checkmark. Filed as `LEASE-ASC842-ZERO-FE-CREATE-SURFACE` on the
+board — a genuine product gap (needs a create wizard built), not a defect and not a retry target.
+
 **All 9 catalog/master rows above (1-20) — none posts a journal entry, so USMCA's GL was untouched by them.**
 Row 21 (2026-08-28, CC-3) is the first MONEY surface exercised: DR 5400 Truck Repairs & Maintenance / CR 2000
 Accounts Payable (A/P), $50.00, balanced. **Already voided** the same session (reversing JE
