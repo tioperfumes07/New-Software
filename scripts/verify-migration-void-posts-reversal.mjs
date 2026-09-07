@@ -106,6 +106,30 @@ const BASELINE = new Set([
  */
 const MARKER_SYNC_ONLY = new Set(["202612480900_bills_sync_void_markers.sql"]);
 
+/**
+ * NEVER-POSTED-CONFIRMED — applied, immutable migrations whose voided table is NOT a subledger row
+ * at all (never carries a GL posting in the first place), so "reverse it or say why not" resolves
+ * to "there is nothing to reverse" — distinct from BASELINE (real residue, owner-gated) and
+ * MARKER-SYNC-ONLY (residue belongs to an earlier writer already baselined there). Each entry here
+ * requires live proof that zero `accounting.journal_entry_postings` rows were ever created from the
+ * voided table, not just an assumption from its schema.
+ *
+ * GO-ACCT-01 (2026-09-07, CC-2 live-verify): 202613300700_go_acct_01_recon_sessions_void_status_and_unique.sql
+ * voids 2 duplicate `banking.reconciliation_sessions` rows (stray 'open' sessions superseded by the
+ * canonical 'reconciled' one for the same bank_account_id + period). A reconciliation session is a
+ * WORKSHEET (statement_balance_cents/book_balance_cents/variance_cents) tracking whether a bank
+ * statement period has been reconciled — it is never itself the source of a GL posting; the actual
+ * bank-feed matches/adjustments that a reconciliation covers post through their own transaction
+ * paths, independent of the session row's existence. Live-confirmed on prod (Neon, bypass_rls=lucia):
+ * `SELECT count(*) FROM accounting.journal_entry_postings WHERE source_transaction_type ILIKE
+ * '%recon%'` → 0 — no posting has ever referenced a reconciliation session, applied or not. The
+ * migration's own UPDATE also never touches a `status = 'reconciled'` row (confirmed by reading the
+ * WHERE clause), so no live financial figure was reclassified, only a duplicate worksheet retired.
+ */
+const NEVER_POSTED_CONFIRMED = new Set([
+  "202613300700_go_acct_01_recon_sessions_void_status_and_unique.sql",
+]);
+
 if (process.argv.includes("--selftest")) {
   const failures = [];
   const voidSql = "UPDATE accounting.bills b\n SET voided_at = now(), void_reason = 'x'\n WHERE 1=1;";
@@ -162,6 +186,20 @@ if (process.argv.includes("--selftest")) {
     }
   }
 
+  // Same load-bearing proof for NEVER_POSTED_CONFIRMED: detected against an empty exemption set,
+  // cleared once its own set is applied.
+  for (const n of NEVER_POSTED_CONFIRMED) {
+    const p = path.join(MIGRATIONS, n);
+    if (!fs.existsSync(p)) continue;
+    const entry = [{ name: n, sql: fs.readFileSync(p, "utf8") }];
+    if (collectProblems(entry, none).length !== 1) {
+      failures.push(`${n} was not detected with an empty exemption set — exemption would be decorative`);
+    }
+    if (collectProblems(entry, NEVER_POSTED_CONFIRMED).length !== 0) {
+      failures.push(`${n} was still reported once NEVER_POSTED_CONFIRMED is applied`);
+    }
+  }
+
   if (failures.length) {
     console.error(`${LABEL} SELFTEST FAILED:`);
     for (const f of failures) console.error("  - " + f);
@@ -182,7 +220,7 @@ const files = fs.existsSync(MIGRATIONS)
       .filter((f) => f.endsWith(".sql"))
       .map((f) => ({ name: f, sql: fs.readFileSync(path.join(MIGRATIONS, f), "utf8") }))
   : [];
-const problems = collectProblems(files, new Set([...BASELINE, ...MARKER_SYNC_ONLY]));
+const problems = collectProblems(files, new Set([...BASELINE, ...MARKER_SYNC_ONLY, ...NEVER_POSTED_CONFIRMED]));
 if (problems.length) {
   console.error(`${LABEL} FAIL — ${problems.length} migration(s) void without reversing:`);
   for (const p of problems) console.error("  ✗ " + p);
@@ -191,5 +229,6 @@ if (problems.length) {
 console.log(
   `${LABEL} OK — no NEW migration voids a financial row without posting reversals or declaring ` +
     `VOID-REVERSAL-EXEMPT (${BASELINE.size} known offenders baselined, their residue owner-gated; ` +
-    `${MARKER_SYNC_ONLY.size} marker-sync-only migration(s) reviewed and confirmed to add no new residue).`
+    `${MARKER_SYNC_ONLY.size} marker-sync-only migration(s) reviewed and confirmed to add no new residue; ` +
+    `${NEVER_POSTED_CONFIRMED.size} migration(s) confirmed live to void a table that never posts to the GL).`
 );
