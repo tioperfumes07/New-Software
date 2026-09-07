@@ -1,4 +1,14 @@
 {
+  "10889": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-07",
+    "purpose": "verify-acc20-void-unmatch-resets-review-state (orphan-guard wiring: written 2026-09-06, never wired into any verify-step -- flagged by verify-cc1-money-orphan-guard-registry-batch.mjs's own unaccounted-guards census). Covers the void-cascade release path (void.service.ts unmatchBankTransactionById) resetting review_state, the sibling of the already-wired manual-unmatch path at verify-step 10303."
+  },
+  "10893": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-07",
+    "purpose": "verify-invoices-no-load-id-column (orphan-guard wiring: written 2026-09-06, never wired into any verify-step -- flagged by verify-cc1-money-orphan-guard-registry-batch.mjs's own unaccounted-guards census). Static guard: draft-crew-status-selfheal.cron.ts reads accounting.invoices via the real column inv.source_load_id, never a nonexistent inv.load_id."
+  },
   "10791": {
     "claimed_at": "2026-09-06",
     "claimed_by": "cc-2",
