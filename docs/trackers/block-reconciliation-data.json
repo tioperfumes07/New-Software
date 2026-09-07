@@ -1,6 +1,6 @@
 {
  "date": "2026-09-07",
- "generated_at_iso": "2026-09-07T12:45:47.118Z",
+ "generated_at_iso": "2026-09-07T17:53:32.456Z",
  "counts": {
   "PENDING": 17,
   "PENDING (GATED)": 30,
@@ -13727,6 +13727,24 @@
  ],
  "merged_prs": [
   {
+   "number": 21267,
+   "title": "Claude-1- fix(accounting): ACCT-F26030 — TRANSP-AR-CONTROL-NEGATIVE-BALANCE traced, not a defect",
+   "mergedAt": "2026-09-07T17:46:17Z",
+   "branch": "claude/transp-ar-control-integrity-guard"
+  },
+  {
+   "number": 21266,
+   "title": "Claude-1- CLAIM-RESERVE 10865 -- transp-ar-control-opening-balance-integrity",
+   "mergedAt": "2026-09-07T17:33:30Z",
+   "branch": "claude/claim-reserve-10865"
+  },
+  {
+   "number": 21265,
+   "title": "chore(tracker): auto-refresh reconcile + phase-manifest artifacts",
+   "mergedAt": "2026-09-07T12:46:14Z",
+   "branch": "chore/tracker-artifacts-sync"
+  },
+  {
    "number": 21256,
    "title": "Claude-1- docs(board): close stale REVREC-NEVER-POSTS-TO-GL, file TRANSP AR finding",
    "mergedAt": "2026-09-07T06:15:11Z",
@@ -17307,24 +17325,6 @@
    "title": "CC-2-dispatch: Planners lists sortable frozen columns (owner item 3, sortable half)",
    "mergedAt": "2026-09-05T18:37:36Z",
    "branch": "cc2/l4a-live-chrome-proof-2026-09-05"
-  },
-  {
-   "number": 20654,
-   "title": "Cursor- registrar relay: register live, active items posted",
-   "mergedAt": "2026-09-05T18:37:33Z",
-   "branch": "cursor-register-relay-20260905"
-  },
-  {
-   "number": 20653,
-   "title": "CC-2-docs: CLAIM-RESERVE 10403 (verify-planner-grid-sortable-frozen-columns)",
-   "mergedAt": "2026-09-05T18:35:54Z",
-   "branch": "cc2/claim-reserve-10403-2026-09-05"
-  },
-  {
-   "number": 20652,
-   "title": "Cursor- THE REGISTER: per-module DoD checklists (registrar/auditor split)",
-   "mergedAt": "2026-09-05T18:35:29Z",
-   "branch": "cursor-register-module-dod-20260905"
   }
  ],
  "merged_pr_total": 3000,
