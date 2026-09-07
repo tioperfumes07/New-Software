@@ -79,4 +79,57 @@ describe("FinesPage (A23-9)", () => {
     await user.click(screen.getByTestId("company-violation-create-btn"));
     expect(screen.getByTestId("company-violation-create-modal")).toBeTruthy();
   });
+
+  // SAFETY-MONEY-FINE-CONVERT-DROPS-DRIVER-LABEL — live-caught 2026-09-07 (USMCA battery,
+  // fine-to-liability GL-posting surface's first-ever real exercise): convertFineToLiability's
+  // response is a plain `RETURNING *` on safety.civil_fines and carries no subject_driver_name
+  // (only the enriched GET list/detail JOIN computes that). Replacing the cached row wholesale with
+  // the mutation response therefore dropped the resolved driver name, rendering the governed
+  // "Driver — not visible" tombstone even though the driver was fully resolvable. Plants that exact
+  // response shape and asserts the driver's real name survives the conversion.
+  it("preserves the resolved driver name after Convert to Driver Liability (SAFETY-MONEY-FINE-CONVERT-DROPS-DRIVER-LABEL)", async () => {
+    vi.spyOn(safetyApi, "getSafetyFines").mockResolvedValue({
+      fines: [
+        {
+          id: "fine-1",
+          issued_date: "2026-06-01",
+          subject_type: "driver",
+          subject_driver_id: "driver-1",
+          subject_driver_name: "Neftali Coronado Urbano",
+          issued_by_authority: "DOT",
+          violation_description: "Speeding",
+          amount_cents: 7500,
+          status: "open",
+        },
+      ],
+      total_count: 1,
+    });
+    // Real backend shape: no subject_driver_name in the mutation response.
+    vi.spyOn(safetyApi, "convertFineToLiability").mockResolvedValue({
+      fine: {
+        id: "fine-1",
+        subject_type: "driver",
+        subject_driver_id: "driver-1",
+        status: "open",
+        converted_to_liability_id: "liability-1",
+      },
+      liability: { id: "liability-1" },
+    });
+
+    const user = userEvent.setup();
+    render(wrap(<FinesPage operatingCompanyId={companyId} />));
+    await waitFor(() => expect(screen.getByText("Speeding")).toBeTruthy());
+
+    await user.click(screen.getByRole("button", { name: "Open" }));
+    await waitFor(() => expect(screen.getByTestId("fine-detail-drawer")).toBeTruthy());
+    expect(screen.getByText("Neftali Coronado Urbano")).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Convert to Driver Liability" }));
+    await user.click(screen.getByRole("button", { name: "Confirm conversion" }));
+
+    await waitFor(() => expect(safetyApi.convertFineToLiability).toHaveBeenCalledWith("fine-1", companyId));
+    await waitFor(() => expect(screen.getByText("Liability")).toBeTruthy());
+    expect(screen.getByText("Neftali Coronado Urbano")).toBeTruthy();
+    expect(screen.queryByText("Driver — not visible")).toBeNull();
+  });
 });
