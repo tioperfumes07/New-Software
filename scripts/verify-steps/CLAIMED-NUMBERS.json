@@ -8173,5 +8173,10 @@
     "claimed_by": "claude",
     "claimed_at": "2026-09-07",
     "purpose": "verify-transp-ar-control-opening-balance-integrity (TRANSP-AR-CONTROL-NEGATIVE-BALANCE, docs/audit/GUARD-WORKORDERS.md). Read-only live-data integrity guard: TRANSP ar_control GL account nets to -$961,983.52; traced live to a single owner-entered opening-balance JE line (2025-01-01, QBO Balance Sheet 12/31/2024 signed-actual, matches docs/specs/qbo-parity/OPENING-BALANCE-TIEOUT-CEREMONY-2026-07-04.md exactly) -- NOT a posting-side defect; TMS live posting engine nets $0 outside that one line. Guard locks the opening line against silent edits (void-not-delete) and tripwires any future non-opening ar_control movement beyond $10,000."
+  },
+  "10869": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-07",
+    "purpose": "verify-manual-delivery-authorization (MANUAL-DELIVERY-AUTH-01, owner request 2026-09-07). Live-data + static guard: a load with no manual authorization and no real delivery evidence is refused (missing_delivery_evidence); a load WITH an active authorization earns, JE memo tagged distinctly; factoring packet assembles with manual_delivery_authorization_id set; revoking the authorization makes a fresh postLoadRevenueLatch call refuse again."
   }
 }

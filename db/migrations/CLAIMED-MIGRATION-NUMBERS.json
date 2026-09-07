@@ -846,6 +846,11 @@
       "claimed_by": "claude",
       "claimed_at": "2026-09-07",
       "purpose": "ROUND 16.26 item SET-14: two independent boolean flags on accounting.expenses -- is_reimbursable (owed back to the driver) and is_company_expense (a direct company cost) -- additive, default false, no backfill of existing rows (forward-guarantee pattern already established in this file for is_sample_data/unit_id)."
+    },
+    "202613960000": {
+      "claimed_by": "claude",
+      "claimed_at": "2026-09-07",
+      "purpose": "MANUAL-DELIVERY-AUTH-01 (owner request 2026-09-07): dispatch.manual_delivery_authorizations table + dispatch.pod_documents.source column, letting Owner/Administrator/Manager manually authorize revenue recognition + factoring submission for a load before physical delivery, when customer and factoring have both agreed to accept early billing against a signed POD/BOL already in hand. Does not touch mdata.loads.status or any load_stops timestamp; adds a separate, always-audited, reason-required authorization record that poster.service.ts recognizes as alternate evidence to the delivery-departure gate, always distinctly tagged in the JE memo and POD source column."
     }
   },
   "202613590001": {
