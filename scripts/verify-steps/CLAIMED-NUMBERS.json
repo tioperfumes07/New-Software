@@ -8133,5 +8133,10 @@
     "claimed_by": "cursor",
     "claimed_at": "2026-09-07",
     "purpose": "verify-navy-not-black-no-raw-hex"
+  },
+  "10837": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-07",
+    "purpose": "verify-invoice-copies-export-safe"
   }
 }
