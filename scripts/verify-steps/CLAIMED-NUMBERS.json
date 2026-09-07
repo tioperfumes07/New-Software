@@ -8183,5 +8183,10 @@
     "claimed_by": "claude",
     "claimed_at": "2026-09-07",
     "purpose": "verify-payment-terms-code-name-collision (PAYMENT-TERMS-CODE-NAME-COLUMN-COLLISION, docs/audit/GUARD-WORKORDERS.md). Static guard: AccountingCatalogModal/ProfileDrawer/ListPage support a singleCodeNameField opt-in that hides the redundant Display Name field and mirrors code into display_name on submit; PaymentTermsListPage opts in (catalogs.payment_terms has ONE physical column, terms_name, backing both code and display_name server-side)."
+  },
+  "10877": {
+    "claimed_by": "claude",
+    "claimed_at": "2026-09-07",
+    "purpose": "verify-safety-events-with-driver-view-live (SAFETY-BROKEN-VIEW). Static+live guard: migration 202613970000 correctly aliases driver_id/unit_id/event_at and LEFT JOINs mdata.drivers (never INNER JOIN, which would drop the 5 of 7 live open events with no subject_driver_id); live half re-counts views.safety_events_with_driver, expects > 0."
   }
 }

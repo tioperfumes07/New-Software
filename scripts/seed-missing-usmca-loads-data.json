@@ -1815,5 +1815,38 @@
     "additional_pay_rows": [],
     "reimbursement_rows": [],
     "deduction_rows_from_driver_settlement": []
+  },
+  "13553": {
+    "load_number": "13553",
+    "settlement_ref": null,
+    "customer_name": "PAYPA TRANSPORT",
+    "driver_name": "Rafael Rogelio Rivero Reynoso",
+    "unit": "T148",
+    "trailer": "447 - 53' Reefer",
+    "status_in_recon": "Completed",
+    "pickup": {
+      "location_name": null,
+      "city": "Laredo",
+      "state": "TX",
+      "zip": null,
+      "date": "2026-08-26"
+    },
+    "delivery": {
+      "location_name": null,
+      "city": "BAYTOWN",
+      "state": "TX",
+      "zip": null,
+      "date": "2026-08-27"
+    },
+    "linehaul_amount": 1500,
+    "loaded_miles": 377.2,
+    "loaded_rate": null,
+    "empty_miles": null,
+    "empty_rate": null,
+    "fuel_rows": [],
+    "expense_rows": [],
+    "additional_pay_rows": [],
+    "reimbursement_rows": [],
+    "deduction_rows_from_driver_settlement": []
   }
 }
