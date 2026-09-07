@@ -1,6 +1,6 @@
 {
  "date": "2026-09-07",
- "generated_at_iso": "2026-09-07T04:53:01.299Z",
+ "generated_at_iso": "2026-09-07T12:45:47.118Z",
  "counts": {
   "PENDING": 17,
   "PENDING (GATED)": 30,
@@ -1375,10 +1375,10 @@
    "fin": true,
    "tier": "",
    "status": "NEEDS-VERIFY",
-   "evidence": "PR #21136 title-match only, unverified",
+   "evidence": "PR #21250 title-match only, unverified",
    "name": "Register Source column shows source",
    "registered_on": null,
-   "pr": 21136
+   "pr": 21250
   },
   {
    "id": "REVENUE-RECOGNITION-TWO-EVENT-LATCH-2026-07-19",
@@ -13727,6 +13727,60 @@
  ],
  "merged_prs": [
   {
+   "number": 21256,
+   "title": "Claude-1- docs(board): close stale REVREC-NEVER-POSTS-TO-GL, file TRANSP AR finding",
+   "mergedAt": "2026-09-07T06:15:11Z",
+   "branch": "cc1-revrec-investigate"
+  },
+  {
+   "number": 21255,
+   "title": "Claude-1- docs(board): self-correct ACCT-F26028, file untracked-index finding",
+   "mergedAt": "2026-09-07T06:12:46Z",
+   "branch": "claude/cc1-close-board-26029"
+  },
+  {
+   "number": 21254,
+   "title": "Claude-1- FINDING: ACCT-F26029 self-correction -- revert ACCT-F26028, duplicated an already-live fix",
+   "mergedAt": "2026-09-07T06:11:33Z",
+   "branch": "claude/cc1-revert-26028-redundant"
+  },
+  {
+   "number": 21253,
+   "title": "Claude-1- FINDING: ACCT-F26028 coa-roles + bank-accounts.ledger_account_id now structurally unique among active rows",
+   "mergedAt": "2026-09-07T06:08:20Z",
+   "branch": "claude/cc1-coa-roles-bank-accounts-uniqueness"
+  },
+  {
+   "number": 21252,
+   "title": "Claude-1- CLAIM-RESERVE migration 202613950000 + verify-step 10861",
+   "mergedAt": "2026-09-07T06:05:40Z",
+   "branch": "claude/claim-mig-202613950000"
+  },
+  {
+   "number": 21251,
+   "title": "Claude-1- docs(board): close GUARD-WORKORDERS depreciation-register row (ACCT-F26027)",
+   "mergedAt": "2026-09-07T05:38:13Z",
+   "branch": "claude/cc1-close-board-26027"
+  },
+  {
+   "number": 21250,
+   "title": "Claude-1- FINDING: ACCT-F26027 capitalized severe repair now registers a fixed_assets row",
+   "mergedAt": "2026-09-07T05:37:25Z",
+   "branch": "claude/cc1-capitalized-repair-fixed-asset"
+  },
+  {
+   "number": 21249,
+   "title": "Claude-1- CLAIM-RESERVE migration 202613940000 + verify-step 10857",
+   "mergedAt": "2026-09-07T05:31:55Z",
+   "branch": "cc1-claim-mig-202613940000"
+  },
+  {
+   "number": 21248,
+   "title": "chore(tracker): auto-refresh reconcile + phase-manifest artifacts",
+   "mergedAt": "2026-09-07T04:53:23Z",
+   "branch": "chore/tracker-artifacts-sync"
+  },
+  {
    "number": 21247,
    "title": "Claude-1-ROUND 16.26 CLOSED report (docs) — all 7 assigned items DONE",
    "mergedAt": "2026-09-07T04:32:10Z",
@@ -17271,60 +17325,6 @@
    "title": "Cursor- THE REGISTER: per-module DoD checklists (registrar/auditor split)",
    "mergedAt": "2026-09-05T18:35:29Z",
    "branch": "cursor-register-module-dod-20260905"
-  },
-  {
-   "number": 20651,
-   "title": "Devin-WAVE4-2+3: Driver Load History filters+export+click-to-load; Planners Grid/List toggle+pagination+sort+export",
-   "mergedAt": "2026-09-05T18:29:47Z",
-   "branch": "devin/wave4-driver-loadhistory-planners"
-  },
-  {
-   "number": 20650,
-   "title": "CC-2-docs: L.4a live Chrome proof + L.4c live-confirmed",
-   "mergedAt": "2026-09-05T18:27:24Z",
-   "branch": "cc2/l4a-live-chrome-proof-2026-09-05"
-  },
-  {
-   "number": 20649,
-   "title": "Claude-1- test(guards): ACCT-F5863 — owner-named guards for deduction-void 3-branch + S.1 miles/rate, S.1 live-verified 76/76",
-   "mergedAt": "2026-09-05T18:26:30Z",
-   "branch": "claude/cc1-deduction-void-guard-plus-s1-guard"
-  },
-  {
-   "number": 20648,
-   "title": "Codex- re-scope Samsara telemetry to USMCA",
-   "mergedAt": "2026-09-05T18:26:20Z",
-   "branch": "codex/samsara-usmca-retag-migration"
-  },
-  {
-   "number": 20647,
-   "title": "Claude-3-docs: 3-item packet response — lane flag, M.3 shapes, SEED-14 blocker",
-   "mergedAt": "2026-09-05T18:24:47Z",
-   "branch": "claude-3-m3-shapes-handoff"
-  },
-  {
-   "number": 20646,
-   "title": "docs(bus): STATUS-NOW + journal — Google address picker complete (#20633 #20644 #20645), owner rulings",
-   "mergedAt": "2026-09-05T18:24:12Z",
-   "branch": "lead/journal-1825"
-  },
-  {
-   "number": 20645,
-   "title": "fix(dispatch): address picker bias = 50 km circle on the Laredo yard (env-overridable), not a continent-wide box",
-   "mergedAt": "2026-09-05T18:23:05Z",
-   "branch": "lead/geocode-bias-yard"
-  },
-  {
-   "number": 20644,
-   "title": "feat(dispatch): Book Load address picker — Places Autocomplete (New) + Place Details (address selection, landmarks)",
-   "mergedAt": "2026-09-05T18:15:33Z",
-   "branch": "lead/places-autocomplete"
-  },
-  {
-   "number": 20643,
-   "title": "CC-2-docs: 2.2 + L.4c re-verified green",
-   "mergedAt": "2026-09-05T18:15:16Z",
-   "branch": "cc2/22-l4c-reverify-fix-2026-09-05"
   }
  ],
  "merged_pr_total": 3000,
