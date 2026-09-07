@@ -154,8 +154,11 @@ const KANBAN_STATUS_GROUPS: KanbanColumnDef[] = [
   // Awaiting assignment is TRUCK-derived (cards injected from awaitingTrucks), so it matches no
   // load status. Loads with no truck (draft/planned/unassigned/booked) fall into Booked unassigned.
   { key: "awaiting_assignment", title: "Awaiting assignment", statuses: [], dropStatus: "planned" },
-  { key: "booked_unassigned", title: "Booked unassigned", statuses: ["draft", "planned", "unassigned", "booked"], dropStatus: "booked" },
-  { key: "assigned", title: "Assigned", statuses: ["assigned", "assigned_not_dispatched"], dropStatus: "assigned" },
+  // OWNER-COLLAPSE-2026-09-07: "Booked unassigned" and "Assigned" merged into one lane on the owner's
+  // explicit instruction ("collapse into one Assigned lane") -- a load with no truck yet and a load
+  // that already has one both now render in this single "Assigned" column. Never split this back into
+  // two lanes without a new owner instruction (Rule 4 -- do not invent a rule that isn't theirs).
+  { key: "assigned", title: "Assigned", statuses: ["draft", "planned", "unassigned", "booked", "assigned", "assigned_not_dispatched"], dropStatus: "assigned" },
   { key: "dispatched", title: "Dispatched", statuses: ["dispatched"], dropStatus: "dispatched" },
   { key: "at_pickup", title: "At pickup", statuses: ["at_pickup"], dropStatus: "at_pickup", showDwell: true },
   { key: "loaded", title: "Loaded", statuses: [], dropStatus: "in_transit", derivedOnly: true },
@@ -206,8 +209,9 @@ function resolveKanbanColumnKey(load: DispatchLoadRow): string {
   }
 
   const group = KANBAN_STATUS_GROUPS.find((entry) => entry.statuses.includes(status));
-  // Fallback is Booked unassigned (a load needing a truck) — never the truck-only Awaiting lane.
-  return group?.key ?? "booked_unassigned";
+  // Fallback is Assigned (booked_unassigned + assigned merged, owner 2026-09-07) — never the
+  // truck-only Awaiting lane.
+  return group?.key ?? "assigned";
 }
 
 function groupLoadsByColumn(loads: DispatchLoadRow[]) {
