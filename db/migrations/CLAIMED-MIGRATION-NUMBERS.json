@@ -831,6 +831,11 @@
       "claimed_by": "claude",
       "claimed_at": "2026-09-07",
       "purpose": "ROUND 16.24 item 3: GRANT USAGE/SELECT on accounting.cash_flow_row_adjustments_seq_seq to ih35_app -- migration 202613870000 added the seq bigserial column but never granted its implicit sequence, so every roll-over/hide write has been failing live with 42501 permission denied since that migration landed (live-reproduced this session)."
+    },
+    "202613930000": {
+      "claimed_by": "claude",
+      "claimed_at": "2026-09-07",
+      "purpose": "ROUND 16.26 item SET-14: two independent boolean flags on accounting.expenses -- is_reimbursable (owed back to the driver) and is_company_expense (a direct company cost) -- additive, default false, no backfill of existing rows (forward-guarantee pattern already established in this file for is_sample_data/unit_id)."
     }
   },
   "202613590001": {
