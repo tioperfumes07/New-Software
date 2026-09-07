@@ -278,6 +278,198 @@ export async function registerOwnedUnitAsFixedAsset(
   };
 }
 
+export type RegisterCapitalizedRepairInput = {
+  operating_company_id: string;
+  unit_uuid: string;
+  work_order_id: string;
+  wo_display_id: string | null;
+  capitalized_amount_cents: number;
+  /** WO-close bill date -- the day the repair is booked, not the WO's open date. */
+  purchase_date: string; // YYYY-MM-DD
+  actor_user_id: string;
+};
+
+export type RegisterCapitalizedRepairResult = {
+  created: boolean;
+  reason?: "already_registered_for_wo" | "unit_not_found" | "class_missing" | "invalid_amount";
+  fixed_asset_id?: string;
+  asset_number?: string | null;
+};
+
+/**
+ * ACCT-F26027 -- GUARD-WORKORDERS DEPRECIATION-REGISTER-DEFERRED-VS-NEVER-DEFER.
+ *
+ * A WO-close severe repair >= $7,000 (capitalize-threshold.ts's decideRepairBooksTreatment)
+ * already posts its GL debit to the fixed_asset_default role account
+ * (maintenance-posting/poster.service.ts), but that alone does not put the capitalized cost
+ * onto the depreciation register/schedule -- this creates the accounting.fixed_assets row a
+ * capitalized repair needs to enter the same monthly depreciation engine an owned-unit
+ * registration (registerOwnedUnitAsFixedAsset above) uses.
+ *
+ * Deliberately a SEPARATE asset row from the truck's own registration (never mutates an
+ * existing asset's purchase_price_cents in place -- once a schedule has periods computed off
+ * the original basis, silently changing that basis would be a WORM-style violation of the
+ * numbers a prior period's JE preview or an already-posted depreciation entry was computed
+ * from). This mirrors how a capitalized improvement is tracked as its own sub-asset in
+ * practice: its own basis, its own in-service date, depreciated on its own schedule from the
+ * repair date forward.
+ *
+ * Idempotent per work order (DB-enforced via uq_fixed_assets_one_per_capitalized_wo, migration
+ * 202613940000) -- a WO-close bill "reused" retry can never double-book the same capitalized
+ * repair as two separate assets.
+ */
+export async function registerCapitalizedRepairAsFixedAsset(
+  client: DbClient,
+  input: RegisterCapitalizedRepairInput
+): Promise<RegisterCapitalizedRepairResult> {
+  const amount = Number(input.capitalized_amount_cents);
+  if (!Number.isInteger(amount) || amount <= 0) {
+    return { created: false, reason: "invalid_amount" };
+  }
+
+  const existing = await client.query<{ id: string; asset_number: string | null }>(
+    `SELECT id::text AS id, asset_number
+     FROM accounting.fixed_assets
+     WHERE capitalized_from_work_order_id = $1::uuid
+       AND operating_company_id = $2::uuid
+       AND deleted_at IS NULL
+       AND voided_at IS NULL
+     LIMIT 1`,
+    [input.work_order_id, input.operating_company_id]
+  );
+  if (existing.rows[0]) {
+    return {
+      created: false,
+      reason: "already_registered_for_wo",
+      fixed_asset_id: existing.rows[0].id,
+      asset_number: existing.rows[0].asset_number,
+    };
+  }
+
+  // work_orders.unit_id FKs to mdata.units (trucks/tractors only -- 202607230000) -- reuse the
+  // same truck-class lookup registerOwnedUnitAsFixedAsset uses above, never inventing a class.
+  const unit = await client.query<{
+    id: string;
+    unit_number: string;
+    vin: string | null;
+    owner_company_id: string;
+  }>(
+    `SELECT id::text AS id, unit_number, vin, owner_company_id::text AS owner_company_id
+     FROM mdata.units
+     WHERE id = $1::uuid
+       AND deactivated_at IS NULL
+       AND COALESCE(is_sample_data, false) = false`,
+    [input.unit_uuid]
+  );
+  if (!unit.rows[0]) return { created: false, reason: "unit_not_found" };
+
+  const cls = await client.query<{
+    id: string;
+    default_method: string;
+    default_useful_life_months: number;
+    default_asset_account_id: string | null;
+    default_accum_depr_account_id: string | null;
+    default_depr_expense_account_id: string | null;
+  }>(
+    `SELECT id::text AS id, default_method, default_useful_life_months,
+            default_asset_account_id::text AS default_asset_account_id,
+            default_accum_depr_account_id::text AS default_accum_depr_account_id,
+            default_depr_expense_account_id::text AS default_depr_expense_account_id
+     FROM accounting.fixed_asset_classes
+     WHERE operating_company_id = $1::uuid
+       AND class_code = $2
+       AND is_active = true
+       AND deleted_at IS NULL
+     LIMIT 1`,
+    [input.operating_company_id, TRUCK_CLASS_CODE]
+  );
+  if (!cls.rows[0]) return { created: false, reason: "class_missing" };
+
+  const accumDepr = await resolvePerUnitAccumDeprAccountId(client, {
+    operating_company_id: input.operating_company_id,
+    unit_number: unit.rows[0].unit_number,
+    class_default_account_id: cls.rows[0].default_accum_depr_account_id,
+  });
+
+  const woLabel = input.wo_display_id ?? input.work_order_id;
+  const name = `Capitalized Repair -- Truck ${unit.rows[0].unit_number} (WO ${woLabel})`;
+  const assetNumber = `FA-REPAIR-${woLabel}`;
+
+  const inserted = await client.query<{ id: string }>(
+    `INSERT INTO accounting.fixed_assets (
+       operating_company_id,
+       owner_operating_company_id,
+       asset_number,
+       name,
+       class_id,
+       unit_uuid,
+       vin_serial,
+       purchase_price_cents,
+       salvage_value_cents,
+       purchase_date,
+       in_service_date,
+       method,
+       useful_life_months,
+       convention,
+       asset_account_id,
+       accum_depr_account_id,
+       depr_expense_account_id,
+       capitalized_from_work_order_id,
+       status,
+       is_active,
+       created_by_user_id,
+       updated_by_user_id
+     ) VALUES (
+       $1::uuid, $2::uuid, $3, $4, $5::uuid, $6::uuid, $7,
+       $8, 0, $9::date, $9::date,
+       $10, $11, 'half_month',
+       $12::uuid, $13::uuid, $14::uuid,
+       $15::uuid,
+       'active', true, $16::uuid, $16::uuid
+     )
+     RETURNING id::text AS id`,
+    [
+      input.operating_company_id,
+      unit.rows[0].owner_company_id,
+      assetNumber,
+      name,
+      cls.rows[0].id,
+      input.unit_uuid,
+      unit.rows[0].vin,
+      amount,
+      input.purchase_date,
+      cls.rows[0].default_method || "straight_line",
+      cls.rows[0].default_useful_life_months || 60,
+      cls.rows[0].default_asset_account_id,
+      accumDepr.account_id,
+      cls.rows[0].default_depr_expense_account_id,
+      input.work_order_id,
+      input.actor_user_id,
+    ]
+  );
+
+  await appendCrudAudit(
+    client as never,
+    input.actor_user_id,
+    "accounting.fixed_assets.capitalized_from_repair",
+    {
+      resource_type: "accounting.fixed_assets",
+      resource_id: inserted.rows[0].id,
+      operating_company_id: input.operating_company_id,
+      unit_uuid: input.unit_uuid,
+      unit_number: unit.rows[0].unit_number,
+      work_order_id: input.work_order_id,
+      capitalized_amount_cents: amount,
+      accum_depr_account_id: accumDepr.account_id,
+      accum_depr_source: accumDepr.source,
+    },
+    "info",
+    "ACCT-F26027"
+  );
+
+  return { created: true, fixed_asset_id: inserted.rows[0].id, asset_number: assetNumber };
+}
+
 export type BulkRegisterResult = {
   registered: number;
   skipped_already: number;

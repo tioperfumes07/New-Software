@@ -6,6 +6,8 @@ import { isEnabled } from "../../lib/feature-flags/service.js";
 import { resolveMdataVendorIdBestEffort, resolveVendorIsSampleDataBestEffort } from "../bills.service.js";
 import { CAPITALIZE_REPAIR_THRESHOLD_CENTS, decideRepairBooksTreatment } from "../capitalize-threshold.js";
 import { resolveRoleAccount, CoaRoleResolutionError, type CoaRole } from "../coa-roles/resolver.service.js";
+import { registerCapitalizedRepairAsFixedAsset } from "../owned-unit-fixed-asset-register.service.js";
+import { companyBusinessDate } from "../../lib/company-business-date.js";
 
 // GL-posting kill switch for the maintenance / WO-close bill. The bill (A/P row + lines) is always
 // created below, but auto-posting it to the GL is gated PER-ENTITY via lib.feature_flags (isEnabled) —
@@ -220,9 +222,12 @@ async function insertBillLinesFromWorkOrder(
     wo_service_class: string | null;
     description: string | null;
     total_actual_cost: string | number | null;
+    unit_id: string | null;
+    display_id: string | null;
   }>(
     `
-      SELECT wo_type::text, wo_service_class::text, description, total_actual_cost
+      SELECT wo_type::text, wo_service_class::text, description, total_actual_cost,
+             unit_id::text, display_id::text
       FROM maintenance.work_orders
       WHERE id = $1::uuid
         AND operating_company_id = $2::uuid
@@ -288,6 +293,23 @@ async function insertBillLinesFromWorkOrder(
     const treatment = decideRepairBooksTreatment(woTotalCents);
     const role: CoaRole = treatment === "capitalize" ? "fixed_asset_default" : "heavy_repair_expense";
     capitalizeAccountId = await resolveRoleAccount(client, input.operating_company_id, role);
+
+    // ACCT-F26027 -- GUARD-WORKORDERS DEPRECIATION-REGISTER-DEFERRED-VS-NEVER-DEFER. The GL debit
+    // above is not the whole fix: a capitalized repair also needs a fixed_assets register row so it
+    // enters the depreciation schedule/autopost engine, not just the balance sheet. wo.unit_id is a
+    // real FK to mdata.units (trucks/tractors only, 202607230000) -- when absent (no unit on this
+    // WO), we fail closed on the register write only, never on the GL posting above.
+    if (treatment === "capitalize" && wo.unit_id) {
+      await registerCapitalizedRepairAsFixedAsset(client, {
+        operating_company_id: input.operating_company_id,
+        unit_uuid: wo.unit_id,
+        work_order_id: input.work_order_id,
+        wo_display_id: wo.display_id ?? null,
+        capitalized_amount_cents: woTotalCents,
+        purchase_date: companyBusinessDate(),
+        actor_user_id: input.actor_user_id,
+      });
+    }
   }
 
   const seqRes = await client.query<{ max_line_sequence: number }>(
